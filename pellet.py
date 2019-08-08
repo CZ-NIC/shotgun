@@ -2,6 +2,7 @@
 
 import argparse
 from collections import defaultdict
+from heapq import heappush, heappop
 import ipaddress
 import logging
 import os
@@ -9,12 +10,19 @@ import socket
 import sys
 import tempfile
 import traceback
-from typing import List, Mapping, Optional, Union
+from typing import Iterator, List, Mapping, Optional, Tuple, Union
 
 import dpkt.pcap
 
 
 IP = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
+
+
+def pcap_yielder(filename_pcap: str) -> Iterator[Tuple[float, dpkt.dpkt.Packet]]:
+    with open(filename_pcap, 'rb') as fin:
+        pcap = dpkt.pcap.Reader(fin)
+        for ts, pkt in pcap:
+            yield ts, pkt
 
 
 def process_pcap(
@@ -53,10 +61,36 @@ def process_pcap(
                     file_n += 1
                     if (client_next - 1) >= clients:
                         break
+
             # join file
-            logging.debug('sleep')
-            import time
-            time.sleep(300)
+            logging.info('joining %d files...', file_n - 1)
+            with open(filename_out, 'wb') as fout:
+                pcap_out = dpkt.pcap.Writer(
+                    fout, snaplen=66000, linktype=dpkt.pcap.DLT_RAW)
+
+                def push(heap, yielder):
+                    try:
+                        val = next(yielder)
+                    except StopIteration:
+                        return
+                    else:
+                        heappush(heap, (val[0], val[1], yielder))
+
+                heap = []
+                for i in range(1, file_n):
+                    partial_fname = os.path.join(tmpdir, '{0:04d}'.format(i))
+                    yielder = pcap_yielder(partial_fname)
+                    push(heap, yielder)
+
+                while True:
+                    try:
+                        item = heappop(heap)
+                    except IndexError:
+                        break
+                    pcap_out.writepkt(item[1], ts=item[0])
+                    push(heap, item[2])
+
+                pcap_out.close()
 
 
 def get_client_address(client: int) -> bytes:
@@ -92,26 +126,31 @@ def process_time_chunk(
     time_end = None
 
     for ts, pkt in pcap_in:
-        if time_end is None:
-            time_end = ts + time_period
+        if time_end is None:  # TODO improve time handling to be consistent across chunks
+            time_end = ts - time_offset + time_period
 
         eth = dpkt.ethernet.Ethernet(pkt)
         ip = eth.data
-        # import pdb
-        # pdb.set_trace()
         # TODO ip more fragments?
         # TODO check ipv6 compatiblity
         udp = ip.data
-        try:
-            dns = dpkt.dns.DNS(udp.data)  # TODO add support for garbage?
-        except dpkt.dpkt.UnpackError as exc:
-            # TODO must be fixed - NSEC, RRSIG, DS ...
-            logging.warning('dropping packet due to parse error: %s', exc)
-            continue
-        if dns.qr != dpkt.dns.DNS_Q:
-            continue
-        if dns.opcode != dpkt.dns.DNS_QUERY:
-            continue
+        payload = udp.data
+
+        if len(payload) < 3:
+            continue  # small garbage isn't supported
+        if payload[2] & 0x80:
+            continue  # QR=1 -> response
+
+        # try:
+        #     dns = dpkt.dns.DNS(udp.data)  # TODO add support for garbage?
+        # except (dpkt.dpkt.UnpackError, UnicodeDecodeError) as exc:
+        #     # TODO must be fixed - NSEC, RRSIG, DS ...
+        #     logging.warning('dropping packet due to parse error: %s', exc)
+        #     continue
+        # if dns.qr != dpkt.dns.DNS_Q:
+        #     continue
+        # if dns.opcode != dpkt.dns.DNS_QUERY:
+        #     continue
 
         # do mapping from original ip to client; new client otherwise
         try:
@@ -128,11 +167,15 @@ def process_time_chunk(
         ts -= time_offset
 
         # set msgid to next sequential id
-        dns.id = msgid_map[client_n]
-        msgid_map[client_n] += 1
+        msgid = msgid_map[client_ip]
+        msgid_map[client_ip] += 1
+        payload = bytearray(payload)
+        payload[0] = (msgid & 0xff00) >> 8
+        payload[1] = msgid & 0xff
+        payload = bytes(payload)
 
         # prepare the packet
-        udp_out = dpkt.udp.UDP(data=dns, dport=53)
+        udp_out = dpkt.udp.UDP(data=payload, dport=53)
         udp_out.ulen = len(udp_out)
         ip_out = dpkt.ip6.IP6()
         ip_out.src = client_ip
@@ -143,13 +186,14 @@ def process_time_chunk(
         ip_out.plen = udp_out.ulen
 
         # write dns message to pcap
-        pcap_out.writepkt(ip_out)
+        pcap_out.writepkt(ip_out, ts=ts)
 
         # check time period wasn't exceeded; break otherwise
         if ts > time_end:
             logging.info('%f %f', ts, time_period)
             return client_n - client_start
 
+    # TODO: discard chunk, keep the rest, issue warning
     raise NotImplementedError
 
 
