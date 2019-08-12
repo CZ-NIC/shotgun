@@ -16,81 +16,121 @@ import dpkt.pcap
 
 
 IP = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
+PcapIterator = Iterator[Tuple[float, dpkt.dpkt.Packet]]
+PacketHeap = List[Tuple[float, dpkt.dpkt.Packet, PcapIterator]]
 
 
-def pcap_yielder(filename_pcap: str) -> Iterator[Tuple[float, dpkt.dpkt.Packet]]:
-    with open(filename_pcap, 'rb') as fin:
-        pcap = dpkt.pcap.Reader(fin)
-        for ts, pkt in pcap:
-            yield ts, pkt
+def create_partial_files(
+            pcap_in: dpkt.pcap.Reader,
+            dest: str,
+            clients: int,
+            time_period: float
+        ) -> int:
+    """
+    Each partial file contains simulated clients for the given
+    time period. Multiple partial files will be created until the
+    amount of clients needed is satisfied (or inpur PCAP runs out).
+    """
+    file_n = 1
+    client_next = 1
+
+    while True:
+        partial_fname = '{0:04d}'.format(file_n)
+        with open(os.path.join(dest, partial_fname), 'wb') as partial_fout:
+            partial_pcap_out = dpkt.pcap.Writer(
+                partial_fout, snaplen=66000, linktype=dpkt.pcap.DLT_RAW)
+            time_offset = (file_n - 1) * time_period
+            try:
+                new_clients = process_time_chunk(
+                    pcap_in, partial_pcap_out, client_next, clients, time_period, time_offset)
+            except RuntimeError:
+                # TODO handle exceptions
+                pass
+            finally:
+                partial_pcap_out.close()
+            client_next += new_clients
+            logging.info('chunk %04d: %d clients; total: %d / %d clients',
+                         file_n, new_clients, client_next - 1, clients)
+            file_n += 1
+            if (client_next - 1) >= clients:
+                break
+    logging.info('generated %d clients in %d files', client_next - 1, file_n - 1)
+    return file_n - 1
+
+
+def join_partial_files(
+            filename_out: str,
+            tmpdir: str,
+            nfiles: int,
+        ) -> None:
+    """
+    The partial files are assumed to have the packets monotonically
+    ordered by time. This function merges all input files such that
+    the results is also monotonically ordered by time.
+    """
+
+    def pcap_yielder(
+                filename_pcap: str
+            ) -> PcapIterator:
+        with open(filename_pcap, 'rb') as fin:
+            pcap = dpkt.pcap.Reader(fin)
+            for ts, pkt in pcap:
+                yield ts, pkt
+
+    def push(heap: PacketHeap, yielder: PcapIterator) -> None:
+        try:
+            val = next(yielder)
+        except StopIteration:
+            return
+        else:
+            heappush(heap, (val[0], val[1], yielder))
+
+    logging.info('joining %d files...', nfiles)
+    with open(filename_out, 'wb') as fout:
+        try:  # TODO could with be used for dpkt.pcap.Writer?
+            pcap_out = dpkt.pcap.Writer(
+                fout, snaplen=66000, linktype=dpkt.pcap.DLT_RAW)
+
+            # use heap to sort packets from all partial pcaps
+            heap = []  # type: PacketHeap
+            for i in range(1, nfiles + 1):
+                partial_fname = os.path.join(tmpdir, '{0:04d}'.format(i))
+                yielder = pcap_yielder(partial_fname)
+                push(heap, yielder)
+
+            # write all packets to the output file
+            while True:
+                try:
+                    item = heappop(heap)
+                except IndexError:
+                    break
+                pcap_out.writepkt(item[1], ts=item[0])
+                push(heap, item[2])
+        finally:
+            pcap_out.close()
 
 
 def process_pcap(
             filename_in: str,
             filename_out: str,
             clients: int,
-            time: float,
+            time_period: float,
             ips: Optional[List[IP]] = None
         ) -> None:
     with open(filename_in, 'rb') as fin:
         pcap_in = dpkt.pcap.Reader(fin)
 
+        # read filter for 53/udp
         filter_ = create_filter(ips)
         logging.debug('using filter: "%s"', filter_)
         pcap_in.setfilter(filter_)
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            logging.info('tmpdir: %s', tmpdir)
-            file_n = 1
-            client_next = 1
+            logging.debug('tmpdir: %s', tmpdir)
 
-            while True:
-                partial_fname = '{0:04d}'.format(file_n)
-                with open(os.path.join(tmpdir, partial_fname), 'wb') as partial_fout:
-                    partial_pcap_out = dpkt.pcap.Writer(
-                        partial_fout, snaplen=66000, linktype=dpkt.pcap.DLT_RAW)
-                    time_offset = (file_n - 1) * time
-                    try:
-                        new_clients = process_time_chunk(
-                            pcap_in, partial_pcap_out, client_next, clients, time, time_offset)
-                    finally:
-                        partial_pcap_out.close()
-                    client_next += new_clients
-                    logging.info('chunk %04d: %d clients; total: %d / %d clients',
-                                 file_n, new_clients, client_next - 1, clients)
-                    file_n += 1
-                    if (client_next - 1) >= clients:
-                        break
-
-            # join file
-            logging.info('joining %d files...', file_n - 1)
-            with open(filename_out, 'wb') as fout:
-                pcap_out = dpkt.pcap.Writer(
-                    fout, snaplen=66000, linktype=dpkt.pcap.DLT_RAW)
-
-                def push(heap, yielder):
-                    try:
-                        val = next(yielder)
-                    except StopIteration:
-                        return
-                    else:
-                        heappush(heap, (val[0], val[1], yielder))
-
-                heap = []  # type: List[Tuple[float, dpkt.packet.Packet, Iterator]]
-                for i in range(1, file_n):
-                    partial_fname = os.path.join(tmpdir, '{0:04d}'.format(i))
-                    yielder = pcap_yielder(partial_fname)
-                    push(heap, yielder)
-
-                while True:
-                    try:
-                        item = heappop(heap)
-                    except IndexError:
-                        break
-                    pcap_out.writepkt(item[1], ts=item[0])
-                    push(heap, item[2])
-
-                pcap_out.close()
+            nfiles = create_partial_files(pcap_in, tmpdir, clients, time_period)
+            join_partial_files(filename_out, tmpdir, nfiles)
+            logging.info('DONE: output PCAP created at %s', filename_out)
 
 
 def get_client_address(client: int) -> bytes:
@@ -190,7 +230,6 @@ def process_time_chunk(
 
         # check time period wasn't exceeded; break otherwise
         if ts > time_end:
-            logging.info('%f %f', ts, time_period)
             return client_n - client_start
 
     # TODO: discard chunk, keep the rest, issue warning
