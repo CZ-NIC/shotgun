@@ -142,15 +142,6 @@ def get_client_address(client: int) -> bytes:
     return socket.inet_pton(socket.AF_INET6, address)
 
 
-# def get_client_address(client: int) -> bytes:
-#     assert client <= 0x00fffffff
-#     oct1 = 10
-#     oct2 = (client & 0xff0000) >> 16
-#     oct3 = (client & 0xff00) >> 8
-#     oct4 = client & 0xff
-#     return bytes([oct1, oct2, oct3, oct4])
-
-
 def process_time_chunk(
             pcap_in: dpkt.pcap.Reader,
             pcap_out: dpkt.pcap.Writer,
@@ -180,17 +171,6 @@ def process_time_chunk(
             continue  # small garbage isn't supported
         if payload[2] & 0x80:
             continue  # QR=1 -> response
-
-        # try:
-        #     dns = dpkt.dns.DNS(udp.data)  # TODO add support for garbage?
-        # except (dpkt.dpkt.UnpackError, UnicodeDecodeError) as exc:
-        #     # TODO must be fixed - NSEC, RRSIG, DS ...
-        #     logging.warning('dropping packet due to parse error: %s', exc)
-        #     continue
-        # if dns.qr != dpkt.dns.DNS_Q:
-        #     continue
-        # if dns.opcode != dpkt.dns.DNS_QUERY:
-        #     continue
 
         # do mapping from original ip to client; new client otherwise
         try:
