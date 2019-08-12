@@ -10,7 +10,7 @@ import socket
 import sys
 import tempfile
 import traceback
-from typing import Iterator, List, Mapping, Optional, Tuple, Union
+from typing import Dict, Iterator, List, Optional, Tuple, Union
 
 import dpkt.pcap
 
@@ -76,7 +76,7 @@ def process_pcap(
                     else:
                         heappush(heap, (val[0], val[1], yielder))
 
-                heap = []
+                heap = []  # type: List[Tuple[float, dpkt.packet.Packet, Iterator]]
                 for i in range(1, file_n):
                     partial_fname = os.path.join(tmpdir, '{0:04d}'.format(i))
                     yielder = pcap_yielder(partial_fname)
@@ -120,8 +120,8 @@ def process_time_chunk(
             time_offset: float,
         ) -> int:
     client_n = client_start
-    client_map = {}  # type: Mapping[bytes, bytes]
-    msgid_map = defaultdict(int)  # type: Mapping[bytes, int]
+    client_map = {}  # type: Dict[bytes, bytes]
+    msgid_map = defaultdict(int)  # type: Dict[bytes, int]
     dst_ip = socket.inet_pton(socket.AF_INET6, '::1')
     time_end = None
 
