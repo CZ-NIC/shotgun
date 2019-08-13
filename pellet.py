@@ -95,7 +95,7 @@ def join_partial_files(
 
     logging.info('joining %d files...', nfiles)
     with open(filename_out, 'wb') as fout:
-        try:  # TODO could with be used for dpkt.pcap.Writer?
+        try:
             pcap_out = dpkt.pcap.Writer(
                 fout, snaplen=66000, linktype=dpkt.pcap.DLT_RAW)
 
