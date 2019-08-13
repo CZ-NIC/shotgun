@@ -20,6 +20,10 @@ PcapIterator = Iterator[Tuple[float, dpkt.dpkt.Packet]]
 PacketHeap = List[Tuple[float, dpkt.dpkt.Packet, PcapIterator]]
 
 
+class NotEnoughInputDataError(RuntimeError):
+    pass
+
+
 def create_partial_files(
             pcap_in: dpkt.pcap.Reader,
             dest: str,
@@ -43,9 +47,13 @@ def create_partial_files(
             try:
                 new_clients = process_time_chunk(
                     pcap_in, partial_pcap_out, client_next, clients, time_period, time_offset)
-            except RuntimeError:
-                # TODO handle exceptions
-                pass
+            except NotEnoughInputDataError:
+                logging.error("No more available input data! Aborting prematurely...")
+                break
+            except RuntimeError as exc:
+                logging.error('Unhandled exception: %s', exc)
+                logging.debug(traceback.format_exc())
+                break
             finally:
                 partial_pcap_out.close()
             client_next += new_clients
@@ -160,6 +168,10 @@ def process_time_chunk(
         if time_end is None:  # TODO improve time handling to be consistent across chunks
             time_end = ts - time_offset + time_period
 
+        # check time period wasn't exceeded; return otherwise
+        if ts > time_end:
+            return client_n - client_start
+
         eth = dpkt.ethernet.Ethernet(pkt)
         ip = eth.data
         udp = ip.data  # NOTE: ip packet musn't be fragmented
@@ -206,12 +218,7 @@ def process_time_chunk(
         # write dns message to pcap
         pcap_out.writepkt(ip_out, ts=ts)
 
-        # check time period wasn't exceeded; break otherwise
-        if ts > time_end:
-            return client_n - client_start
-
-    # TODO: discard chunk, keep the rest, issue warning
-    raise NotImplementedError
+    raise NotEnoughInputDataError
 
 
 def create_filter(ips: Optional[List[IP]] = None) -> str:
