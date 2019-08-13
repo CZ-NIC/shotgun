@@ -1,0 +1,28 @@
+variables:
+  LC_ALL: C.UTF-8
+
+stages:
+  - test
+
+.debian: &debian
+  image: $CI_REGISTRY/knot/knot-resolver/ci/debian-buster:knot-2.8
+  tags:
+    - docker
+    - linux
+    - amd64
+
+test:mypy:
+  <<: *debian
+  script:
+    - ./ci/mypy-run.sh
+
+test:flake8:
+  <<: *debian
+  script:
+    - python3 -m flake8 --max-line-length=100 . && echo "OK, no flake8 errors detected"
+
+test:pylint:
+  <<: *debian
+  script:
+    - pip3 install -r requirements.txt
+    - ./ci/pylint-run.sh
