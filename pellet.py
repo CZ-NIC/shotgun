@@ -162,9 +162,7 @@ def process_time_chunk(
 
         eth = dpkt.ethernet.Ethernet(pkt)
         ip = eth.data
-        # TODO ip more fragments?
-        # TODO check ipv6 compatiblity
-        udp = ip.data
+        udp = ip.data  # NOTE: ip packet musn't be fragmented
         payload = udp.data
 
         if len(payload) < 3:
