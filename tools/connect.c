@@ -77,7 +77,7 @@ int main()
 		src_addr[i].sin6_port = htons(0);
 
 		char *src_ip;
-		asprintf(&src_ip, CLIENT_IP_STRFORMAT, i);
+		asprintf(&src_ip, CLIENT_IP_STRFORMAT, i + 1);
 		inet_pton(AF_INET6, src_ip, &src_addr[i].sin6_addr);
 		free(src_ip);
 	}
