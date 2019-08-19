@@ -87,6 +87,7 @@ int main()
 {
 	struct sockaddr_in6 src_addr[NUMBER_OF_IPS];
 	struct sockaddr_in6 dest_addr;
+	char str[INET6_ADDRSTRLEN];
 
 	for (int i = 0; i < NUMBER_OF_IPS; ++i) {
 		src_addr[i].sin6_family = AF_INET6;
@@ -96,6 +97,11 @@ int main()
 		asprintf(&src_ip, CLIENT_IP_STRFORMAT, i + 1);
 		assert(inet_pton(AF_INET6, src_ip, &src_addr[i].sin6_addr) == 1);
 		free(src_ip);
+	}
+
+	for (int i = 0; i < NUMBER_OF_IPS; ++i) {
+		inet_ntop(AF_INET6, &(src_addr[i].sin6_addr), str, INET6_ADDRSTRLEN);
+		printf("%s\n", str);
 	}
 
 	dest_addr.sin6_family = AF_INET6;
