@@ -30,7 +30,7 @@ int create_connection(struct sockaddr_in6* src, struct sockaddr_in6* dest) {
 
 	if (setsockopt(s, IPPROTO_IP, IP_BIND_ADDRESS_NO_PORT,
 		(const void *) &bind_address_no_port, sizeof(int)) == -1) {
-		printf("failed to set IP_BIND_ADDRESS_NO_PORT: %d\n", errno);
+		perror("failed to set IP_BIND_ADDRESS_NO_PORT");
 		return -1;
 	}
 
@@ -44,15 +44,14 @@ int create_connection(struct sockaddr_in6* src, struct sockaddr_in6* dest) {
 	assert(flags != -1);
 
 	if (fcntl(s, F_SETFL, flags | O_NONBLOCK) == -1) {
-		printf("failed to set O_NONBLOCK\n");
+		perror("failed to set O_NONBLOCK");
 		return -1;
 	}
 
-	inet_ntop(AF_INET6, &(src->sin6_addr), str, INET6_ADDRSTRLEN);
-	printf("%s\n", str);
 	if (bind(s, (struct sockaddr*)src, sizeof(struct sockaddr_in6)) == -1) {
 		perror("bind()");
-		//printf("failed to bind(): %d\n", errno);
+		inet_ntop(AF_INET6, &(src->sin6_addr), str, INET6_ADDRSTRLEN);
+		printf("%s\n", str);
 		return -1;
 	}
 
@@ -60,7 +59,7 @@ int create_connection(struct sockaddr_in6* src, struct sockaddr_in6* dest) {
 		if (errno == EINPROGRESS) {
 			return s;
 		}
-		printf("failed to connect(): %d\n", errno);
+		perror("failed to connect()");
 		return -1;
 	}
 
