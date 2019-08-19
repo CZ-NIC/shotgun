@@ -109,13 +109,15 @@ int main()
 	inet_pton(AF_INET6, SERVER_IP_STR, &dest_addr.sin6_addr);
 
 	int fds[MAX_CONN];
-	fd_set wfds, rfds;
+	// fd_set wfds, rfds;
 	int ret;
 
+	/*
 	FD_ZERO(&wfds);
 	FD_ZERO(&rfds);
 
 	printf("connect() start\n");
+	*/
 
 	for (int i = 0; i < MAX_CONN; ++i) {
 		if (i%1000==0) {
@@ -126,9 +128,10 @@ int main()
 			continue;
 		}
 		fds[i] = ret;
-		FD_SET(ret, &wfds);
+		//FD_SET(ret, &wfds);
 	}
 
+	/*
 	struct timeval tv;
 	tv.tv_sec = 5;
 	tv.tv_usec = 0;
@@ -159,6 +162,7 @@ int main()
 
 	ret = select(MAX_CONN, &rfds, NULL, NULL, &tv);
 	printf("read select(): %d\n", ret);
+	*/
 
 	for (int j = 0; j < MAX_CONN; ++j) {
 		shutdown(fds[j], SHUT_RDWR);
