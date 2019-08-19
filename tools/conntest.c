@@ -94,7 +94,7 @@ int main()
 
 		char *src_ip;
 		asprintf(&src_ip, CLIENT_IP_STRFORMAT, i + 1);
-		inet_pton(AF_INET6, src_ip, &src_addr[i].sin6_addr);
+		assert(inet_pton(AF_INET6, src_ip, &src_addr[i].sin6_addr) == 1);
 		free(src_ip);
 	}
 
