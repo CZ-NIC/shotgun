@@ -6,6 +6,7 @@ from heapq import heappush, heappop
 import ipaddress
 import logging
 import os
+import random
 import socket
 import sys
 import tempfile
@@ -160,7 +161,7 @@ def process_time_chunk(
         ) -> int:
     client_n = client_start
     client_map = {}  # type: Dict[bytes, bytes]
-    msgid_map = defaultdict(int)  # type: Dict[bytes, int]
+    msgid_map = defaultdict(lambda: random.randint(0, 65535))  # type: Dict[bytes, int]
     dst_ip = socket.inet_pton(socket.AF_INET6, '::1')
     time_end = None
 
