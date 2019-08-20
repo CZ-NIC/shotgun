@@ -167,7 +167,7 @@ def process_time_chunk(
 
     for ts, pkt in pcap_in:
         if time_end is None:  # TODO improve time handling to be consistent across chunks
-            time_end = ts - time_offset + time_period
+            time_end = ts + time_period
 
         # check time period wasn't exceeded; return otherwise
         if ts > time_end:
