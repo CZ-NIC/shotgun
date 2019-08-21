@@ -35,12 +35,14 @@ _uv_udp_recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
 		const struct sockaddr* addr, unsigned flags) {
 	if (nread == 0 && NULL == addr) {
 		free(buf->base);
+		printf("Freeing recvbuf\n");
 	} else if (nread > 0) {
 		printf("Received: %d\n", nread);
 		for (int i = 0; i < nread; ++i) {
 			printf("%c", buf->base[i]);
 		}
 		printf("\n");
+		uv_udp_recv_stop(handle);
 	}
 }
 
