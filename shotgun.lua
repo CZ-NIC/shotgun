@@ -1,5 +1,5 @@
 #!/usr/bin/env dnsjit
-local NUM_THREADS = 4
+local CHANNEL_SIZE = 16384
 
 
 local object = require("dnsjit.core.objects")
@@ -90,7 +90,7 @@ layer:producer(delay)
 
 
 -- setup threads
-local channel = require("dnsjit.core.channel").new(4)
+local channel = require("dnsjit.core.channel").new(CHANNEL_SIZE)
 local thread = require("dnsjit.core.thread").new()
 thread:start(thread_main)
 thread:push(channel)
