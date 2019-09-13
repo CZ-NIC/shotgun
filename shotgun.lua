@@ -1,9 +1,9 @@
 #!/usr/bin/env dnsjit
 local CHANNEL_SIZE = 16384
+local NUM_THREADS = 2
 
 
 local object = require("dnsjit.core.objects")
-local ffi = require("ffi")
 local log = require("dnsjit.core.log")
 local getopt = require("dnsjit.lib.getopt").new({
 	{ "v", "verbose", 0, "Enable and increase verbosity for each time given", "?+" },
@@ -83,45 +83,43 @@ end
 local input = require("dnsjit.input.fpcap").new()
 local delay = require("dnsjit.filter.timing").new()
 local layer = require("dnsjit.filter.layer").new()
+local split = require("dnsjit.filter.split").new()  -- TODO ipsplit
+local copy = require("dnsjit.filter.copy").new()
 input:open(pcap)
 delay:keep()
 delay:producer(input)
 layer:producer(delay)
 
-
 -- setup threads
-local channel = require("dnsjit.core.channel").new(CHANNEL_SIZE)
-local thread = require("dnsjit.core.thread").new()
-thread:start(thread_main)
-thread:push(channel)
-
--- read PCAP, parse, copy objects and pass to channel
-local prod, pctx = layer:produce()
-while true do
-	local obj, payload, ip6
-	local srcobj = prod(pctx)
-	if srcobj == nil then break end
-
-	-- find and copy payload object
-	obj = srcobj:cast()
-	while (obj.obj_type ~= object.PAYLOAD and obj.obj_prev ~= nil) do
-		obj = obj.obj_prev:cast()
-	end
-	if obj.obj_type == object.PAYLOAD then
-		payload = obj:copy()
-
-		-- find and copy IP6 object
-		while (obj.obj_type ~= object.IP6 and obj.obj_prev ~= nil) do
-			obj = obj.obj_prev:cast()
-		end
-		if obj.obj_type == object.IP6 then
-			ip6 = obj:copy()
-			payload.obj_prev = ffi.cast("core_object_t*", ip6)
-
-			channel:put(payload)
-		end
-	end
+local thread = require("dnsjit.core.thread")
+local channel = require("dnsjit.core.channel")
+local threads = {}
+local channels = {}
+for i = 1,NUM_THREADS+1 do
+	threads[i] = thread.new()
+	channels[i] = channel.new(CHANNEL_SIZE)
+	threads[i]:start(thread_main)
+	threads[i]:push(channels[i])
+	split:receiver(channels[i])
 end
 
-channel:close()
-thread:stop()
+copy:layer(object.PAYLOAD)
+copy:layer(object.IP6)
+copy:receiver(split)
+
+-- process PCAP
+local prod, pctx = layer:produce()
+local recv, rctx = copy:receive()
+while true do
+	local obj = prod(pctx)
+	if obj == nil then break end
+	recv(rctx, obj)
+end
+
+-- close channels and join threads
+for i = 1,NUM_THREADS do
+	channels[i]:close()
+end
+for i = 1,NUM_THREADS do
+	threads[i]:stop()
+end
