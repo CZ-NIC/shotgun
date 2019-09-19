@@ -1,9 +1,9 @@
 #!/usr/bin/env dnsjit
-local NUM_THREADS = 2
+local SEND_THREADS = 1
 local TARGET_IP = "fbfb::cafe"
 local TARGET_PORT = 5553
 local BIND_IP_PATTERN = "fbfb::%x"
-local CHANNEL_SIZE = 16384 * 1
+local CHANNEL_SIZE = 16384
 local MAX_CLIENTS_DNSSIM = 100000
 local MAX_BATCH_SIZE = 512
 
@@ -130,8 +130,8 @@ local layer = require("dnsjit.filter.layer").new()
 local split = require("dnsjit.filter.dnssim").new()
 local copy = require("dnsjit.filter.copy").new()
 input:open(pcap)
---delay:keep()
---delay:producer(input)
+delay:realtime()
+delay:producer(input)
 
 -- setup threads
 local thread = require("dnsjit.core.thread")
@@ -140,7 +140,7 @@ local outputs = {}
 local threads = {}
 local channels = {}
 
-for i=1,NUM_THREADS do
+for i=1,SEND_THREADS do
 	channels[i] = channel.new(CHANNEL_SIZE)
 	split:receiver(channels[i])
 
@@ -160,7 +160,7 @@ copy:layer(object.PAYLOAD)
 copy:layer(object.IP6)
 copy:receiver(split)
 
-layer:producer(input)
+layer:producer(delay)
 
 
 -- process PCAP
@@ -173,9 +173,9 @@ while true do
 end
 
 -- teardown
-for i=1,NUM_THREADS do
+for i=1,SEND_THREADS do
 	channels[i]:close()
 end
-for i=1,NUM_THREADS do
+for i=1,SEND_THREADS do
 	threads[i]:stop()
 end
