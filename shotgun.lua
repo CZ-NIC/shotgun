@@ -1,17 +1,13 @@
 #!/usr/bin/env dnsjit
-local SEND_THREADS = 1
-local TARGET_IP = "fbfb::cafe"
-local TARGET_PORT = 5553
-local BIND_IP_PATTERN = "fbfb::%x"
-local CHANNEL_SIZE = 16384
-local MAX_CLIENTS_DNSSIM = 100000
-local MAX_BATCH_SIZE = 512
-
-
 local object = require("dnsjit.core.objects")
 local log = require("dnsjit.core.log")
 local getopt = require("dnsjit.lib.getopt").new({
 	{ "v", "verbose", 0, "Enable and increase verbosity for each time given", "?+" },
+	{ "t", "threads", 1, "Number of sender threads", "?" },
+	{ "p", "port", 53, "Target port", "?" },
+	{ "s", "server", "::1", "Target IPv6 address", "?" },
+	{ "b", "bind", "", "Source IPv6 bind address (pattern)", "?" },
+	{ "d", "drift", 1.0, "Maximum realtime drift", "?" },
 })
 local pcap = unpack(getopt:parse())
 if getopt:val("help") then
@@ -36,6 +32,15 @@ if pcap == nil then
 	print("usage: "..arg[1].." <pcap>")
 	return
 end
+
+local SEND_THREADS = getopt:val("t")
+local TARGET_IP = getopt:val("s")
+local TARGET_PORT = getopt:val("p")
+local BIND_IP_PATTERN = getopt:val("b")
+local REALTIME_DRIFT = getopt:val("d")
+local CHANNEL_SIZE = 16384
+local MAX_CLIENTS_DNSSIM = 100000
+local MAX_BATCH_SIZE = 512
 
 
 local function thread_output(thr)
@@ -130,7 +135,7 @@ local layer = require("dnsjit.filter.layer").new()
 local split = require("dnsjit.filter.dnssim").new()
 local copy = require("dnsjit.filter.copy").new()
 input:open(pcap)
-delay:realtime()
+delay:realtime(REALTIME_DRIFT)
 delay:producer(input)
 
 -- setup threads
@@ -152,8 +157,12 @@ for i=1,SEND_THREADS do
 	threads[i]:push(TARGET_PORT)
 	threads[i]:push("data_"..os.time().."_"..i..".json")
 	threads[i]:push(MAX_BATCH_SIZE)
-	threads[i]:push(1)
-	threads[i]:push(string.format(BIND_IP_PATTERN, i))
+	if BIND_IP_PATTERN ~= "" then
+		threads[i]:push(1)
+		threads[i]:push(string.format(BIND_IP_PATTERN, i))
+	else
+		threads[i]:push(0)
+	end
 end
 
 copy:layer(object.PAYLOAD)
