@@ -92,40 +92,38 @@ local function thread_output(thr)
 	output:export(outfile)
 end
 
---local function thread_filter(thr)
---	local split = require("dnsjit.filter.dnssim").new()
---	local log = require("dnsjit.core.log")
---	local chann_in = thr:pop()
---	local chann_out1 = thr:pop()
---	--local chann_out2 = thr:pop()
---	local MAX_BATCH_SIZE = chann_in.capacity
---	split:receiver(chann_out1)
---	--split:receiver(chann_out2)
---	local recv, rctx = split:receive()
---	while true do
---		local obj
---		local i = 0
---
---		--print("thr filter: "..chann_in:size())
---		--if chann_in:is_full() == 1 then
---		--	log.fatal("filter thread can't keep up")
---		--end
---
---		-- read available data from channel
---		while i < MAX_BATCH_SIZE do
---			obj = chann_in:try_get()
---			if obj == nil then break end
---			recv(rctx, obj)
---			i = i + 1
---		end
---		-- check if channel is still open
---		if obj == nil and chann_in.closed == 1 then
---			chann_out1:close()
---			--chann_out2:close()
---			break
---		end
---	end
---end
+local function thread_filter(thr)
+	local split = require("dnsjit.filter.dnssim").new()
+	local log = require("dnsjit.core.log")
+
+	local chann_in = thr:pop()
+
+	local n_out = thr:pop()
+	local channels = {}
+	for ic=1,n_out do
+		channels[ic] = thr:pop()
+		split:receiver(channels[ic])
+	end
+
+	local recv, rctx = split:receive()
+	while true do
+		local obj = chann_in:get()
+
+		-- read available data from channel
+		while obj ~= nil do
+			recv(rctx, obj)
+			obj = chann_in:get()
+		end
+
+		-- check if channel is still open
+		if chann_in.closed == 1 then
+			for ic=1,n_out do
+				channels[ic]:close()
+			end
+			break
+		end
+	end
+end
 
 
 -- setup input
@@ -137,6 +135,7 @@ local copy = require("dnsjit.filter.copy").new()
 input:open(pcap)
 delay:realtime(REALTIME_DRIFT)
 delay:producer(input)
+layer:producer(delay)
 
 -- setup threads
 local thread = require("dnsjit.core.thread")
@@ -145,9 +144,18 @@ local outputs = {}
 local threads = {}
 local channels = {}
 
+-- filter thread
+local thr_filter = thread.new()
+local chann_filter = channel.new(CHANNEL_SIZE)
+thr_filter:start(thread_filter)
+thr_filter:push(chann_filter)
+thr_filter:push(SEND_THREADS)
+
+-- send threads
 for i=1,SEND_THREADS do
 	channels[i] = channel.new(CHANNEL_SIZE)
-	split:receiver(channels[i])
+	--split:receiver(channels[i])
+	thr_filter:push(channels[i])
 
 	threads[i] = thread.new()
 	threads[i]:start(thread_output)
@@ -167,9 +175,8 @@ end
 
 copy:layer(object.PAYLOAD)
 copy:layer(object.IP6)
-copy:receiver(split)
-
-layer:producer(delay)
+--copy:receiver(split)
+copy:receiver(chann_filter)
 
 
 -- process PCAP
@@ -182,9 +189,10 @@ while true do
 end
 
 -- teardown
-for i=1,SEND_THREADS do
-	channels[i]:close()
-end
+--for i=1,SEND_THREADS do
+--	channels[i]:close()
+--end
+chann_filter:close()
 for i=1,SEND_THREADS do
 	threads[i]:stop()
 end
