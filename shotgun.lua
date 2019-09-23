@@ -152,6 +152,7 @@ thr_filter:push(chann_filter)
 thr_filter:push(SEND_THREADS)
 
 -- send threads
+local outname = "data_"..os.time().."%02d.json"
 for i=1,SEND_THREADS do
 	channels[i] = channel.new(CHANNEL_SIZE)
 	--split:receiver(channels[i])
@@ -163,7 +164,7 @@ for i=1,SEND_THREADS do
 	threads[i]:push(MAX_CLIENTS_DNSSIM)
 	threads[i]:push(TARGET_IP)
 	threads[i]:push(TARGET_PORT)
-	threads[i]:push("data_"..os.time().."_"..i..".json")
+	threads[i]:push(string.format(outname, i))
 	threads[i]:push(MAX_BATCH_SIZE)
 	if BIND_IP_PATTERN ~= "" then
 		threads[i]:push(1)
@@ -195,4 +196,12 @@ end
 chann_filter:close()
 for i=1,SEND_THREADS do
 	threads[i]:stop()
+end
+
+--print outfiles
+for i=1,SEND_THREADS do
+	local f = assert(io.open(string.format(outname, i), "r"))
+	local content = f:read("*all")
+	f:close()
+	print(content)
 end
