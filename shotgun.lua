@@ -2,12 +2,13 @@
 local object = require("dnsjit.core.objects")
 local log = require("dnsjit.core.log")
 local getopt = require("dnsjit.lib.getopt").new({
-	{ "v", "verbose", 0, "Enable and increase verbosity for each time given", "?+" },
+	{ "v", "verbose", 2, "Verbosity level (0-4)", "?" },
 	{ "t", "threads", 1, "Number of sender threads", "?" },
 	{ "p", "port", 53, "Target port", "?" },
 	{ "s", "server", "::1", "Target IPv6 address", "?" },
 	{ "b", "bind", "", "Source IPv6 bind address (pattern)", "?" },
-	{ "d", "drift", 1.0, "Maximum realtime drift", "?" },
+	{ "i", "ips", 1, "Number of source IPs per thread (when -b is set)", "?" },
+	{ "d", "drift", 1.0, "Maximum realtime drift (seconds)", "?" },
 })
 local pcap = unpack(getopt:parse())
 if getopt:val("help") then
@@ -37,6 +38,7 @@ local SEND_THREADS = getopt:val("t")
 local TARGET_IP = getopt:val("s")
 local TARGET_PORT = getopt:val("p")
 local BIND_IP_PATTERN = getopt:val("b")
+local NUM_BIND_IP = getopt:val("i")
 local REALTIME_DRIFT = getopt:val("d")
 local CHANNEL_SIZE = 16384
 local MAX_CLIENTS_DNSSIM = 100000
@@ -46,7 +48,6 @@ local MAX_BATCH_SIZE = 512
 local function thread_output(thr)
 	local channel = thr:pop()
 	local output = require("dnsjit.output.dnssim").new(thr:pop())
-	local log = require("dnsjit.core.log")
 	local ffi = require("ffi")
 	local running
 
@@ -94,7 +95,6 @@ end
 
 local function thread_filter(thr)
 	local split = require("dnsjit.filter.dnssim").new()
-	local log = require("dnsjit.core.log")
 
 	local chann_in = thr:pop()
 
@@ -167,8 +167,11 @@ for i=1,SEND_THREADS do
 	threads[i]:push(string.format(outname, i))
 	threads[i]:push(MAX_BATCH_SIZE)
 	if BIND_IP_PATTERN ~= "" then
-		threads[i]:push(1)
-		threads[i]:push(string.format(BIND_IP_PATTERN, i))
+		threads[i]:push(NUM_BIND_IP)
+		for j=1,NUM_BIND_IP do
+			local addr = string.format(BIND_IP_PATTERN, NUM_BIND_IP*(i-1)+j)
+			threads[i]:push(addr)
+		end
 	else
 		threads[i]:push(0)
 	end
