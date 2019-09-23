@@ -44,4 +44,13 @@ time period.
 Simulating tens thousands of individual clients is challenging, especially with
 TCP. Plans are to support UDP, TCP and TLS.
 
+#### UDP
+
+- On the server, make sure the socket's receive buffer is sufficient.
+  Otherwise, many packets can be lost, resulting in low response rate.
+
+  ```
+  net.core.rmem_default=4096000
+  ```
+
 TODO
