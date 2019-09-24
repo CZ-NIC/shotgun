@@ -40,9 +40,9 @@ local TARGET_PORT = getopt:val("p")
 local BIND_IP_PATTERN = getopt:val("b")
 local NUM_BIND_IP = getopt:val("i")
 local REALTIME_DRIFT = getopt:val("d")
-local CHANNEL_SIZE = 16384
-local MAX_CLIENTS_DNSSIM = 100000
-local MAX_BATCH_SIZE = 512
+local MAX_CLIENTS_DNSSIM = 200000
+local CHANNEL_SIZE = 2048  -- dnsjit default
+local MAX_BATCH_SIZE = 32  -- libuv default
 
 
 local function thread_output(thr)
