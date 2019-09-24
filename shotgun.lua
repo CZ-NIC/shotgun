@@ -3,12 +3,15 @@ local object = require("dnsjit.core.objects")
 local log = require("dnsjit.core.log")
 local getopt = require("dnsjit.lib.getopt").new({
 	{ "v", "verbose", 2, "Verbosity level (0-4)", "?" },
-	{ "t", "threads", 1, "Number of sender threads", "?" },
+	{ "T", "threads", 1, "Number of sender threads", "?" },
 	{ "p", "port", 53, "Target port", "?" },
 	{ "s", "server", "::1", "Target IPv6 address", "?" },
+	{ "t", "timeout", 2, "Timeout for requests", "?" },
 	{ "b", "bind", "", "Source IPv6 bind address (pattern)", "?" },
 	{ "i", "ips", 1, "Number of source IPs per thread (when -b is set)", "?" },
 	{ "d", "drift", 1.0, "Maximum realtime drift (seconds)", "?" },
+	{ "S", "stats_interval", 100000,
+		"Interval for logging statistics (in packets per thread)", "?" },
 })
 local pcap = unpack(getopt:parse())
 if getopt:val("help") then
@@ -34,12 +37,14 @@ if pcap == nil then
 	return
 end
 
-local SEND_THREADS = getopt:val("t")
+local SEND_THREADS = getopt:val("T")
 local TARGET_IP = getopt:val("s")
 local TARGET_PORT = getopt:val("p")
+local TIMEOUT = getopt:val("t")
 local BIND_IP_PATTERN = getopt:val("b")
 local NUM_BIND_IP = getopt:val("i")
 local REALTIME_DRIFT = getopt:val("d")
+local LOG_INTERVAL = getopt:val("S")
 local MAX_CLIENTS_DNSSIM = 200000
 local CHANNEL_SIZE = 2048  -- dnsjit default
 local MAX_BATCH_SIZE = 32  -- libuv default
@@ -53,6 +58,8 @@ local function thread_output(thr)
 
 	output:udp_only()
 	output:target(thr:pop(), thr:pop())
+	output:timeout(thr:pop())
+	output:log_interval(thr:pop())
 	output:free_after_use(true)
 
 	local outfile = thr:pop()
@@ -164,6 +171,8 @@ for i=1,SEND_THREADS do
 	threads[i]:push(MAX_CLIENTS_DNSSIM)
 	threads[i]:push(TARGET_IP)
 	threads[i]:push(TARGET_PORT)
+	threads[i]:push(TIMEOUT)
+	threads[i]:push(LOG_INTERVAL)
 	threads[i]:push(string.format(outname, i))
 	threads[i]:push(MAX_BATCH_SIZE)
 	if BIND_IP_PATTERN ~= "" then
