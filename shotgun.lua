@@ -100,41 +100,9 @@ local function thread_output(thr)
 	output:export(outfile)
 end
 
-local function thread_filter(thr)
-	local split = require("dnsjit.filter.dnssim").new()
-
-	local chann_in = thr:pop()
-
-	local n_out = thr:pop()
-	local channels = {}
-	for ic=1,n_out do
-		channels[ic] = thr:pop()
-		split:receiver(channels[ic])
-	end
-
-	local recv, rctx = split:receive()
-	while true do
-		local obj = chann_in:get()
-
-		-- read available data from channel
-		while obj ~= nil do
-			recv(rctx, obj)
-			obj = chann_in:get()
-		end
-
-		-- check if channel is still open
-		if chann_in.closed == 1 then
-			for ic=1,n_out do
-				channels[ic]:close()
-			end
-			break
-		end
-	end
-end
-
 
 -- setup input
-local input = require("dnsjit.input.mmpcap").new()
+local input = require("dnsjit.input.fpcap").new()
 local delay = require("dnsjit.filter.timing").new()
 local layer = require("dnsjit.filter.layer").new()
 local split = require("dnsjit.filter.dnssim").new()
@@ -151,19 +119,11 @@ local outputs = {}
 local threads = {}
 local channels = {}
 
--- filter thread
-local thr_filter = thread.new()
-local chann_filter = channel.new(CHANNEL_SIZE)
-thr_filter:start(thread_filter)
-thr_filter:push(chann_filter)
-thr_filter:push(SEND_THREADS)
-
 -- send threads
 local outname = "data_"..os.time().."%02d.json"
 for i=1,SEND_THREADS do
 	channels[i] = channel.new(CHANNEL_SIZE)
-	--split:receiver(channels[i])
-	thr_filter:push(channels[i])
+	split:receiver(channels[i])
 
 	threads[i] = thread.new()
 	threads[i]:start(thread_output)
@@ -188,8 +148,7 @@ end
 
 copy:layer(object.PAYLOAD)
 copy:layer(object.IP6)
---copy:receiver(split)
-copy:receiver(chann_filter)
+copy:receiver(split)
 
 
 -- process PCAP
@@ -202,10 +161,9 @@ while true do
 end
 
 -- teardown
---for i=1,SEND_THREADS do
---	channels[i]:close()
---end
-chann_filter:close()
+for i=1,SEND_THREADS do
+	channels[i]:close()
+end
 for i=1,SEND_THREADS do
 	threads[i]:stop()
 end
