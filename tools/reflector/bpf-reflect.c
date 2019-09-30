@@ -48,9 +48,11 @@ int xdp_reflect_udp_func(struct xdp_md *ctx)
 			return XDP_PASS;
 	}
 
-	if (ip_type != IPPROTO_UDP || udphdr->dest != UDP_PORT)
+	if (ip_type != IPPROTO_UDP)
 		return XDP_PASS;
 	const int dns_len = parse_udphdr(&nh, data_end, &udphdr);
+	if (udphdr->dest != UDP_PORT)
+		return XDP_PASS;
 	uint8_t *dns_wire = nh.pos;
 	if (dns_len < KNOT_WIRE_HEADER_SIZE
 	    || dns_wire + KNOT_WIRE_HEADER_SIZE > (uint8_t *)data_end) {
