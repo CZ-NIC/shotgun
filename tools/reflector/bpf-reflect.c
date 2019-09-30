@@ -12,6 +12,10 @@
 #include "bpf_endian.h"
 #include "parsing_helpers.h"
 
+#ifndef UDP_PORT
+#define UDP_PORT 53
+#endif
+
 static inline uint16_t from32to16(uint32_t sum)
 {
 	sum = (sum & 0xffff) + (sum >> 16);
@@ -44,7 +48,7 @@ int xdp_reflect_udp_func(struct xdp_md *ctx)
 			return XDP_PASS;
 	}
 
-	if (ip_type != IPPROTO_UDP)
+	if (ip_type != IPPROTO_UDP || udphdr->dest != UDP_PORT)
 		return XDP_PASS;
 	const int dns_len = parse_udphdr(&nh, data_end, &udphdr);
 	uint8_t *dns_wire = nh.pos;
