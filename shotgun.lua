@@ -12,6 +12,7 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ "d", "drift", 1.0, "Maximum realtime drift (seconds)", "?" },
 	{ "S", "stats_interval", 100000,
 		"Interval for logging statistics (in packets per thread)", "?" },
+	{ "O", "outdir", ".", "directory for output files (must exist)", "?" },
 })
 local pcap = unpack(getopt:parse())
 if getopt:val("help") then
@@ -45,6 +46,7 @@ local BIND_IP_PATTERN = getopt:val("b")
 local NUM_BIND_IP = getopt:val("i")
 local REALTIME_DRIFT = getopt:val("d")
 local LOG_INTERVAL = getopt:val("S")
+local OUTDIR = getopt:val("O")
 local MAX_CLIENTS_DNSSIM = 200000
 local CHANNEL_SIZE = 2048  -- dnsjit default
 local MAX_BATCH_SIZE = 32  -- libuv default
@@ -120,7 +122,7 @@ local threads = {}
 local channels = {}
 
 -- send threads
-local outname = "data_"..os.time().."%02d.json"
+local outname = OUTDIR.."/data_"..os.time().."_%02d.json"
 for i=1,SEND_THREADS do
 	channels[i] = channel.new(CHANNEL_SIZE)
 	split:receiver(channels[i])
