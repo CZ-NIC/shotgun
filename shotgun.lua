@@ -148,8 +148,8 @@ for i=1,SEND_THREADS do
 	end
 end
 
-copy:layer(object.PAYLOAD)
-copy:layer(object.IP6)
+copy:obj_type(object.PAYLOAD)
+copy:obj_type(object.IP6)
 copy:receiver(split)
 
 
