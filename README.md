@@ -47,11 +47,12 @@ in-flight TCP queries with potentially the same msgid).
 The input data can be created with:
 
 ```
-./pellet.py input.pcap -c CLIENTS -t TIME
+./pellet.py input.pcap -c CLIENTS -t TIME -r RESOLVER_IP
 ```
 
 where `CLIENTS` is the number of required clients and `TIME` is the selected
-time period.
+time period. `RESOLVER_IP` is necessary to extract only the traffic towards the
+resolver and not other upstream servers.
 
 ### Replaying the traffic
 
@@ -84,6 +85,13 @@ port range per IP.
 sysctl -w net.ipv4.ip_local_port_range="1025 60999"
 ```
 
+The tool may also open a large number of file descriptors. Make sure to have
+sufficiently large limit for the number of file descriptors.
+
+```
+ulimit -n 1000000
+```
+
 #### UDP
 
 - On the server, make sure the socket's receive buffer is sufficient.
@@ -92,3 +100,20 @@ sysctl -w net.ipv4.ip_local_port_range="1025 60999"
   ```
   net.core.rmem_default=8192000
   ```
+
+### Example
+
+The following example can be used to test the prototype from 2019-10-02 to
+simulate UDP clients.
+
+Process captured PCAP and extract clients 50k clients within 30 seconds of traffic:
+
+```
+docker run -v "$PWD:/data:rw" registry.labs.nic.cz/knot/shotgun/pellet:20191002 /data/captured.pcap -o /data/pellets.pcap -c 50000 -t 30 -r $RESOLVER_IP
+```
+
+Replay the clients against IPv6 localhost server:
+
+```
+docker run --network host -v "$PWD:/data:rw" registry.labs.nic.cz/knot/shotgun:20191002 -O /data /data/pellets.pcap -s "::1" -p 53
+```
