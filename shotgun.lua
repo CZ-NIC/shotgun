@@ -55,7 +55,6 @@ local MAX_BATCH_SIZE = 32  -- libuv default
 local function thread_output(thr)
 	local channel = thr:pop()
 	local output = require("dnsjit.output.dnssim").new(thr:pop())
-	local ffi = require("ffi")
 	local running
 
 	output:udp_only()
@@ -65,10 +64,10 @@ local function thread_output(thr)
 	output:free_after_use(true)
 
 	local outfile = thr:pop()
-	local MAX_BATCH_SIZE = thr:pop()
+	local batch_size = thr:pop()
 
 	local nbind = thr:pop()
-	for i=1,nbind do
+	for _ = 1, nbind do
 		output:bind(thr:pop())
 	end
 
@@ -78,7 +77,7 @@ local function thread_output(thr)
 		local i = 0
 
 		-- read available data from channel
-		while i < MAX_BATCH_SIZE do
+		while i < batch_size do
 			obj = channel:try_get()
 			if obj == nil then break end
 			recv(rctx, obj)
@@ -117,13 +116,12 @@ layer:producer(delay)
 -- setup threads
 local thread = require("dnsjit.core.thread")
 local channel = require("dnsjit.core.channel")
-local outputs = {}
 local threads = {}
 local channels = {}
 
 -- send threads
 local outname = OUTDIR.."/data_"..os.time().."_%02d.json"
-for i=1,SEND_THREADS do
+for i = 1, SEND_THREADS do
 	channels[i] = channel.new(CHANNEL_SIZE)
 	split:receiver(channels[i])
 
@@ -139,7 +137,7 @@ for i=1,SEND_THREADS do
 	threads[i]:push(MAX_BATCH_SIZE)
 	if BIND_IP_PATTERN ~= "" then
 		threads[i]:push(NUM_BIND_IP)
-		for j=1,NUM_BIND_IP do
+		for j = 1, NUM_BIND_IP do
 			local addr = string.format(BIND_IP_PATTERN, NUM_BIND_IP*(i-1)+j)
 			threads[i]:push(addr)
 		end
@@ -163,15 +161,15 @@ while true do
 end
 
 -- teardown
-for i=1,SEND_THREADS do
+for i = 1, SEND_THREADS do
 	channels[i]:close()
 end
-for i=1,SEND_THREADS do
+for i = 1, SEND_THREADS do
 	threads[i]:stop()
 end
 
 --print outfiles
-for i=1,SEND_THREADS do
+for i = 1, SEND_THREADS do
 	local f = assert(io.open(string.format(outname, i), "r"))
 	local content = f:read("*all")
 	f:close()
