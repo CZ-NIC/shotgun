@@ -4,6 +4,7 @@ Realistic DNS traffic simulator with many independent clients
 
 ## Current status
 
+- under development: active branches unstable, docker containers should work
 - prototype for processing inut PCAPs is functional, but slow and requires
   python-dpkt from master
 - prototype for sending traffic is able to simulate UDP clients
