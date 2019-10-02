@@ -26,3 +26,8 @@ test:pylint:
   script:
     - pip3 install -r requirements.txt
     - ./ci/pylint-run.sh
+
+test:luacheck:
+  <<: *debian
+  script:
+    - ./ci/luacheck-run.sh
