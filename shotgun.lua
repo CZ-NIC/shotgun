@@ -11,7 +11,7 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ "i", "ips", 1, "Number of source IPs per thread (when -b is set)", "?" },
 	{ "d", "drift", 1.0, "Maximum realtime drift (seconds)", "?" },
 	{ "S", "stats_interval", 5, "Log statistics every N seconds", "?" },
-	{ "O", "outdir", ".", "directory for output files (must exist)", "?" },
+	{ "O", "outdir", ".", "Directory for output files (must exist)", "?" },
 })
 local pcap = unpack(getopt:parse())
 if getopt:val("help") then
