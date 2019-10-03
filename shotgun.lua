@@ -10,8 +10,7 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ "b", "bind", "", "Source IPv6 bind address pattern (example: 'fd00::%x')", "?" },
 	{ "i", "ips", 1, "Number of source IPs per thread (when -b is set)", "?" },
 	{ "d", "drift", 1.0, "Maximum realtime drift (seconds)", "?" },
-	{ "S", "stats_interval", 100000,
-		"Interval for logging statistics (in packets per thread)", "?" },
+	{ "S", "stats_interval", 5, "Log statistics every N seconds", "?" },
 	{ "O", "outdir", ".", "directory for output files (must exist)", "?" },
 })
 local pcap = unpack(getopt:parse())
@@ -60,7 +59,7 @@ local function thread_output(thr)
 	output:udp_only()
 	output:target(thr:pop(), thr:pop())
 	output:timeout(thr:pop())
-	output:log_interval(thr:pop())
+	output:stat_collect(thr:pop())
 	output:free_after_use(true)
 
 	local outfile = thr:pop()
@@ -89,6 +88,7 @@ local function thread_output(thr)
 
 		-- check if channel is still open
 		if obj == nil and channel.closed == 1 then
+			output:stat_finish()
 			break
 		end
 	end
@@ -166,12 +166,4 @@ for i = 1, SEND_THREADS do
 end
 for i = 1, SEND_THREADS do
 	threads[i]:stop()
-end
-
---print outfiles
-for i = 1, SEND_THREADS do
-	local f = assert(io.open(string.format(outname, i), "r"))
-	local content = f:read("*all")
-	f:close()
-	print(content)
 end
