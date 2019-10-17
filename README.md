@@ -64,7 +64,7 @@ For ease of use, docker container with shotgun is available. Note that running
 the security risk.
 
 ```
-docker run registry.labs.nic.cz/knot/shotgun:20191002 --help
+docker run registry.labs.nic.cz/knot/shotgun:20191010 --help
 ```
 
 #### Shotgun
@@ -103,8 +103,7 @@ ulimit -n 1000000
 
 ### Example
 
-The following example can be used to test the prototype from 2019-10-02 to
-simulate UDP clients.
+The following example can be used to test the prototype to simulate UDP clients.
 
 Process captured PCAP and extract clients 50k clients within 30 seconds of traffic:
 
@@ -115,5 +114,5 @@ docker run -v "$PWD:/data:rw" registry.labs.nic.cz/knot/shotgun/pellet:20191002 
 Replay the clients against IPv6 localhost server:
 
 ```
-docker run --network host -v "$PWD:/data:rw" registry.labs.nic.cz/knot/shotgun:20191002 -O /data /data/pellets.pcap -s "::1" -p 53
+docker run --network host -v "$PWD:/data:rw" registry.labs.nic.cz/knot/shotgun:20191010 -O /data /data/pellets.pcap -s "::1" -p 53
 ```
