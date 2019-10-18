@@ -47,7 +47,7 @@ local REALTIME_DRIFT = getopt:val("d")
 local LOG_INTERVAL = getopt:val("S")
 local OUTDIR = getopt:val("O")
 local MAX_CLIENTS_DNSSIM = 200000
-local CHANNEL_SIZE = 2048  -- dnsjit default
+local CHANNEL_SIZE = 16384  -- empirically tested value suitable for UDP dnssim
 local MAX_BATCH_SIZE = 32  -- libuv default
 
 
@@ -74,6 +74,12 @@ local function thread_output(thr)
 	while true do
 		local obj
 		local i = 0
+
+		-- check channel isn't overfull
+		if channel:full() then
+			output:log():fatal("sender thread can't keep up with traffic; "
+				.."use more sender threads (-T)")
+		end
 
 		-- read available data from channel
 		while i < batch_size do
