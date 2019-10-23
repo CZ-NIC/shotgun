@@ -20,6 +20,11 @@ IP = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
 PcapIterator = Iterator[Tuple[float, dpkt.dpkt.Packet]]
 PacketHeap = List[Tuple[float, dpkt.dpkt.Packet, PcapIterator]]
 
+LINK_TYPES = {
+    dpkt.pcap.DLT_EN10MB: dpkt.ethernet.Ethernet,
+    dpkt.pcap.DLT_LINUX_SLL: dpkt.sll.SLL,
+}
+
 
 class NotEnoughInputDataError(RuntimeError):
     pass
@@ -128,6 +133,9 @@ def process_pcap(
         ) -> None:
     with open(filename_in, 'rb') as fin:
         pcap_in = dpkt.pcap.Reader(fin)
+        if pcap_in.datalink() not in LINK_TYPES:
+            logging.critical("Unsupported PCAP linktype")
+            sys.exit(1)
 
         # read filter for 53/udp
         filter_ = create_filter(ips)
@@ -165,6 +173,8 @@ def process_time_chunk(
     dst_ip = socket.inet_pton(socket.AF_INET6, '::1')
     time_end = None
 
+    parse = LINK_TYPES[pcap_in.datalink()]
+
     for ts, pkt in pcap_in:
         if time_end is None:  # TODO improve time handling to be consistent across chunks
             time_end = ts + time_period
@@ -173,10 +183,19 @@ def process_time_chunk(
         if ts > time_end:
             return client_n - client_start
 
-        eth = dpkt.ethernet.Ethernet(pkt)
-        ip = eth.data
+        link = parse(pkt)
+
+        ip = link.data
+        if not isinstance(ip, (dpkt.ip.IP, dpkt.ip6.IP6)):
+            continue
+
         udp = ip.data  # NOTE: ip packet musn't be fragmented
+        if not isinstance(udp, dpkt.udp.UDP):
+            continue
+
         payload = udp.data
+        if not isinstance(payload, bytes):
+            continue
 
         if len(payload) < 3:
             continue  # small garbage isn't supported
