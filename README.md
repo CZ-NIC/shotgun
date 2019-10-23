@@ -108,7 +108,7 @@ The following example can be used to test the prototype to simulate UDP clients.
 Process captured PCAP and extract clients 50k clients within 30 seconds of traffic:
 
 ```
-docker run -v "$PWD:/data:rw" registry.labs.nic.cz/knot/shotgun/pellet:20191002 /data/captured.pcap -o /data/pellets.pcap -c 50000 -t 30 -r $RESOLVER_IP
+docker run -v "$PWD:/data:rw" registry.labs.nic.cz/knot/shotgun/pellet:20191023 /data/captured.pcap -o /data/pellets.pcap -c 50000 -t 30 -r $RESOLVER_IP
 ```
 
 Replay the clients against IPv6 localhost server:
