@@ -126,7 +126,7 @@ local threads = {}
 local channels = {}
 
 -- send threads
-local outname = OUTDIR.."/data_"..os.time().."_%02d.json"
+local outname = OUTDIR.."/shotgun-"..os.time().."-%02d.json"
 for i = 1, SEND_THREADS do
 	channels[i] = channel.new(CHANNEL_SIZE)
 	split:receiver(channels[i])
