@@ -20,7 +20,7 @@ RUN \
 RUN \
 	git clone https://github.com/tomaskrizek/dnsjit.git && \
 	cd dnsjit && \
-	git checkout simulator && \
+	git checkout dnssim-latency && \
 	./autogen.sh && \
 	./configure && \
 	make && \
