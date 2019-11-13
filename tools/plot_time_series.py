@@ -84,18 +84,18 @@ def init_plot(title):
     return ax
 
 
-def plot_response_rate(ax, data, stats_interval, label, skip_last=True, eval_func=None):
-    stats_periodic = data['stats_periodic'][:-1] if skip_last else data['stats_periodic']
+def plot_response_rate(ax, data, label, eval_func=None):
+    stats_periodic = data['stats_periodic']
+    time_offset = stats_periodic[0]['since_ms']
 
     if not eval_func:
         eval_func = response_rate
 
-    xvalues = list(range(
-        stats_interval,
-        len(stats_periodic) * stats_interval + 1,
-        stats_interval))
+    xvalues = []
     yvalues = []
     for stats in stats_periodic:
+        time = (stats['until_ms'] - time_offset) / 1000
+        xvalues.append(time)
         yvalues.append(eval_func(stats))
 
     ax.plot(xvalues, yvalues, label=label, marker='o', linestyle='--')
@@ -149,7 +149,6 @@ def main():
         plot_response_rate(
             ax,
             data,
-            data['stats_interval'],
             label)
 
         if args.rcode:
@@ -166,7 +165,6 @@ def main():
                 plot_response_rate(
                     ax,
                     data,
-                    data['stats_interval'],
                     rcode_label,
                     eval_func=eval_func)
 
