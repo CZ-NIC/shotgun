@@ -20,7 +20,7 @@ RUN \
 RUN \
 	git clone https://github.com/tomaskrizek/dnsjit.git && \
 	cd dnsjit && \
-	git checkout simulator && \
+	git checkout dnssim-latency && \
 	./autogen.sh && \
 	./configure && \
 	make && \
@@ -29,6 +29,7 @@ RUN \
 RUN \
 	git clone https://gitlab.labs.nic.cz/knot/shotgun.git && \
 	cd shotgun && \
+	git checkout json-update && \
 	cd ..
 
 ENTRYPOINT ["dnsjit/src/dnsjit", "shotgun/shotgun.lua"]
