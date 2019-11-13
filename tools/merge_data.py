@@ -3,11 +3,13 @@
 import argparse
 import json
 import logging
+import os
 import sys
 import traceback
 
 
 JSON_VERSION = 20191111
+DEFAULT_FILENAME = 'shotgun-all.json'
 
 
 class VersionError(RuntimeError):
@@ -150,9 +152,13 @@ def main():
 
     parser.add_argument('json_file', nargs='+',
                         help='Paths to per-thread JSON results')
-    parser.add_argument('-o', '--output', default='shotgun-all.json',
+    parser.add_argument('-o', '--output', default=DEFAULT_FILENAME,
                         help='Output JSON file')
     args = parser.parse_args()
+
+    outpath = args.output
+    if outpath == DEFAULT_FILENAME:
+        outpath = os.path.join(os.path.dirname(args.json_file[0]), outpath)
 
     try:
         thread_data = []
@@ -162,9 +168,9 @@ def main():
 
         merged = merge_data(thread_data)
 
-        with open(args.output, 'w') as f:
+        with open(outpath, 'w') as f:
             json.dump(merged, f)
-        logging.info('DONE: merged shotgun results saved as %s', args.output)
+        logging.info('DONE: merged shotgun results saved as %s', outpath)
     except (FileNotFoundError, VersionError) as exc:
         logging.critical('%s', exc)
         sys.exit(1)
