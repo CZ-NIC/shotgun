@@ -75,12 +75,6 @@ local function thread_output(thr)
 		local obj
 		local i = 0
 
-		-- check channel isn't overfull
-		if channel:full() then
-			output:log():fatal("sender thread can't keep up with traffic; "
-				.."use more sender threads (-T)")
-		end
-
 		-- read available data from channel
 		while i < batch_size do
 			obj = channel:try_get()
