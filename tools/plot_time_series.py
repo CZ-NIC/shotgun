@@ -84,7 +84,7 @@ def init_plot(title):
     return ax
 
 
-def plot_response_rate(ax, data, label, eval_func=None):
+def plot_response_rate(ax, data, label, eval_func=None, min_timespan=0):
     stats_periodic = data['stats_periodic']
     time_offset = stats_periodic[0]['since_ms']
 
@@ -94,6 +94,9 @@ def plot_response_rate(ax, data, label, eval_func=None):
     xvalues = []
     yvalues = []
     for stats in stats_periodic:
+        timespan = stats['until_ms'] - stats['since_ms']
+        if timespan < min_timespan:
+            continue
         time = (stats['until_ms'] - time_offset) / 1000
         xvalues.append(time)
         yvalues.append(eval_func(stats))
@@ -145,11 +148,13 @@ def main():
         qps = data['stats_sum']['requests'] / timespan
         dirname = os.path.basename(os.path.dirname(os.path.normpath(json_path)))
         label = '{} ({} QPS)'.format(dirname, siname(qps))
+        min_timespan = data['stats_interval_ms'] / 2
 
         plot_response_rate(
             ax,
             data,
-            label)
+            label,
+            min_timespan=min_timespan)
 
         if args.rcode:
             for rcode in args.rcode:
@@ -166,7 +171,8 @@ def main():
                     ax,
                     data,
                     rcode_label,
-                    eval_func=eval_func)
+                    eval_func=eval_func,
+                    min_timespan=min_timespan)
 
     plt.legend()
     plt.savefig(args.output)
