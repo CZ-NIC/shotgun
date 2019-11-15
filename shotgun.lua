@@ -75,12 +75,6 @@ local function thread_output(thr)
 		local obj
 		local i = 0
 
-		-- check channel isn't overfull
-		if channel:full() then
-			output:log():fatal("sender thread can't keep up with traffic; "
-				.."use more sender threads (-T)")
-		end
-
 		-- read available data from channel
 		while i < batch_size do
 			obj = channel:try_get()
@@ -126,7 +120,7 @@ local threads = {}
 local channels = {}
 
 -- send threads
-local outname = OUTDIR.."/data_"..os.time().."_%02d.json"
+local outname = OUTDIR.."/shotgun-"..os.time().."-%02d.json"
 for i = 1, SEND_THREADS do
 	channels[i] = channel.new(CHANNEL_SIZE)
 	split:receiver(channels[i])

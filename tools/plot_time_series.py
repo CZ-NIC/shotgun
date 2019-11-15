@@ -6,12 +6,16 @@ import json
 import logging
 import math
 import os.path
+import sys
 
 # pylint: disable=wrong-import-order,wrong-import-position
 import matplotlib
 from matplotlib.ticker import MultipleLocator
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt  # noqa
+
+
+JSON_VERSION = 20191111
 
 
 StatRcode = collections.namedtuple('StatRcode', ['field', 'label'])
@@ -53,31 +57,6 @@ def siname(n):
     return '{:.0f}{}'.format(n / 10**(3 * siidx), sinames[siidx])
 
 
-def merge_data(thread_data):
-    out = {
-        'discarded': 0,
-        'stats_sum': collections.defaultdict(int),
-        'stats_periodic': [],
-    }
-
-    def add_stats(src, dst):
-        for key, val in src.items():
-            dst[key] += val
-
-    for data in thread_data:
-        out['discarded'] += data['discarded']
-        add_stats(data['stats_sum'], out['stats_sum'])
-        for i in range(len(data['stats_periodic'])):
-            try:
-                out['stats_periodic'][i]
-            except IndexError:
-                out['stats_periodic'].append(collections.defaultdict(int))
-                assert len(out['stats_periodic']) == (i + 1)
-            add_stats(data['stats_periodic'][i], out['stats_periodic'][i])
-
-    return out
-
-
 def stat_field_rate(field):
     def inner(stats):
         return 100.0 * stats[field] / (stats['requests'] + stats['ongoing'])
@@ -105,18 +84,21 @@ def init_plot(title):
     return ax
 
 
-def plot_response_rate(ax, data, stats_interval, label, skip_last=True, eval_func=None):
-    stats_periodic = data['stats_periodic'][:-1] if skip_last else data['stats_periodic']
+def plot_response_rate(ax, data, label, eval_func=None, min_timespan=0):
+    stats_periodic = data['stats_periodic']
+    time_offset = stats_periodic[0]['since_ms']
 
     if not eval_func:
         eval_func = response_rate
 
-    xvalues = list(range(
-        stats_interval,
-        len(stats_periodic) * stats_interval + 1,
-        stats_interval))
+    xvalues = []
     yvalues = []
     for stats in stats_periodic:
+        timespan = stats['until_ms'] - stats['since_ms']
+        if timespan < min_timespan:
+            continue
+        time = (stats['until_ms'] - time_offset) / 1000
+        xvalues.append(time)
         yvalues.append(eval_func(stats))
 
     ax.plot(xvalues, yvalues, label=label, marker='o', linestyle='--')
@@ -131,12 +113,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="Plot time series from shotgun experiment")
 
-    parser.add_argument('input_dir', nargs='+',
-                        help='Directory with results; name will be used as label')
+    parser.add_argument('json_file', nargs='+', help='Shotgun results JSON file(s)')
     parser.add_argument('-t', '--title', default='Response Rate over Time',
                         help='Graph title')
-    parser.add_argument('-S', '--stats-interval', default=5, type=int,
-                        help='Statistics collection interval')
     parser.add_argument('-o', '--output', default='response_rate.svg',
                         help='Output graph filename')
     parser.add_argument('-r', '--rcode', nargs='*', type=int,
@@ -146,33 +125,36 @@ def main():
     # initialize graph
     ax = init_plot(args.title)
 
-    for in_dir in args.input_dir:
-        thread_data = []
+    for json_path in args.json_file:
+        try:
+            with open(json_path) as f:
+                data = json.load(f)
+        except FileNotFoundError as exc:
+            logging.critical('%s', exc)
+            sys.exit(1)
 
-        for filename in os.listdir(in_dir):
-            if not filename.endswith('.json'):
-                continue
+        try:
+            assert data['version'] == JSON_VERSION
+        except (KeyError, AssertionError):
+            logging.critical(
+                "Older formats of JSON data aren't supported. "
+                "Use older tooling or re-run the tests with newer shotgun.")
+            sys.exit(1)
 
-            path = os.path.join(in_dir, filename)
-            with open(path) as f:
-                thread_data.append(json.load(f))
-
-        # merge data
-        data = merge_data(thread_data)
         if data['discarded'] != 0:
             logging.warning("%d discarded packets may skew results!", data['discarded'])
 
-        label = os.path.basename(os.path.normpath(in_dir))
-        if len(data['stats_periodic']) > 1:
-            qps = data['stats_sum']['requests'] / \
-                (args.stats_interval * (len(data['stats_periodic']) - 1))
-            label = '{} ({} QPS)'.format(label, siname(qps))
+        timespan = (data['stats_sum']['until_ms'] - data['stats_sum']['since_ms']) / 1000
+        qps = data['stats_sum']['requests'] / timespan
+        dirname = os.path.basename(os.path.dirname(os.path.normpath(json_path)))
+        label = '{} ({} QPS)'.format(dirname, siname(qps))
+        min_timespan = data['stats_interval_ms'] / 2
 
         plot_response_rate(
             ax,
             data,
-            args.stats_interval,
-            label)
+            label,
+            min_timespan=min_timespan)
 
         if args.rcode:
             for rcode in args.rcode:
@@ -188,9 +170,9 @@ def main():
                 plot_response_rate(
                     ax,
                     data,
-                    args.stats_interval,
                     rcode_label,
-                    eval_func=eval_func)
+                    eval_func=eval_func,
+                    min_timespan=min_timespan)
 
     plt.legend()
     plt.savefig(args.output)
