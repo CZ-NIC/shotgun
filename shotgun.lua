@@ -106,12 +106,13 @@ end
 local input = require("dnsjit.input.fpcap").new()
 local delay = require("dnsjit.filter.timing").new()
 local layer = require("dnsjit.filter.layer").new()
-local split = require("dnsjit.filter.dnssim").new()
+local ipsplit = require("dnsjit.filter.ipsplit").new()
 local copy = require("dnsjit.filter.copy").new()
 input:open(pcap)
 delay:realtime(REALTIME_DRIFT)
 delay:producer(input)
 layer:producer(delay)
+ipsplit:overwrite_dst()
 
 -- setup threads
 local thread = require("dnsjit.core.thread")
@@ -123,7 +124,7 @@ local channels = {}
 local outname = OUTDIR.."/shotgun-"..os.time().."-%02d.json"
 for i = 1, SEND_THREADS do
 	channels[i] = channel.new(CHANNEL_SIZE)
-	split:receiver(channels[i])
+	ipsplit:receiver(channels[i])
 
 	threads[i] = thread.new()
 	threads[i]:start(thread_output)
@@ -148,7 +149,7 @@ end
 
 copy:obj_type(object.PAYLOAD)
 copy:obj_type(object.IP6)
-copy:receiver(split)
+copy:receiver(ipsplit)
 
 
 -- process PCAP
