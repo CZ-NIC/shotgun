@@ -106,12 +106,13 @@ end
 local input = require("dnsjit.input.fpcap").new()
 local delay = require("dnsjit.filter.timing").new()
 local layer = require("dnsjit.filter.layer").new()
-local split = require("dnsjit.filter.dnssim").new()
+local split = require("dnsjit.filter.ipsplit").new()
 local copy = require("dnsjit.filter.copy").new()
 input:open(pcap)
 delay:realtime(REALTIME_DRIFT)
 delay:producer(input)
 layer:producer(delay)
+split:overwrite_dst()
 
 -- setup threads
 local thread = require("dnsjit.core.thread")
