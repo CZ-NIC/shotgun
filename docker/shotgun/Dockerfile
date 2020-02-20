@@ -1,4 +1,4 @@
-FROM ubuntu:18.04
+FROM ubuntu:focal
 
 RUN \
 	apt-get update -qq && \
@@ -11,6 +11,7 @@ RUN \
 		luajit \
 		libuv1-dev \
 		libgoogle-perftools-dev \
+		make \
 		automake \
 		libtool \
 		pkg-config \
@@ -22,7 +23,7 @@ RUN \
 	cd dnsjit && \
 	git checkout tcp-dnssim && \
 	./autogen.sh && \
-	./configure && \
+	./configure --disable-dependency-tracking && \
 	make && \
 	cd ..
 
