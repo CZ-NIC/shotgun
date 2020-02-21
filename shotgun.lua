@@ -19,6 +19,7 @@ if getopt:val("help") then
 	return
 end
 local v = getopt:val("v")
+log.display_file_line(true)
 if v > 0 then
 	log.enable("warning")
 end
