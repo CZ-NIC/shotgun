@@ -7,6 +7,8 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ "p", "port", 53, "Target port", "?" },
 	{ "s", "server", "::1", "Target IPv6 address", "?" },
 	{ "t", "timeout", 2, "Timeout for requests", "?" },
+	{ "k", "hanshake_timeout", 5, "Timeout for session handshake", "?" },
+	{ "e", "idle_timeout", 0, "Idle timeout for TCP sessions", "?" },
 	{ "b", "bind", "", "Source IPv6 bind address pattern (example: 'fd00::%x')", "?" },
 	{ "i", "ips", 1, "Number of source IPs per thread (when -b is set)", "?" },
 	{ "d", "drift", 1.0, "Maximum realtime drift (seconds)", "?" },
@@ -44,6 +46,8 @@ local SEND_THREADS = getopt:val("T")
 local TARGET_IP = getopt:val("s")
 local TARGET_PORT = getopt:val("p")
 local TIMEOUT = getopt:val("t")
+local HANDSHAKE_TIMEOUT = getopt:val("k")
+local IDLE_TIMEOUT = getopt:val("e")
 local BIND_IP_PATTERN = getopt:val("b")
 local NUM_BIND_IP = getopt:val("i")
 local REALTIME_DRIFT = getopt:val("d")
@@ -62,6 +66,8 @@ local function thread_output(thr)
 	output:tcp()
 	output:target(thr:pop(), thr:pop())
 	output:timeout(thr:pop())
+	output:handshake_timeout(thr:pop())
+	output:idle_timeout(thr:pop())
 	output:stats_collect(thr:pop())
 	output:free_after_use(true)
 
@@ -136,6 +142,8 @@ for i = 1, SEND_THREADS do
 	threads[i]:push(TARGET_IP)
 	threads[i]:push(TARGET_PORT)
 	threads[i]:push(TIMEOUT)
+	threads[i]:push(HANDSHAKE_TIMEOUT)
+	threads[i]:push(IDLE_TIMEOUT)
 	threads[i]:push(LOG_INTERVAL)
 	threads[i]:push(string.format(outname, i))
 	threads[i]:push(MAX_BATCH_SIZE)
