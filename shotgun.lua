@@ -2,7 +2,7 @@
 local object = require("dnsjit.core.objects")
 local log = require("dnsjit.core.log")
 local getopt = require("dnsjit.lib.getopt").new({
-	{ "v", "verbose", 2, "Verbosity level (0-4)", "?" },
+	{ "v", "verbose", 2, "Verbosity level (0-5)", "?" },
 	{ "T", "threads", 1, "Number of sender threads", "?" },
 	{ "p", "port", 53, "Target port", "?" },
 	{ "s", "server", "::1", "Target IPv6 address", "?" },
@@ -26,9 +26,12 @@ if v > 1 then
 	log.enable("notice")
 end
 if v > 2 then
-	log.enable("info")
+	log.display_file_line(true)
 end
 if v > 3 then
+	log.enable("info")
+end
+if v > 4 then
 	log.enable("debug")
 end
 
