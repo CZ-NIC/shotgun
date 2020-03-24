@@ -3,6 +3,7 @@ FROM ubuntu:focal
 RUN \
 	apt-get update -qq && \
 	apt-get install -y -qqq \
+		gdb \
 		libck-dev \
 		libluajit-5.1-dev \
 		libpcap-dev \
