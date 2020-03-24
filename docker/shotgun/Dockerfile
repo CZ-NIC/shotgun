@@ -1,5 +1,7 @@
 FROM ubuntu:focal
 
+ENV DEBIAN_FRONTEND=noninteractive
+
 RUN \
 	apt-get update -qq && \
 	apt-get install -y -qqq \
