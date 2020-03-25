@@ -84,6 +84,15 @@ def init_plot(title):
     return ax
 
 
+def set_axes_limits(ax):
+    bottom, top = ax.get_ylim()
+    bottom = math.floor(bottom / 10) * 10
+    top = math.ceil(top / 10) * 10
+    top = top + 1 if top <= 100 else 101
+    bottom = bottom - 1 if bottom >= 0 else -1
+    ax.set_ylim(bottom, top)
+
+
 def plot_response_rate(ax, data, label, eval_func=None, min_timespan=0):
     stats_periodic = data['stats_periodic']
     time_offset = stats_periodic[0]['since_ms']
@@ -173,6 +182,8 @@ def main():
                     rcode_label,
                     eval_func=eval_func,
                     min_timespan=min_timespan)
+
+    set_axes_limits(ax)
 
     plt.legend()
     plt.savefig(args.output)
