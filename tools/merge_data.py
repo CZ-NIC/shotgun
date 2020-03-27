@@ -8,7 +8,7 @@ import sys
 import traceback
 
 
-JSON_VERSION = 20191111
+JSON_VERSION = 20200327
 DEFAULT_FILENAME = 'shotgun-all.json'
 
 
