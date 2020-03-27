@@ -21,7 +21,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt  # noqa
 
 
-JSON_VERSION = 20191111
+JSON_VERSION = 20200406
 MIN_X_EXP = -1
 MAX_X_EXP = 2
 
