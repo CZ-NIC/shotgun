@@ -101,7 +101,7 @@ def merge_latency(data, since=0, until=float('+inf')):
             for i, _ in enumerate(stats['latency']):
                 latency[i] += stats['latency'][i]
 
-    qps = requests / (end - start)
+    qps = requests / (end - start) * 1000  # convert from ms
     return latency, qps
 
 
