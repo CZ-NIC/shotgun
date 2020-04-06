@@ -8,7 +8,7 @@ import sys
 import traceback
 
 
-JSON_VERSION = 20200327
+JSON_VERSION = 20200406
 DEFAULT_FILENAME = 'shotgun-all.json'
 
 
@@ -64,6 +64,9 @@ DATA_STRUCTURE_STATS = {
     'requests': sum,
     'ongoing': sum,
     'answers': sum,
+    'conn_active': sum,
+    'conn_handshakes': sum,
+    'conn_handshakes_failed': sum,
     'rcode_noerror': sum,
     'rcode_formerr': sum,
     'rcode_servfail': sum,
