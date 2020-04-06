@@ -15,7 +15,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt  # noqa
 
 
-JSON_VERSION = 20200327
+JSON_VERSION = 20200406
 
 
 StatRcode = collections.namedtuple('StatRcode', ['field', 'label'])
