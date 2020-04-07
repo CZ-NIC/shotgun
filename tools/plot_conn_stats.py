@@ -31,7 +31,7 @@ def siname(n):
 
 
 def init_plot(title):
-    _, ax = plt.subplots(figsize=(8, 6))
+    _, ax = plt.subplots(figsize=(10, 7))
 
     ax.set_xlabel('Time [s]')
     ax.set_ylabel('Number of connections')
@@ -39,13 +39,13 @@ def init_plot(title):
 
     ax.grid(True, axis='x', which='major')
     ax.grid(True, axis='y', which='major')
-    ax.grid(True, axis='y', which='minor', linestyle='dashed', color='#DDDDDD')
+    ax.grid(True, axis='y', which='minor', linestyle='--', color='#DDDDDD')
 
     return ax
 
 
 def plot(ax, data, label, eval_func, min_timespan=0):
-    stats_periodic = data['stats_periodic']
+    stats_periodic = data['stats_periodic'][:-1]  # omit the last often misleading datapoint
     time_offset = stats_periodic[0]['since_ms']
 
     xvalues = []
@@ -101,7 +101,7 @@ def main():
 
         plot(ax, data, label='Active',
              eval_func=lambda stats: stats['conn_active'])
-        plot(ax, data, label='Handshakes (total)',
+        plot(ax, data, label='Handshakes',
              eval_func=lambda stats: stats['conn_handshakes'])
         plot(ax, data, label='Handshakes (failed)',
              eval_func=lambda stats: stats['conn_handshakes_failed'])
