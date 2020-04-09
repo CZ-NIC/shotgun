@@ -11,7 +11,6 @@ RUN \
 		liblmdb-dev \
 		libgnutls28-dev \
 		luajit \
-		libuv1-dev \
 		libgoogle-perftools-dev \
 		make \
 		automake \
@@ -19,6 +18,15 @@ RUN \
 		pkg-config \
 		git && \
 	rm -rf /var/lib/apt/lists/*
+
+RUN \
+	git clone https://github.com/oerdnj/libuv.git && \
+	cd libuv && \
+	git checkout tcp_fastopen && \
+	sh autogen.sh && \
+	./configure && \
+	make && \
+	make install
 
 RUN \
 	git clone https://github.com/tomaskrizek/dnsjit.git && \
