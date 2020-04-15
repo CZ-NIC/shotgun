@@ -79,8 +79,9 @@ def plot_log_percentile_histogram(ax, latency, label):
 
 
 def merge_latency(data, since=0, until=float('+inf')):
-    since_ms = data['stats_sum']['since_ms'] + since * 1000
-    until_ms = data['stats_sum']['since_ms'] + until * 1000
+    # add 100ms tolarence for interval beginning / end
+    since_ms = data['stats_sum']['since_ms'] + since * 1000 - 100
+    until_ms = data['stats_sum']['since_ms'] + until * 1000 + 100
 
     latency = []
     requests = 0
@@ -92,14 +93,17 @@ def merge_latency(data, since=0, until=float('+inf')):
         if stats['until_ms'] >= until_ms:
             break
         requests += stats['requests']
+        end = stats['until_ms']
         if not latency:
             latency = list(stats['latency'])
             start = stats['since_ms']
         else:
-            end = stats['until_ms']
             assert len(stats['latency']) == len(latency)
             for i, _ in enumerate(stats['latency']):
                 latency[i] += stats['latency'][i]
+
+    if not latency:
+        raise RuntimeError('no samples matching this interval')
 
     qps = requests / (end - start) * 1000  # convert from ms
     return latency, qps
