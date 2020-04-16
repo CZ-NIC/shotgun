@@ -8,7 +8,7 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ "s", "server", "::1", "Target IPv6 address", "?" },
 	{ "t", "timeout", 2, "Timeout for requests", "?" },
 	{ "k", "hanshake_timeout", 5, "Timeout for session handshake", "?" },
-	{ "e", "idle_timeout", 0, "Idle timeout for TCP sessions", "?" },
+	{ "e", "idle_timeout", 10, "Idle timeout for TCP sessions", "?" },
 	{ "b", "bind", "", "Source IPv6 bind address pattern (example: 'fd00::%x')", "?" },
 	{ "i", "ips", 1, "Number of source IPs per thread (when -b is set)", "?" },
 	{ "d", "drift", 1.0, "Maximum realtime drift (seconds)", "?" },
