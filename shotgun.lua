@@ -63,7 +63,7 @@ local function thread_output(thr)
 	local output = require("dnsjit.output.dnssim").new(thr:pop())
 	local running
 
-	output:tcp()
+	output:udp_only()
 	output:target(thr:pop(), thr:pop())
 	output:timeout(thr:pop())
 	output:handshake_timeout(thr:pop())

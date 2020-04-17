@@ -43,7 +43,7 @@ RUN ldconfig
 RUN \
 	git clone https://gitlab.labs.nic.cz/knot/shotgun.git && \
 	cd shotgun && \
-	git checkout tcp-shotgun && \
+	git checkout tmp-udp-shotgun && \
 	cd ..
 
 ENTRYPOINT ["dnsjit/src/dnsjit", "shotgun/shotgun.lua"]
