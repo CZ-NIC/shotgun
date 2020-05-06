@@ -23,7 +23,7 @@ RUN \
 RUN \
 	git clone https://github.com/tomaskrizek/dnsjit.git && \
 	cd dnsjit && \
-	git checkout tcp-dnssim && \
+	git checkout tls-dnssim && \
 	./autogen.sh && \
 	./configure --disable-dependency-tracking && \
 	make && \
@@ -32,7 +32,7 @@ RUN \
 RUN \
 	git clone https://gitlab.labs.nic.cz/knot/shotgun.git && \
 	cd shotgun && \
-	git checkout tcp-shotgun && \
+	git checkout tls-shotgun && \
 	cd ..
 
 ENTRYPOINT ["dnsjit/src/dnsjit", "shotgun/shotgun.lua"]
