@@ -11,7 +11,7 @@ import socket
 import sys
 import tempfile
 import traceback
-from typing import Dict, Iterator, List, Optional, Tuple, Union
+from typing import Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 import dns
 import dns.exception
@@ -82,6 +82,7 @@ def join_partial_files(
             filename_out: str,
             tmpdir: str,
             nfiles: int,
+            filter_func: Optional[Callable[[dpkt.dpkt.Packet], bool]] = None
         ) -> None:
     """
     The partial files are assumed to have the packets monotonically
@@ -124,7 +125,8 @@ def join_partial_files(
                     item = heappop(heap)
                 except IndexError:
                     break
-                pcap_out.writepkt(item[1], ts=item[0])
+                if filter_func is None or filter_func(item[1]):
+                    pcap_out.writepkt(item[1], ts=item[0])
                 push(heap, item[2])
         finally:
             pcap_out.close()
@@ -136,8 +138,14 @@ def process_pcap(
             clients: int,
             time_period: float,
             ips: Optional[List[IP]] = None,
-            include_malformed: bool = False
+            include_malformed: bool = False,
+            ramp: int = 0
         ) -> None:
+    if ramp == 0:
+        filter_func = None
+    else:
+        raise NotImplementedError
+
     with open(filename_in, 'rb') as fin:
         pcap_in = dpkt.pcap.Reader(fin)
         if pcap_in.datalink() not in LINK_TYPES:
@@ -153,7 +161,7 @@ def process_pcap(
             logging.debug('tmpdir: %s', tmpdir)
 
             nfiles = create_partial_files(pcap_in, tmpdir, clients, time_period, include_malformed)
-            join_partial_files(filename_out, tmpdir, nfiles)
+            join_partial_files(filename_out, tmpdir, nfiles, filter_func)
             logging.info('DONE: output PCAP created at %s', filename_out)
 
 
