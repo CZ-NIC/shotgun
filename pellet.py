@@ -11,7 +11,7 @@ import socket
 import sys
 import tempfile
 import traceback
-from typing import Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 import dns
 import dns.exception
@@ -82,7 +82,7 @@ def join_partial_files(
             filename_out: str,
             tmpdir: str,
             nfiles: int,
-            filter_func: Optional[Callable[[dpkt.dpkt.Packet], bool]] = None
+            filter_func: Optional[Callable[[float, dpkt.dpkt.Packet], bool]] = None
         ) -> None:
     """
     The partial files are assumed to have the packets monotonically
@@ -125,11 +125,45 @@ def join_partial_files(
                     item = heappop(heap)
                 except IndexError:
                     break
-                if filter_func is None or filter_func(item[1]):
+                if filter_func is None or filter_func(item[0], item[1]):
                     pcap_out.writepkt(item[1], ts=item[0])
                 push(heap, item[2])
         finally:
             pcap_out.close()
+
+
+def create_ramp_fitler(
+            ramp_time: float,
+            target_clients: int
+        ) -> Callable[[float, dpkt.dpkt.Packet], bool]:
+    next_client_time = 0.0
+    ramp_end = 0.0
+    client_map = {}  # type: Dict[bytes, Any]
+
+    def ramp_filter(ts: float, pkt: dpkt.dpkt.Packet) -> bool:
+        nonlocal next_client_time
+        nonlocal ramp_end
+        nonlocal client_map
+
+        if next_client_time == 0:
+            next_client_time = ts
+            ramp_end = ts + ramp_time
+
+        if ts >= ramp_end:
+            return True
+
+        ip6 = dpkt.ip6.IP6(pkt)
+        if ip6.src in client_map:
+            return True
+        elif ts >= next_client_time:
+            next_client_time = (
+                ramp_time * (len(client_map) / target_clients) +
+                ramp_end - ramp_time)
+            client_map[ip6.src] = 1
+            return True
+        return False
+
+    return ramp_filter
 
 
 def process_pcap(
@@ -144,7 +178,7 @@ def process_pcap(
     if ramp == 0:
         filter_func = None
     else:
-        raise NotImplementedError
+        filter_func = create_ramp_fitler(ramp, clients)
 
     with open(filename_in, 'rb') as fin:
         pcap_in = dpkt.pcap.Reader(fin)
@@ -284,6 +318,9 @@ def main():
         '-t', '--time', type=float, default=300,
         help='how many seconds to simulate')
     parser.add_argument(
+        '--ramp', type=int, default=0,
+        help='length of ramp-up time')
+    parser.add_argument(
         '-o', '--output', type=str, default='pellets.pcap',
         help='output PCAP file with pseudoclients')
     parser.add_argument(
@@ -311,7 +348,7 @@ def main():
 
     try:
         process_pcap(args.pcap_in, args.output, args.clients, args.time, ips,
-                     args.include_malformed)
+                     args.include_malformed, args.ramp)
     except FileNotFoundError as exc:
         logging.critical('%s', exc)
         sys.exit(1)
