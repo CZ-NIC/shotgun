@@ -63,7 +63,7 @@ local function thread_output(thr)
 	local output = require("dnsjit.output.dnssim").new(thr:pop())
 	local running
 
-	output:tls()
+	output:tls("NORMAL:%NO_TICKETS")
 	output:target(thr:pop(), thr:pop())
 	output:timeout(thr:pop())
 	output:handshake_timeout(thr:pop())
