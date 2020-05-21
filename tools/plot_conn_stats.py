@@ -12,7 +12,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt  # noqa
 
 
-JSON_VERSION = 20200406
+JSON_VERSION = 20200406  # TODO bump
 
 
 sinames = ['', ' k', ' M', ' G', ' T']
