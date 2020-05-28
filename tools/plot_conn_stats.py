@@ -101,8 +101,10 @@ def main():
 
         plot(ax, data, label='Active',
              eval_func=lambda stats: stats['conn_active'])
-        plot(ax, data, label='Handshakes',
+        plot(ax, data, label='TCP Handshakes',
              eval_func=lambda stats: stats['conn_handshakes'])
+        plot(ax, data, label='TLS session resumed',
+             eval_func=lambda stats: stats['conn_resumed'])
         plot(ax, data, label='Handshakes (failed)',
              eval_func=lambda stats: stats['conn_handshakes_failed'])
 
