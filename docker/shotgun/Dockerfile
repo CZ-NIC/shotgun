@@ -1,4 +1,4 @@
-FROM ubuntu:focal
+FROM ubuntu:18.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -13,7 +13,6 @@ RUN \
 		luajit \
 		libuv1-dev \
 		libgoogle-perftools-dev \
-		make \
 		automake \
 		libtool \
 		pkg-config \
@@ -25,7 +24,7 @@ RUN \
 	cd dnsjit && \
 	git checkout tls-dnssim && \
 	./autogen.sh && \
-	./configure --disable-dependency-tracking && \
+	./configure && \
 	make && \
 	cd ..
 

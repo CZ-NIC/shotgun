@@ -29,7 +29,6 @@ of view.
 #### shotgun.lua
 
 - dnsjit (with dnssim installed from https://github.com/tomaskrizek/dnsjit/tree/simulator )
-  compiled with libuv >= 1.34.2
 
 ### Input data
 
