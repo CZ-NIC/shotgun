@@ -12,6 +12,7 @@ RUN \
 		libgnutls28-dev \
 		luajit \
 		libuv1-dev \
+		libnghttp2-dev \
 		libgoogle-perftools-dev \
 		make \
 		automake \
@@ -23,7 +24,7 @@ RUN \
 RUN \
 	git clone https://github.com/tomaskrizek/dnsjit.git && \
 	cd dnsjit && \
-	git checkout tls-dnssim && \
+	git checkout https2-dnssim && \
 	./autogen.sh && \
 	./configure --disable-dependency-tracking && \
 	make && \
@@ -32,7 +33,7 @@ RUN \
 RUN \
 	git clone https://gitlab.labs.nic.cz/knot/shotgun.git && \
 	cd shotgun && \
-	git checkout tls-shotgun && \
+	git checkout https2-shotgun && \
 	cd ..
 
 ENTRYPOINT ["dnsjit/src/dnsjit", "shotgun/shotgun.lua"]
