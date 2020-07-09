@@ -33,7 +33,7 @@ RUN \
 RUN \
 	git clone https://gitlab.labs.nic.cz/knot/shotgun.git && \
 	cd shotgun && \
-	git checkout tls-shotgun && \
+	git checkout tmp-tcp-shotgun && \
 	cd ..
 
 ENTRYPOINT ["dnsjit/src/dnsjit", "shotgun/shotgun.lua"]
