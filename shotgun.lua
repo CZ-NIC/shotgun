@@ -69,7 +69,7 @@ local function thread_output(thr)
 	output:timeout(thr:pop())
 	output:handshake_timeout(thr:pop())
 	output:idle_timeout(thr:pop())
-	output:tls(thr:pop())
+	output:udp_only(thr:pop())
 	output:stats_collect(thr:pop())
 	output:free_after_use(true)
 
