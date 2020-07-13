@@ -13,6 +13,10 @@ import tempfile
 import traceback
 from typing import Dict, Iterator, List, Optional, Tuple, Union
 
+import dns
+import dns.exception
+import dns.message
+
 import dpkt.pcap
 
 
@@ -159,7 +163,7 @@ def get_client_address(client: int) -> bytes:
     return socket.inet_pton(socket.AF_INET6, address)
 
 
-def process_time_chunk(
+def process_time_chunk(  # pylint: disable=too-many-statements
             pcap_in: dpkt.pcap.Reader,
             pcap_out: dpkt.pcap.Writer,
             client_start: int,
@@ -203,12 +207,19 @@ def process_time_chunk(
             continue  # QR=1 -> response
 
         # do mapping from original ip to client; new client otherwise
+        client_ip = None
         try:
             client_ip = client_map[ip.src]
         except KeyError:
             if client_n > max_clients:
                 continue  # no more clients needed
 
+        try:  # ignore malformed queries
+            dns.message.from_wire(payload)
+        except dns.exception.FormError:
+            continue
+
+        if client_ip is None:
             client_ip = get_client_address(client_n)
             client_map[ip.src] = client_ip
             client_n += 1
