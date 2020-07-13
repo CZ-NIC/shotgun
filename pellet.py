@@ -2,6 +2,9 @@
 
 import argparse
 from collections import defaultdict
+import dns
+import dns.exception
+import dns.message
 from heapq import heappush, heappop
 import ipaddress
 import logging
@@ -201,6 +204,11 @@ def process_time_chunk(
             continue  # small garbage isn't supported
         if payload[2] & 0x80:
             continue  # QR=1 -> response
+
+        try:  # ignore malformed queries
+            dns.message.from_wire(payload)
+        except dns.exception.FormError:
+            continue
 
         # do mapping from original ip to client; new client otherwise
         try:
