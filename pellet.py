@@ -37,14 +37,15 @@ class NotEnoughInputDataError(RuntimeError):
 def create_partial_files(
             pcap_in: dpkt.pcap.Reader,
             dest: str,
-            clients: int,
             time_period: float,
+            clients: Optional[int] = None,
             include_malformed: bool = False
         ) -> int:
     """
-    Each partial file contains simulated clients for the given
-    time period. Multiple partial files will be created until the
-    amount of clients needed is satisfied (or inpur PCAP runs out).
+    Each partial file contains simulated clients for the given time period. If
+    the number of clients is greater than what is available in the input PCAP,
+    multiple partial files will be created until the amount of clients needed
+    is satisfied (or input PCAP runs out).
     """
     file_n = 1
     client_next = 1
@@ -57,7 +58,7 @@ def create_partial_files(
             time_offset = (file_n - 1) * time_period
             try:
                 new_clients = process_time_chunk(
-                    pcap_in, partial_pcap_out, client_next, clients, time_period, time_offset,
+                    pcap_in, partial_pcap_out, client_next, time_period, time_offset, clients,
                     include_malformed)
             except NotEnoughInputDataError:
                 logging.error("No more available input data! Aborting prematurely...")
@@ -69,10 +70,10 @@ def create_partial_files(
             finally:
                 partial_pcap_out.close()
             client_next += new_clients
-            logging.info('chunk %04d: %d clients; total: %d / %d clients',
-                         file_n, new_clients, client_next - 1, clients)
+            logging.info('chunk %04d: %d clients; total: %d',
+                         file_n, new_clients, client_next - 1)
             file_n += 1
-            if (client_next - 1) >= clients:
+            if clients is None or (client_next - 1) >= clients:
                 break
     logging.info('generated %d clients in %d files', client_next - 1, file_n - 1)
     return file_n - 1
@@ -133,8 +134,8 @@ def join_partial_files(
 def process_pcap(
             filename_in: str,
             filename_out: str,
-            clients: int,
             time_period: float,
+            clients: Optional[int] = None,
             ips: Optional[List[IP]] = None,
             include_malformed: bool = False
         ) -> None:
@@ -152,7 +153,7 @@ def process_pcap(
         with tempfile.TemporaryDirectory() as tmpdir:
             logging.debug('tmpdir: %s', tmpdir)
 
-            nfiles = create_partial_files(pcap_in, tmpdir, clients, time_period, include_malformed)
+            nfiles = create_partial_files(pcap_in, tmpdir, time_period, clients, include_malformed)
             join_partial_files(filename_out, tmpdir, nfiles)
             logging.info('DONE: output PCAP created at %s', filename_out)
 
@@ -170,9 +171,9 @@ def process_time_chunk(  # pylint: disable=too-many-statements
             pcap_in: dpkt.pcap.Reader,
             pcap_out: dpkt.pcap.Writer,
             client_start: int,
-            max_clients: int,
             time_period: float,
             time_offset: float,
+            max_clients: Optional[int] = None,
             include_maformed: bool = False
         ) -> int:
     client_n = client_start
@@ -215,7 +216,7 @@ def process_time_chunk(  # pylint: disable=too-many-statements
         try:
             client_ip = client_map[ip.src]
         except KeyError:
-            if client_n > max_clients:
+            if max_clients is not None and client_n > max_clients:
                 continue  # no more clients needed
 
         if not include_maformed:
@@ -270,8 +271,8 @@ def main():
         description='prepare PCAP with pseudoclients for shotgun')
     parser.add_argument('pcap_in', type=str, help='input PCAP file to process')
     parser.add_argument(
-        '-c', '--clients', type=int, default=10000,
-        help='number of clients to prepare')
+        '-c', '--clients', type=int,
+        help='number of clients to prepare (default: all available in given timeslot)')
     parser.add_argument(
         '-t', '--time', type=float, default=300,
         help='how many seconds to simulate')
@@ -302,7 +303,7 @@ def main():
                 ips.append(ip)
 
     try:
-        process_pcap(args.pcap_in, args.output, args.clients, args.time, ips,
+        process_pcap(args.pcap_in, args.output, args.time, args.clients, ips,
                      args.include_malformed)
     except FileNotFoundError as exc:
         logging.critical('%s', exc)
