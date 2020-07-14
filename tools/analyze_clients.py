@@ -11,6 +11,10 @@ import sys
 import traceback
 from typing import Dict, List, Optional, Union
 
+import dns
+import dns.exception
+import dns.message
+
 import dpkt
 # Force matplotlib to use a different backend to handle machines without a display
 import matplotlib
@@ -75,7 +79,8 @@ def count_client_queries(
             filename: str,
             ips: Optional[List[IP]] = None,
             since: float = 0,
-            until: float = float('+inf')
+            until: float = float('+inf'),
+            include_malformed: bool = False
         ) -> Dict[bytes, int]:
     clients = defaultdict(int)  # type: Dict[bytes, int]
 
@@ -120,6 +125,12 @@ def count_client_queries(
                 continue  # small garbage isn't supported
             if payload[2] & 0x80:
                 continue  # QR=1 -> response
+
+            if not include_malformed:
+                try:
+                    dns.message.from_wire(payload)
+                except dns.exception.FormError:
+                    continue
 
             # do mapping from original ip to client; new client otherwise
             clients[ip.src] += 1
@@ -175,6 +186,8 @@ def main():
                         help='Omit data before this time (secs since test start)')
     parser.add_argument('--until', type=float, default=float('+inf'),
                         help='Omit data after this time (secs since test start)')
+    parser.add_argument('-m', '--include-malformed', action='store_true',
+                        help='include malformed packets')
     args = parser.parse_args()
 
     ips = []
@@ -197,7 +210,8 @@ def main():
         label = os.path.basename(pcap)
         logging.info('Processing: %s', label)
         try:
-            clients = count_client_queries(pcap, ips, args.since, args.until)
+            clients = count_client_queries(pcap, ips, args.since, args.until,
+                                           args.include_malformed)
         except FileNotFoundError as exc:
             logging.critical('%s', exc)
             sys.exit(1)
