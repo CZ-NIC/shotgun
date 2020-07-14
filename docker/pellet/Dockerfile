@@ -9,6 +9,7 @@ RUN \
 		git && \
 	rm -rf /var/lib/apt/lists/*
 
+RUN pip3 install dnspython
 RUN pip3 install git+git://github.com/kbandla/dpkt.git@2c6aada35c38c93061ac6d4c47862174ffcc4799
 
 RUN git clone https://gitlab.labs.nic.cz/knot/shotgun.git
