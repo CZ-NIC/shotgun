@@ -25,6 +25,7 @@ of view.
 #### pellet.py
 
 - python-dpkt (latest from git, commit 2c6aada35 or newer)
+- python-dnspython
 
 #### shotgun.lua
 
