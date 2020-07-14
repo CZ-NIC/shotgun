@@ -38,7 +38,8 @@ def create_partial_files(
             pcap_in: dpkt.pcap.Reader,
             dest: str,
             clients: int,
-            time_period: float
+            time_period: float,
+            include_malformed: bool = False
         ) -> int:
     """
     Each partial file contains simulated clients for the given
@@ -56,7 +57,8 @@ def create_partial_files(
             time_offset = (file_n - 1) * time_period
             try:
                 new_clients = process_time_chunk(
-                    pcap_in, partial_pcap_out, client_next, clients, time_period, time_offset)
+                    pcap_in, partial_pcap_out, client_next, clients, time_period, time_offset,
+                    include_malformed)
             except NotEnoughInputDataError:
                 logging.error("No more available input data! Aborting prematurely...")
                 break
@@ -133,7 +135,8 @@ def process_pcap(
             filename_out: str,
             clients: int,
             time_period: float,
-            ips: Optional[List[IP]] = None
+            ips: Optional[List[IP]] = None,
+            include_malformed: bool = False
         ) -> None:
     with open(filename_in, 'rb') as fin:
         pcap_in = dpkt.pcap.Reader(fin)
@@ -149,7 +152,7 @@ def process_pcap(
         with tempfile.TemporaryDirectory() as tmpdir:
             logging.debug('tmpdir: %s', tmpdir)
 
-            nfiles = create_partial_files(pcap_in, tmpdir, clients, time_period)
+            nfiles = create_partial_files(pcap_in, tmpdir, clients, time_period, include_malformed)
             join_partial_files(filename_out, tmpdir, nfiles)
             logging.info('DONE: output PCAP created at %s', filename_out)
 
@@ -170,6 +173,7 @@ def process_time_chunk(  # pylint: disable=too-many-statements
             max_clients: int,
             time_period: float,
             time_offset: float,
+            include_maformed: bool = False
         ) -> int:
     client_n = client_start
     client_map = {}  # type: Dict[bytes, bytes]
@@ -214,10 +218,11 @@ def process_time_chunk(  # pylint: disable=too-many-statements
             if client_n > max_clients:
                 continue  # no more clients needed
 
-        try:  # ignore malformed queries
-            dns.message.from_wire(payload)
-        except dns.exception.FormError:
-            continue
+        if not include_maformed:
+            try:
+                dns.message.from_wire(payload)
+            except dns.exception.FormError:
+                continue
 
         if client_ip is None:
             client_ip = get_client_address(client_n)
@@ -276,6 +281,9 @@ def main():
     parser.add_argument(
         '-r', '--resolvers', type=str, nargs='*',
         help='only use data flowing to specified addresses (IP/IPv6)')
+    parser.add_argument(
+        '-m', '--include-malformed', action='store_true',
+        help='include malformed packets')
 
     args = parser.parse_args()
 
@@ -294,7 +302,8 @@ def main():
                 ips.append(ip)
 
     try:
-        process_pcap(args.pcap_in, args.output, args.clients, args.time, ips)
+        process_pcap(args.pcap_in, args.output, args.clients, args.time, ips,
+                     args.include_malformed)
     except FileNotFoundError as exc:
         logging.critical('%s', exc)
         sys.exit(1)
