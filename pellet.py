@@ -11,7 +11,11 @@ import socket
 import sys
 import tempfile
 import traceback
-from typing import Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
+
+import dns
+import dns.exception
+import dns.message
 
 import dpkt.pcap
 
@@ -34,7 +38,8 @@ def create_partial_files(
             pcap_in: dpkt.pcap.Reader,
             dest: str,
             clients: int,
-            time_period: float
+            time_period: float,
+            include_malformed: bool = False
         ) -> int:
     """
     Each partial file contains simulated clients for the given
@@ -52,7 +57,8 @@ def create_partial_files(
             time_offset = (file_n - 1) * time_period
             try:
                 new_clients = process_time_chunk(
-                    pcap_in, partial_pcap_out, client_next, clients, time_period, time_offset)
+                    pcap_in, partial_pcap_out, client_next, clients, time_period, time_offset,
+                    include_malformed)
             except NotEnoughInputDataError:
                 logging.error("No more available input data! Aborting prematurely...")
                 break
@@ -76,6 +82,7 @@ def join_partial_files(
             filename_out: str,
             tmpdir: str,
             nfiles: int,
+            filter_func: Optional[Callable[[float, dpkt.dpkt.Packet], bool]] = None
         ) -> None:
     """
     The partial files are assumed to have the packets monotonically
@@ -118,10 +125,45 @@ def join_partial_files(
                     item = heappop(heap)
                 except IndexError:
                     break
-                pcap_out.writepkt(item[1], ts=item[0])
+                if filter_func is None or filter_func(item[0], item[1]):
+                    pcap_out.writepkt(item[1], ts=item[0])
                 push(heap, item[2])
         finally:
             pcap_out.close()
+
+
+def create_ramp_fitler(
+            ramp_time: float,
+            target_clients: int
+        ) -> Callable[[float, dpkt.dpkt.Packet], bool]:
+    next_client_time = 0.0
+    ramp_end = 0.0
+    client_map = {}  # type: Dict[bytes, Any]
+
+    def ramp_filter(ts: float, pkt: dpkt.dpkt.Packet) -> bool:
+        nonlocal next_client_time
+        nonlocal ramp_end
+        nonlocal client_map
+
+        if next_client_time == 0:
+            next_client_time = ts
+            ramp_end = ts + ramp_time
+
+        if ts >= ramp_end:
+            return True
+
+        ip6 = dpkt.ip6.IP6(pkt)
+        if ip6.src in client_map:
+            return True
+        elif ts >= next_client_time:
+            next_client_time = (
+                ramp_time * (len(client_map) / target_clients) +
+                ramp_end - ramp_time)
+            client_map[ip6.src] = 1
+            return True
+        return False
+
+    return ramp_filter
 
 
 def process_pcap(
@@ -129,8 +171,15 @@ def process_pcap(
             filename_out: str,
             clients: int,
             time_period: float,
-            ips: Optional[List[IP]] = None
+            ips: Optional[List[IP]] = None,
+            include_malformed: bool = False,
+            ramp: int = 0
         ) -> None:
+    if ramp == 0:
+        filter_func = None
+    else:
+        filter_func = create_ramp_fitler(ramp, clients)
+
     with open(filename_in, 'rb') as fin:
         pcap_in = dpkt.pcap.Reader(fin)
         if pcap_in.datalink() not in LINK_TYPES:
@@ -145,8 +194,8 @@ def process_pcap(
         with tempfile.TemporaryDirectory() as tmpdir:
             logging.debug('tmpdir: %s', tmpdir)
 
-            nfiles = create_partial_files(pcap_in, tmpdir, clients, time_period)
-            join_partial_files(filename_out, tmpdir, nfiles)
+            nfiles = create_partial_files(pcap_in, tmpdir, clients, time_period, include_malformed)
+            join_partial_files(filename_out, tmpdir, nfiles, filter_func)
             logging.info('DONE: output PCAP created at %s', filename_out)
 
 
@@ -159,13 +208,14 @@ def get_client_address(client: int) -> bytes:
     return socket.inet_pton(socket.AF_INET6, address)
 
 
-def process_time_chunk(
+def process_time_chunk(  # pylint: disable=too-many-statements
             pcap_in: dpkt.pcap.Reader,
             pcap_out: dpkt.pcap.Writer,
             client_start: int,
             max_clients: int,
             time_period: float,
             time_offset: float,
+            include_maformed: bool = False
         ) -> int:
     client_n = client_start
     client_map = {}  # type: Dict[bytes, bytes]
@@ -203,12 +253,20 @@ def process_time_chunk(
             continue  # QR=1 -> response
 
         # do mapping from original ip to client; new client otherwise
+        client_ip = None
         try:
             client_ip = client_map[ip.src]
         except KeyError:
             if client_n > max_clients:
                 continue  # no more clients needed
 
+        if not include_maformed:
+            try:
+                dns.message.from_wire(payload)
+            except dns.exception.FormError:
+                continue
+
+        if client_ip is None:
             client_ip = get_client_address(client_n)
             client_map[ip.src] = client_ip
             client_n += 1
@@ -260,11 +318,17 @@ def main():
         '-t', '--time', type=float, default=300,
         help='how many seconds to simulate')
     parser.add_argument(
+        '--ramp', type=int, default=0,
+        help='length of ramp-up time')
+    parser.add_argument(
         '-o', '--output', type=str, default='pellets.pcap',
         help='output PCAP file with pseudoclients')
     parser.add_argument(
         '-r', '--resolvers', type=str, nargs='*',
         help='only use data flowing to specified addresses (IP/IPv6)')
+    parser.add_argument(
+        '-m', '--include-malformed', action='store_true',
+        help='include malformed packets')
 
     args = parser.parse_args()
 
@@ -283,7 +347,8 @@ def main():
                 ips.append(ip)
 
     try:
-        process_pcap(args.pcap_in, args.output, args.clients, args.time, ips)
+        process_pcap(args.pcap_in, args.output, args.clients, args.time, ips,
+                     args.include_malformed, args.ramp)
     except FileNotFoundError as exc:
         logging.critical('%s', exc)
         sys.exit(1)
