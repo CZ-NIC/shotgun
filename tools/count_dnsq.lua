@@ -3,7 +3,7 @@
 -- count_dnsq.lua: count number of valid udp dns queries in pcap / on interface
 --
 -- Count the number of dns queries in given interval and print the value on stdout.
--- Only UDP DNS queries on port 53 that aren't malformed are counted.
+-- Only UDP DNS queries on given port that aren't malformed are counted.
 --
 -- If input PCAP is set, reads and processes the entire PCAP and quits.
 -- If interface is set, packets from that interface are counted until program is stopped.
@@ -14,17 +14,18 @@ local input = require("dnsjit.input.pcap").new()
 local layer = require("dnsjit.filter.layer").new()
 local dns = require("dnsjit.core.object.dns").new()
 local log = require("dnsjit.core.log").new("count_dnsq")
---local clock = require("dnsjit.lib.clock")
 local getopt = require("dnsjit.lib.getopt").new({
 	{ "f", "file", "", "input PCAP", "?" },
 	{ "i", "interface", "", "capture interface", "?" },
-	{ "I", "interval", 100, "interval for counting queries (in ms)", "?" }
+	{ "I", "interval", 100, "interval for counting queries (in ms)", "?" },
+	{ "p", "port", 53, "port to capture", "?" }
 })
 
 getopt:parse()
 local pcap = getopt:val("f")
 local interface = getopt:val("i")
 local interval = getopt:val("I")
+local port = getopt:val("p")
 
 if pcap ~= "" then
 	input:open_offline(pcap)
@@ -79,7 +80,7 @@ while true do
 	local ms = ts.sec * 1000 + ts.nsec / 1000000
 
 	dns.obj_prev = obj
-	if obj_udp ~= nil and obj_udp.dport == 53 and dns:parse(256) == 0 and dns.qr == 0 then
+	if obj_udp ~= nil and obj_udp.dport == port and dns:parse(256) == 0 and dns.qr == 0 then
 		inc_qcount(ms)
 	end
 end
