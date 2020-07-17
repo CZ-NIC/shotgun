@@ -39,17 +39,17 @@ end
 layer:producer(input)
 local produce, pctx = layer:produce()
 
-local function cast(obj, obj_type)
-	local out = obj
-	if out == nil then return nil end
-
-	while out.obj_type ~= obj_type do
-		out = out.obj_prev
-		if out == nil then return nil end
-	end
-
-	return out:cast()
-end
+--local function cast(obj, obj_type)
+--	local out = obj
+--	if out == nil then return nil end
+--
+--	while out.obj_type ~= obj_type do
+--		out = out.obj_prev
+--		if out == nil then return nil end
+--	end
+--
+--	return out:cast()
+--end
 
 local until_ms = nil
 local qcount = 0
@@ -69,12 +69,12 @@ while true do
 	local obj = produce(pctx)
 	if obj == nil then break end
 
-	local obj_udp = cast(obj, object.UDP)
-	local obj_pcap = cast(obj, object.PCAP)
+	local obj_udp = obj:cast_to(object.UDP)
+	local obj_pcap = obj:cast_to(object.PCAP)
 
 	local ts
 	if obj_pcap ~= nil then
-		ts = obj_pcap:cast().ts
+		ts = obj_pcap.ts
 	end
 	local ms = ts.sec * 1000 + ts.nsec / 1000000
 
