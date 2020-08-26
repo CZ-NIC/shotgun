@@ -24,7 +24,7 @@ RUN \
 RUN \
 	git clone https://github.com/tomaskrizek/dnsjit.git && \
 	cd dnsjit && \
-	git checkout https2-dnssim && \
+	git checkout dnssim-qmatch && \
 	./autogen.sh && \
 	./configure --disable-dependency-tracking && \
 	make && \
