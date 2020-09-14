@@ -1,22 +1,34 @@
-# Shotgun
+# DNS Shotgun
 
-Realistic DNS traffic simulator with many independent clients
+Realistic DNS benchmarking tool with advanced replay over various protocols.
 
-## Current status
+## Current status (2020-09-14)
 
-- under development: active branches unstable, docker containers should work
-- prototype for processing inut PCAPs is functional, but slow and requires
+- implemented transport: UDP, TCP, DNS-over-TLS, DNS-over-HTTPS
+- under development: unstable UI, only IPv6 support
+- prototype for processing input PCAPs is functional, but slow and requires
   python-dpkt from master
-- prototype for sending traffic is able to simulate UDP clients
-- dnsjit extensions are not merged upstream
+- dnsjit 1.0.0 supports UDP, TCP and DNS-over-TLS, development version
+  is needed for DNS-over-HTTPS
 
 ## Overview
 
-The idea is to simulate many simultaneous clients with real behaviour, e.g.
-asking different queries with some delays in between. These clients can then be
-replayed against a server using either UDP, TCP or TLS. This should allow
-comparison of UDP vs TCP vs TLS performance from both client and server point
-of view.
+DNS Shotgun is capable of simulating real client behaviour by replaying
+captured traffic. The original queries and their timing are kept intact,
+but you may select which protocol is used for the replay and how many
+clients will be simulated.
+
+This tool requires large amount of source PCAPs. These are ideally captured
+directly on your network to simulate the behaviour of your clients. The captured
+PCAPs are then pre-processed into DNS Shotgun "pellets", which are input files
+that contain the selected amount of simulated clients based on the original
+traffic.
+
+Realistic high-performance benchmarking requires complex setup, especially for
+TCP-based protocols. However, the authors of this tool have successfully used it
+to benchmark and test various DNS implementations with up to hundreds of
+thousands of clients (meaning _connections_ for TCP-based transports) using
+commodity hardware.
 
 ## Usage
 
@@ -29,8 +41,8 @@ of view.
 
 #### shotgun.lua
 
-- dnsjit (with dnssim installed from https://github.com/tomaskrizek/dnsjit/tree/simulator )
-  compiled with libuv >= 1.34.2
+- dnsjit 1.0.0 for UDP, TCP and DoT
+- development version of dnsjit for DoH
 
 ### Input data
 
@@ -58,63 +70,86 @@ resolver and not other upstream servers.
 
 ### Replaying the traffic
 
-Simulating tens thousands of individual clients is challenging, especially with
-TCP. Plans are to support UDP, TCP and TLS.
+#### UDP
+
+```
+./shotgun.lua -P udp -p 53 -s "::1" pellets.pcap
+```
+
+#### TCP
+
+```
+./shotgun.lua -P tcp -p 53 -s "::1" pellets.pcap
+./shotgun.lua -P tcp -p 53 -s "::1" -e 0  pellets.pcap  # no idle timeout
+```
+
+#### DNS-over-TLS (DoT)
+
+```
+./shotgun.lua -P dot -p 853 -s "::1" pellets.pcap
+./shotgun.lua -P dot -p 853 -s "::1" --tls-priority "NORMAL:-VERS-ALL:+VERS-TLS1.3" pellets.pcap
+./shotgun.lua -P dot -p 853 -s "::1" --tls-priority "NORMAL:%NO_TICKETS" pellets.pcap
+```
+
+#### DNS-over-HTTPS (DoH)
+
+```
+./shotgun.lua -P doh -p 443 -s "::1" --tls-priority "NORMAL:-VERS-ALL:+VERS-TLS1.3" pellets.pcap
+./shotgun.lua -P dot -p 443 -s "::1" --tls-priority "NORMAL:-VERS-ALL:+VERS-TLS1.3" -M POST pellets.pcap
+```
+
+#### High-performance benchmarking
+
+```
+./shotgun.lua \
+	-P dot \
+	-p 853 \
+	-s "fd00:dead:beef::cafe" \
+	-T 15 \
+	--bind-pattern "fd00:dead:beef::%x" \
+	--bind-num 8 \
+	pellets.pcap
+```
+
+To be able to scale-up to hundreds of thousands of TCP connections, multiple
+source IP addresses are needed. It's possible to utilize [unique-local
+addresses](https://en.wikipedia.org/wiki/Unique_local_address) in IPv6. Our rule
+of thumb is to use one IP per every 30k clients (when the port range is extended
+to allow 60k ephemeral ports).
+
+Check out the kernel documentation for tuning the network stack for TCP. Other tips:
+```
+ulimit -n 1000000
+sysctl -w net.ipv4.ip_local_port_range="1025 60999"
+stsctl -w net.core.rmem_default="8192000"
+```
+
+#### Docker container
 
 For ease of use, docker container with shotgun is available. Note that running
 ``--privileged`` can improve its performance by a few percent, if you don't mind
 the security risk.
 
 ```
-docker run registry.labs.nic.cz/knot/shotgun:20191010 --help
+docker run registry.labs.nic.cz/knot/shotgun:20200914 --help
 ```
-
-#### Shotgun
-
-The machine that will act as the sender of the traffic should have enough IPs
-and ports to avoid their exhaustion. This is especially important for TCP/TLS.
-
-Only IPv6 is supported right now. You can use the fd00::/8 range to create
-unique local addresses and assign multiple of them to a single interface.
-
-It's also a good idea to extend the port range. In my testing with linux
-kernel 5.3.1, it seemed once a half of this range is depleted, creating a new
-socket starts to take a significantly longer time, slowing the tool down. I'd
-recommend planing the expected port usage to utilize no more than half of the
-port range per IP.
-
-```
-sysctl -w net.ipv4.ip_local_port_range="1025 60999"
-```
-
-The tool may also open a large number of file descriptors. Make sure to have
-sufficiently large limit for the number of file descriptors.
-
-```
-ulimit -n 1000000
-```
-
-#### UDP
-
-- On the server, make sure the socket's receive buffer is sufficient.
-  Otherwise, many packets can be lost, resulting in low response rate.
-
-  ```
-  net.core.rmem_default=8192000
-  ```
-
-### Example
 
 The following example can be used to test the prototype to simulate UDP clients.
 
 Process captured PCAP and extract clients 50k clients within 30 seconds of traffic:
 
 ```
-docker run -v "$PWD:/data:rw" registry.labs.nic.cz/knot/shotgun/pellet:20191023 /data/captured.pcap -o /data/pellets.pcap -c 50000 -t 30 -r $RESOLVER_IP
+docker run -v "$PWD:/data:rw" registry.nic.cz/knot/shotgun/pellet:20200914 /data/captured.pcap -o /data/pellets.pcap -c 50000 -t 30 -r $RESOLVER_IP
 ```
 
 Replay the clients against IPv6 localhost server:
 
 ```
-docker run --network host -v "$PWD:/data:rw" registry.labs.nic.cz/knot/shotgun:20191010 -O /data /data/pellets.pcap -s "::1" -p 53
+docker run --network host -v "$PWD:/data:rw" registry.nic.cz/knot/shotgun:20200914 -O /data /data/pellets.pcap -s "::1"
 ```
+
+### Interpreting the results
+
+DNS Shotgun's output is one JSON file per every thread. These can be merged
+together and then various plots describing the latencies, connection statistics
+etc. can be generated using our utility scripts in the `tools/` directory.
