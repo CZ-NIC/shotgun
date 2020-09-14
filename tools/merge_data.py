@@ -14,7 +14,7 @@ DEFAULT_FILENAME = 'shotgun-all.json'
 
 class VersionError(RuntimeError):
     def __init__(self):
-        super(VersionError, self).__init__(
+        super().__init__(
             "Older formats of JSON data aren't supported. "
             "Use older tooling or re-run the tests with newer shotgun.")
 
@@ -25,13 +25,13 @@ class MismatchData(RuntimeError):
 
 class MissingData(RuntimeError):
     def __init__(self, field):
-        super(MissingData, self).__init__(
+        super().__init__(
             'Field "{field}" is missing in one or more files.'.format(field=field))
 
 
 class MergeFailed(RuntimeError):
     def __init__(self, field):
-        super(MergeFailed, self).__init__(
+        super().__init__(
             'Failed to merge field "{field}".'.format(field=field))
 
 
@@ -125,12 +125,12 @@ def merge_fields(fields, thread_data):
     for field, merge_func in fields.items():
         try:
             field_data = [data[field] for data in thread_data]
-        except KeyError:
-            raise MissingData(field)
+        except KeyError as exc:
+            raise MissingData(field) from exc
         try:
             out[field] = merge_func(field_data)
-        except Exception:
-            raise MergeFailed(field)
+        except Exception as exc:
+            raise MergeFailed(field) from exc
     return out
 
 
@@ -139,8 +139,8 @@ def merge_data(thread_data):
     try:
         if thread_data[0]['version'] != JSON_VERSION:
             raise VersionError
-    except KeyError:
-        raise VersionError
+    except KeyError as exc:
+        raise VersionError from exc
     return merge_fields(DATA_STRUCTURE_ROOT, thread_data)
 
 
