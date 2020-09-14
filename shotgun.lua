@@ -18,6 +18,7 @@ local function isdir(path)
    return exists(path.."/")
 end
 
+local dir = os.getenv("PWD") or ""
 local object = require("dnsjit.core.objects")
 local log = require("dnsjit.core.log")
 local getopt = require("dnsjit.lib.getopt").new({
@@ -34,7 +35,7 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ nil, "bind-pattern", "", "Source IPv6 bind address pattern (example: 'fd00::%x')", "?" },
 	{ nil, "bind-num", 1, "Number of source IPs per thread (when --bind-pattern is set)", "?" },
 	{ nil, "drift", 1, "Maximum realtime drift (seconds)", "?" },
-	{ "O", "outdir", os.getenv("PWD"), "Directory for output files (must exist)", "?" },
+	{ "O", "outdir", dir, "Directory for output files (must exist)", "?" },
 })
 local pcap = unpack(getopt:parse())
 if getopt:val("help") then
@@ -98,7 +99,7 @@ if string.find(TLS_PRIORITY, '"') ~= nil or string.find(TLS_PRIORITY, "'") ~= ni
 	log.fatal("tls priority string may not contain quotes");
 end
 local OUTDIR = getopt:val("O")
-if not isdir(OUTDIR) then
+if OUTDIR == "" or not isdir(OUTDIR) then
 	log.fatal("output directory \"" .. OUTDIR .. "\" doesn't exist")
 end
 
