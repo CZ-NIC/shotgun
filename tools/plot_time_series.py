@@ -15,7 +15,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt  # noqa
 
 
-JSON_VERSION = 20191111
+JSON_VERSION = 20200527
 
 
 StatRcode = collections.namedtuple('StatRcode', ['field', 'label'])
@@ -59,7 +59,7 @@ def siname(n):
 
 def stat_field_rate(field):
     def inner(stats):
-        return 100.0 * stats[field] / (stats['requests'] + stats['ongoing'])
+        return 100.0 * stats[field] / stats['requests']
     return inner
 
 

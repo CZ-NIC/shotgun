@@ -10,6 +10,7 @@ RUN \
 		libpcap-dev \
 		liblmdb-dev \
 		libgnutls28-dev \
+		libnghttp2-dev \
 		luajit \
 		libuv1-dev \
 		libgoogle-perftools-dev \
@@ -21,17 +22,14 @@ RUN \
 	rm -rf /var/lib/apt/lists/*
 
 RUN \
-	git clone https://github.com/tomaskrizek/dnsjit.git && \
+	git clone https://github.com/DNS-OARC/dnsjit.git && \
 	cd dnsjit && \
-	git checkout simulator && \
 	./autogen.sh && \
 	./configure --disable-dependency-tracking && \
 	make && \
 	cd ..
 
 RUN \
-	git clone https://gitlab.labs.nic.cz/knot/shotgun.git && \
-	cd shotgun && \
-	cd ..
+	git clone https://gitlab.labs.nic.cz/knot/shotgun.git
 
 ENTRYPOINT ["dnsjit/src/dnsjit", "shotgun/shotgun.lua"]
