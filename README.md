@@ -1,23 +1,31 @@
 # DNS Shotgun
 
-Realistic DNS benchmarking tool which supports:
+Realistic DNS benchmarking tool which supports multiple transport protocols:
 
   - UDP
   - TCP
   - DNS-over-TLS (DoT)
-  - DNS-over-HTTPS (Doh)
+  - DNS-over-HTTPS (DoH)
 
-DNS Shotgun is capable of emulating hundreds of thousands of clients.  This is
-especially useful to simulate realistic traffic over stateful protocols, since
-every client establishes its own connection.
+*DNS Shotgun is capable of simulating hundreds of thousands of clients.*
+
+Every client establishes its own connection when communicating over TCP-based
+protocol. This makes the tool uniquely suited for realistic benchmarking since
+its traffic patterns are very similar to real clients.
 
 ## Current status (2020-09-14)
 
-- fully supported UDP, TCP and DNS-over-TLS with [dnsjit](https://github.com/DNS-OARC/dnsjit) 1.0.0
+- fully supported UDP, TCP and DNS-over-TLS with
+  [dnsjit](https://github.com/DNS-OARC/dnsjit) 1.0.0
 - fully supported DNS-over-HTTPS with development version of dnsjit
-- under development: unstable UI, traffic can be replayed only over IPv6
-- prototype for processing input PCAPs is functional, but slow and requires
-  python-dpkt from master
+- traffic can be replayed only over IPv6
+- user interface
+    - may be unstable
+    - only very basic UI available
+    - more complex scenarios are no supported yet
+      (e.g. simultaneously using multiple protocols)
+- pellet.py is functional, but it is very slow and requires python-dpkt from
+  master
 
 ## Overview
 
@@ -95,8 +103,7 @@ resolver and not other upstream servers.
 
 ```
 ./shotgun.lua \
-	-P dot \
-	-p 853 \
+	-P tcp \
 	-s "fd00:dead:beef::cafe" \
 	-T 15 \
 	--bind-pattern "fd00:dead:beef::%x" \
@@ -111,11 +118,17 @@ of thumb is to use one IP per every 30k clients (when the port range is extended
 to allow 60k ephemeral ports).
 
 Check out the kernel documentation for tuning the network stack for TCP. Other tips:
+
 ```
 ulimit -n 1000000
 sysctl -w net.ipv4.ip_local_port_range="1025 60999"
 stsctl -w net.core.rmem_default="8192000"
 ```
+
+The entire setup process is quite complex and repetitive when taking multiple
+measurements. There is some ansible automation for DNS Shotgun in the
+[resolver-benchmarking](https://gitlab.nic.cz/knot/resolver-benchmarking)
+repository.
 
 ## Docker container
 
@@ -124,7 +137,7 @@ For ease of use, docker container with shotgun is available. Note that running
 the security risk.
 
 ```
-docker run registry.labs.nic.cz/knot/shotgun:20200914 --help
+docker run registry.nic.cz/knot/shotgun:20200914 --help
 ```
 
 The following example can be used to test the prototype to simulate UDP clients.
@@ -132,13 +145,26 @@ The following example can be used to test the prototype to simulate UDP clients.
 Process captured PCAP and extract clients 50k clients within 30 seconds of traffic:
 
 ```
-docker run -v "$PWD:/data:rw" registry.nic.cz/knot/shotgun/pellet:20200914 /data/captured.pcap -o /data/pellets.pcap -c 50000 -t 30 -r $RESOLVER_IP
+docker run \
+	-v "$PWD:/data:rw" \
+	registry.nic.cz/knot/shotgun/pellet:20200914 \
+	-o /data/pellets.pcap \
+	-c 1000 \
+	-t 10 \
+	-r $RESOLVER_IP \
+	/data/captured.pcap
 ```
 
 Replay the clients against IPv6 localhost server:
 
 ```
-docker run --network host -v "$PWD:/data:rw" registry.nic.cz/knot/shotgun:20200914 -O /data /data/pellets.pcap -s "::1"
+docker run \
+	--network host \
+	-v "$PWD:/data:rw" \
+	registry.nic.cz/knot/shotgun:20200914 \
+	-O /data \
+	-s "::1" \
+	/data/pellets.pcap
 ```
 
 ## Interpreting the results
@@ -153,6 +179,7 @@ When using the sources, the following dependencies are needed.
 
 ### pellet.py
 
+- python3
 - python-dpkt (latest from git, commit 2c6aada35 or newer)
 - python-dnspython
 
