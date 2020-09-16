@@ -1,4 +1,5 @@
 FROM ubuntu:focal
+ARG SHOTGUN_VERSION=v20200914
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -30,6 +31,7 @@ RUN \
 	cd ..
 
 RUN \
-	git clone https://gitlab.labs.nic.cz/knot/shotgun.git
+	git clone -b $SHOTGUN_VERSION --depth=1 \
+	https://gitlab.labs.nic.cz/knot/shotgun.git
 
 ENTRYPOINT ["dnsjit/src/dnsjit", "shotgun/shotgun.lua"]
