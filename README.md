@@ -137,7 +137,7 @@ For ease of use, docker container with shotgun is available. Note that running
 the security risk.
 
 ```
-docker run registry.nic.cz/knot/shotgun:20200914 --help
+docker run registry.nic.cz/knot/shotgun:v20200914 --help
 ```
 
 The following example can be used to test the prototype to simulate UDP clients.
@@ -147,7 +147,7 @@ Process captured PCAP and extract clients 50k clients within 30 seconds of traff
 ```
 docker run \
 	-v "$PWD:/data:rw" \
-	registry.nic.cz/knot/shotgun/pellet:20200914 \
+	registry.nic.cz/knot/shotgun/pellet:v20200914 \
 	-o /data/pellets.pcap \
 	-c 1000 \
 	-t 10 \
@@ -161,7 +161,7 @@ Replay the clients against IPv6 localhost server:
 docker run \
 	--network host \
 	-v "$PWD:/data:rw" \
-	registry.nic.cz/knot/shotgun:20200914 \
+	registry.nic.cz/knot/shotgun:v20200914 \
 	-O /data \
 	-s "::1" \
 	/data/pellets.pcap
