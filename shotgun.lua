@@ -105,6 +105,7 @@ end
 
 
 local function send_thread_main(thr)
+	local id = thr:pop()
 	local channel = thr:pop()
 	local running
 
@@ -119,6 +120,10 @@ local function send_thread_main(thr)
 	output:idle_timeout(thr:pop())
 
 	local protocol = thr:pop()
+	if (id % 2) == 0 then
+		protocol = "udp"
+	end
+
 	local tls_priority = thr:pop()
 	local http_method = thr:pop()
 	local cmd = "output:" .. protocol
@@ -213,6 +218,7 @@ for i = 1, SEND_THREADS do
 
 	threads[i] = thread.new()
 	threads[i]:start(send_thread_main)
+	threads[i]:push(i)
 	threads[i]:push(channels[i])
 	threads[i]:push(MAX_CLIENTS_DNSSIM)
 	threads[i]:push(TARGET_IP)
