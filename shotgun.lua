@@ -105,6 +105,7 @@ end
 
 
 local function send_thread_main(thr)
+	local id = thr:pop()
 	local channel = thr:pop()
 	local running
 
@@ -113,12 +114,18 @@ local function send_thread_main(thr)
 	output = require("dnsjit.output.dnssim").new(thr:pop())
 	local log = require("dnsjit.core.log")
 
-	output:target(thr:pop(), thr:pop())
+	local server = thr:pop()
+	local port = thr:pop()
 	output:timeout(thr:pop())
 	output:handshake_timeout(thr:pop())
 	output:idle_timeout(thr:pop())
 
 	local protocol = thr:pop()
+	if (id % 2) == 0 then
+		protocol = "udp"
+		port = 55191
+	end
+
 	local tls_priority = thr:pop()
 	local http_method = thr:pop()
 	local cmd = "output:" .. protocol
@@ -144,6 +151,7 @@ local function send_thread_main(thr)
 	end
 	assert(loadstring(cmd))()
 
+	output:target(server, port)
 	output:stats_collect(1)
 	output:free_after_use(true)
 
@@ -213,6 +221,7 @@ for i = 1, SEND_THREADS do
 
 	threads[i] = thread.new()
 	threads[i]:start(send_thread_main)
+	threads[i]:push(i)
 	threads[i]:push(channels[i])
 	threads[i]:push(MAX_CLIENTS_DNSSIM)
 	threads[i]:push(TARGET_IP)
