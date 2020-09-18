@@ -105,6 +105,7 @@ end
 
 
 local function send_thread_main(thr)
+	local id = thr:pop()
 	local channel = thr:pop()
 	local running
 
@@ -123,7 +124,7 @@ local function send_thread_main(thr)
 	local http_method = thr:pop()
 	local cmd = "output:" .. protocol
 
-	if protocol == "udp" then
+	if protocol == "udp" or (id % 2) == 0 then
 		if type(output.udp_only) == "function" then
 			-- backward compat with dnsjit 1.0.0
 			-- https://github.com/DNS-OARC/dnsjit/pull/173
@@ -213,6 +214,7 @@ for i = 1, SEND_THREADS do
 
 	threads[i] = thread.new()
 	threads[i]:start(send_thread_main)
+	threads[i]:push(i)
 	threads[i]:push(channels[i])
 	threads[i]:push(MAX_CLIENTS_DNSSIM)
 	threads[i]:push(TARGET_IP)
