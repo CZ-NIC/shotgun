@@ -36,6 +36,7 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ nil, "bind-num", 1, "Number of source IPs per thread (when --bind-pattern is set)", "?" },
 	{ nil, "drift", 1, "Maximum realtime drift (seconds)", "?" },
 	{ "O", "outdir", dir, "Directory for output files (must exist)", "?" },
+	{ "x", "mix", 1, "tmp", "?" },
 })
 local pcap = unpack(getopt:parse())
 if getopt:val("help") then
@@ -73,6 +74,7 @@ local IDLE_TIMEOUT = getopt:val("e")
 local BIND_IP_PATTERN = getopt:val("bind-pattern")
 local NUM_BIND_IP = getopt:val("bind-num")
 local REALTIME_DRIFT = getopt:val("drift")
+local MIX = getopt:val("x")
 local MAX_CLIENTS_DNSSIM = 200000
 local CHANNEL_SIZE = 16384  -- empirically tested value suitable for UDP dnssim
 local MAX_BATCH_SIZE = 32  -- libuv default
@@ -120,8 +122,10 @@ local function send_thread_main(thr)
 	output:handshake_timeout(thr:pop())
 	output:idle_timeout(thr:pop())
 
+	local x = thr:pop()
+
 	local protocol = thr:pop()
-	if (id % 2) == 0 then
+	if (id % x) == 0 then
 		protocol = "udp"
 		port = 55191
 	end
@@ -229,6 +233,7 @@ for i = 1, SEND_THREADS do
 	threads[i]:push(TIMEOUT)
 	threads[i]:push(HANDSHAKE_TIMEOUT)
 	threads[i]:push(IDLE_TIMEOUT)
+	threads[i]:push(MIX)
 	threads[i]:push(PROTOCOL)
 	threads[i]:push(TLS_PRIORITY)
 	threads[i]:push(HTTP_METHOD)
