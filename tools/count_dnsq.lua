@@ -40,18 +40,6 @@ end
 layer:producer(input)
 local produce, pctx = layer:produce()
 
---local function cast(obj, obj_type)
---	local out = obj
---	if out == nil then return nil end
---
---	while out.obj_type ~= obj_type do
---		out = out.obj_prev
---		if out == nil then return nil end
---	end
---
---	return out:cast()
---end
-
 local until_ms = nil
 local qcount = 0
 local function inc_qcount(ms)
