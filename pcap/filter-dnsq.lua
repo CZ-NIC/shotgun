@@ -12,7 +12,7 @@ local dns = require("dnsjit.core.object.dns").new()
 local dns_q = require("dnsjit.core.object.dns.q").new()
 local dns_rr = require("dnsjit.core.object.dns.rr").new()
 local labels = require("dnsjit.core.object.dns.label").new(127)
-local log = require("dnsjit.core.log").new("pellet.lua")
+local log = require("dnsjit.core.log").new("filter-dnsq.lua")
 local getopt = require("dnsjit.lib.getopt").new({
 	{ "r", "read", "", "input file to read", "?" },
 	{ "i", "interface", "", "capture interface", "?" },
@@ -37,6 +37,12 @@ args.malformed = getopt:val("m")
 args.csv = getopt:val("csv")
 args.stats_period = getopt:val("s")
 
+-- Display help
+if getopt:val("help") then
+	getopt:usage()
+	return
+end
+
 -- Check arguments
 if args.port <= 0 or args.port > 65535 then
 	log:fatal("invalid port number")
@@ -58,6 +64,7 @@ elseif args.interface ~= "" then
 	end
 	log:notice("capturing input interface "..args.interface)
 else
+	getopt:usage()
 	log:fatal("input must be specified, use -r/-i")
 end
 layer:producer(input)
