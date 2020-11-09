@@ -21,7 +21,7 @@ local input = require("dnsjit.input.pcap").new()
 local output = require("dnsjit.output.pcap").new()
 local layer = require("dnsjit.filter.layer").new()
 local object = require("dnsjit.core.objects")
-local log = require("dnsjit.core.log").new("pellet.lua")
+local log = require("dnsjit.core.log").new("extract-clients.lua")
 local getopt = require("dnsjit.lib.getopt").new({
 	{ "r", "read", "", "input file to read", "?" },
 	{ "w", "write", "clients%04d.pcap", "output filename template", "?" },
@@ -48,6 +48,12 @@ args.time = getopt:val("t")
 args.keep = getopt:val("k")
 args.csv = getopt:val("csv")  -- TODO add statistics
 
+-- Display help
+if getopt:val("help") then
+	getopt:usage()
+	return
+end
+
 -- Check arguments
 if args.time < 0 then
 	log:fatal("time duration can't be negative")
@@ -70,6 +76,7 @@ if args.read ~= "" then
 	end
 	log:notice("using input PCAP "..args.read)
 else
+	getopt:usage()
 	log:fatal("input must be specified, use -r")
 end
 layer:producer(input)
