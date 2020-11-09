@@ -85,7 +85,7 @@ local csv_output = nil
 if args.csv ~= "" then
 	csv_output = io.stdout
 end
-local stats = require("qstats").new(args.stats_period, csv_output, args.csv)
+local stats = require("qstats").new(args.stats_period, csv_output, args.csv, log)
 
 -- Filtering function that picks only DNS queries
 local function is_dnsq(obj)
