@@ -1,13 +1,19 @@
 local object = require("dnsjit.core.objects")
+local module_log = require("dnsjit.core.log").new("qstats")
 
 local QStats = {}
 local QStatsCounters = {}
 
-function QStats.new(stats_period_ms, output, format)
+function QStats.new(stats_period_ms, output, format, log)
+	if log == nil then
+		log = module_log
+	end
 	if stats_period_ms == nil then
 		stats_period_ms = 1000
 	end
-	assert(stats_period_ms > 0)  -- TODO use logger?
+	if stats_period_ms <= 0 then
+		log:fatal("statistics interval must be greater than 0")
+	end
 	if format == nil then
 		format = "time_s,period_queries"
 	end
@@ -15,6 +21,7 @@ function QStats.new(stats_period_ms, output, format)
 	local self = setmetatable({
 		_stats_period_ms = stats_period_ms,
 		_output = output,
+		_log = log,
 		_format = format,
 		_time_first_ms = nil,   -- time of the very first received packet
 		_time_next_ms = nil,    -- time when next stats begins
