@@ -25,6 +25,7 @@ function QStats.new(stats_period_ms, output, format, log)
 		_format = format,
 		_time_first_ms = nil,   -- time of the very first received packet
 		_time_next_ms = nil,    -- time when next stats begins
+		_time_last_ms = nil,    -- time of the last received packet
 		_period = QStatsCounters.new(),
 		_total = QStatsCounters.new(),
 	}, {  __index = QStats })
@@ -75,9 +76,25 @@ function QStats:receive(obj)
 	end
 
 	self._period.queries = self._period.queries + 1
+
+	-- ensure monotonic update of time
+	if self._time_last_ms == nil or time_pcap_ms > self._time_last_ms then
+		self._time_last_ms = time_pcap_ms
+	end
 end
 
 function QStats:finish()
+	if self._time_last_ms == nil then
+		self._log:warning("no packets received")
+		return
+	elseif self._time_last_ms < self._period.time_since_ms then
+		-- this shouldn't happen, handling just in case
+		self._log:fatal("last packet time is less than start of measurement interval")
+	elseif self._time_last_ms == self._period.time_since_ms then
+		-- avoid division by zero in calculations by adding an extra millisecond
+		self._time_last_ms = self._time_last_ms + 1
+	end
+	self._period.time_until_ms = self._time_last_ms
 	self._total = self._total + self._period
 	self:display()
 end
