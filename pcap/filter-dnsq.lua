@@ -4,6 +4,8 @@
 --
 -- Process input and extract DNS queries into an output PCAP.
 
+local ffi = require("ffi")
+local C = ffi.C
 local input = require("dnsjit.input.pcap").new()
 local output = require("dnsjit.output.pcap").new()
 local layer = require("dnsjit.filter.layer").new()
@@ -22,7 +24,19 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ "", "csv", "time_s,period_time_since_ms,period_time_until_ms,period_queries,total_queries,period_qps,total_qps",
 		"format of output CSV (header)", "?" },
 	{ "s", "stats_period", 100, "period for printing stats (ms)", "?" },
+	{ "a", "address", "", "destination address (can be specified multiple times)", "?*" },
 })
+
+local AF_INET = 2
+local AF_INET6 = 10
+if ffi.os == "OSX" then
+    AF_INET6 = 30
+end
+
+ffi.cdef[[
+    int inet_pton(int af, const char* src, void* dst);
+    int memcmp(const void *s1, const void *s2, size_t n);
+]]
 
 log:enable("all")
 
@@ -36,6 +50,7 @@ args.port = getopt:val("p")
 args.malformed = getopt:val("m")
 args.csv = getopt:val("csv")
 args.stats_period = getopt:val("s")
+args.address = getopt:val("a")
 
 -- Display help
 if getopt:val("help") then
@@ -49,6 +64,23 @@ if args.port <= 0 or args.port > 65535 then
 end
 if args.stats_period <= 0 then
 	log:fatal("stats_period must be grater than 0")
+end
+
+-- Convert IPs to binary
+local addresses = {}
+if #args.address > 0 then
+	for i, addr in ipairs(args.address) do
+		local inet = ffi.new("uint8_t [16]")  -- reserve enough memory for either IPv4 or IPv6
+		local len = 4
+		-- try parse as IPv4
+		if C.inet_pton(AF_INET, addr, inet) ~= 1 then
+			len = 16
+			if C.inet_pton(AF_INET6, addr, inet) ~= 1 then
+				log:fatal("failed to parse address as IPv4 or IPv6: "..addr)
+			end
+		end
+		addresses[i] = { inet = inet, len = len }
+	end
 end
 
 -- Set up input
@@ -87,6 +119,15 @@ if args.csv ~= "" then
 end
 local stats = require("qstats").new(args.stats_period, csv_output, args.csv, log)
 
+local function matches_addresses(ip, len)
+	for _, addr in ipairs(addresses) do
+		if addr.len == len and C.memcmp(ip, addr.inet, len) == 0 then
+			return true
+		end
+	end
+	return false
+end
+
 -- Filtering function that picks only DNS queries
 local function is_dnsq(obj)
 	local payload = obj:cast_to(object.PAYLOAD)
@@ -95,10 +136,19 @@ local function is_dnsq(obj)
 	local udp = obj:cast_to(object.UDP)
 	if udp == nil then return false end  -- use only UDP packets
 	if udp.dport ~= args.port then return false end
+
+	if #addresses > 0 then  -- check destination IP
+		local ip_obj = obj:cast_to(object.IP) or obj:cast_to(object.IP6)
+		local len = 4
+		if ip_obj.obj_type == object.IP6 then len = 16 end
+		if matches_addresses(ip_obj.dst, len) == false then return false end
+	end
+
 	dns.obj_prev = obj
 	dns:parse_header()
 	if dns.qr == 1 then return false end  -- ignore DNS responses
 	if args.malformed then return true end
+
 	-- check that query isn't malformed
 	if dns.qdcount > 0 then  -- parse all questions
 		for _ = 1, dns.qdcount do
