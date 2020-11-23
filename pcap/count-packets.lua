@@ -1,13 +1,55 @@
+#!/usr/bin/env dnsjit
+
+-- count-packets.lua: count number of packets in input PCAP
+
+local input = require("dnsjit.input.pcap").new()
+local layer = require("dnsjit.filter.layer").new()
 local object = require("dnsjit.core.objects")
-local module_log = require("dnsjit.core.log").new("qstats")
+local log = require("dnsjit.core.log").new("filter-dnsq.lua")
+local getopt = require("dnsjit.lib.getopt").new({
+	{ "r", "read", "", "input file to read", "?" },
+	{ "s", "stats_period", 100, "period for printing stats (ms)", "?" },
+})
 
-local QStats = {}
-local QStatsCounters = {}
+log:enable("all")
 
-function QStats.new(stats_period_ms, output, format, log)
-	if log == nil then
-		log = module_log
+-- Parse arguments
+local args = {}
+getopt:parse()
+args.read = getopt:val("r")
+args.stats_period = getopt:val("s")
+
+-- Display help
+if getopt:val("help") then
+	getopt:usage()
+	return
+end
+
+-- Check arguments
+if args.stats_period <= 0 then
+	log:fatal("stats_period must be grater than 0")
+end
+
+-- Set up input
+if args.read ~= "" then
+	if input:open_offline(args.read) ~= 0 then
+		log:fatal("failed to open input PCAP "..args.read)
 	end
+	log:notice("using input PCAP "..args.read)
+else
+	getopt:usage()
+	log:fatal("input must be specified, use -r/-i")
+end
+layer:producer(input)
+local produce, pctx = layer:produce()
+
+-- Set up statistics
+local csv_output = io.stdout
+
+local Stats = {}
+local StatsCounters = {}
+
+function Stats.new(stats_period_ms, output, format)
 	if stats_period_ms == nil then
 		stats_period_ms = 1000
 	end
@@ -15,20 +57,19 @@ function QStats.new(stats_period_ms, output, format, log)
 		log:fatal("statistics interval must be greater than 0")
 	end
 	if format == nil then
-		format = "time_s,period_queries"
+		format = "time_s,period_time_since_ms,period_time_until_ms,period_packets,total_packets,period_pps,total_pps"
 	end
 
 	local self = setmetatable({
 		_stats_period_ms = stats_period_ms,
 		_output = output,
-		_log = log,
 		_format = format,
 		_time_first_ms = nil,   -- time of the very first received packet
 		_time_next_ms = nil,    -- time when next stats begins
 		_time_last_ms = nil,    -- time of the last received packet
-		_period = QStatsCounters.new(),
-		_total = QStatsCounters.new(),
-	}, {  __index = QStats })
+		_period = StatsCounters.new(),
+		_total = StatsCounters.new(),
+	}, {  __index = Stats })
 
 	if self._output ~= nil then
 		self._output:write(format.."\n")
@@ -37,7 +78,7 @@ function QStats.new(stats_period_ms, output, format, log)
 	return self
 end
 
-function QStats:display()
+function Stats:display()
 	if self._output == nil then
 		return
 	end
@@ -55,7 +96,7 @@ function QStats:display()
 	self._output:write(outstr.."\n")
 end
 
-function QStats:receive(obj)
+function Stats:receive(obj)
 	local obj_pcap = obj:cast_to(object.PCAP)
 	local time_pcap_ms = tonumber(obj_pcap.ts.sec) * 1e3 + tonumber(obj_pcap.ts.nsec) * 1e-6
 
@@ -75,7 +116,7 @@ function QStats:receive(obj)
 		self._time_next_ms = next_ms
 	end
 
-	self._period.queries = self._period.queries + 1
+	self._period.packets = self._period.packets + 1
 
 	-- ensure monotonic update of time
 	if self._time_last_ms == nil or time_pcap_ms > self._time_last_ms then
@@ -83,7 +124,7 @@ function QStats:receive(obj)
 	end
 end
 
-function QStats:finish()
+function Stats:finish()
 	if self._time_last_ms == nil then
 		self._log:warning("no packets received")
 		return
@@ -100,18 +141,18 @@ function QStats:finish()
 end
 
 
-function QStatsCounters.new()
+function StatsCounters.new()
 	local self = setmetatable({
 		period_s = nil,
 		time_since_ms = nil,
 		time_until_ms = nil,
-		queries = 0,
+		packets = 0,
 	}, {
-		__index = QStatsCounters,
+		__index = StatsCounters,
 		__add = function(op1, op2)
 			op1.time_since_ms = math.min(op1.time_since_ms, op2.time_since_ms)
 			op1.time_until_ms = math.max(op1.time_until_ms, op2.time_until_ms)
-			op1.queries = op1.queries + op2.queries
+			op1.packets = op1.packets + op2.packets
 
 			return op1
 		end,
@@ -120,14 +161,14 @@ function QStatsCounters.new()
 	return self
 end
 
-function QStatsCounters:begin(time_since_ms, time_until_ms)
-	self.queries = 0
+function StatsCounters:begin(time_since_ms, time_until_ms)
+	self.packets = 0
 	assert(time_until_ms > time_since_ms)
 	self.time_since_ms = time_since_ms
 	self.time_until_ms = time_until_ms
 end
 
-function QStatsCounters:tabulate(prefix)
+function StatsCounters:tabulate(prefix)
 	if prefix == nil then
 		prefix = ""
 	elseif string.sub(prefix, -1) ~= "_" then
@@ -138,14 +179,21 @@ function QStatsCounters:tabulate(prefix)
 	local period_s = (self.time_until_ms - self.time_since_ms) / 1e3
 	res[prefix.."time_since_ms"] = string.format("%d", self.time_since_ms)
 	res[prefix.."time_until_ms"] = string.format("%d", self.time_until_ms)
-	res[prefix.."queries"] = string.format("%d", self.queries)
-	res[prefix.."qps"] = string.format("%d", self.queries / period_s)
+	res[prefix.."packets"] = string.format("%d", self.packets)
+	res[prefix.."pps"] = string.format("%d", self.packets / period_s)
 	return res
 end
 
-function QStatsCounters:count()
-	self.queries = self.queries + 1
+function StatsCounters:count()
+	self.packets = self.packets + 1
 end
 
 
-return QStats
+local stats = Stats.new(args.stats_period, csv_output)
+local obj
+while true do
+	obj = produce(pctx)
+	if obj == nil then break end
+	stats:receive(obj)
+end
+stats:finish()
