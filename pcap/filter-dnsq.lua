@@ -21,9 +21,6 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ "w", "write", "", "output file to write", "?" },
 	{ "p", "port", 53, "destination port to check for UDP DNS queries", "?" },
 	{ "m", "malformed", false, "include malformed queries", "?" },
-	{ "", "csv", "time_s,period_time_since_ms,period_time_until_ms,period_queries,total_queries,period_qps,total_qps",
-		"format of output CSV (header)", "?" },
-	{ "s", "stats_period", 100, "period for printing stats (ms)", "?" },
 	{ "a", "address", "", "destination address (can be specified multiple times)", "?*" },
 })
 
@@ -49,7 +46,6 @@ args.write = getopt:val("w")
 args.port = getopt:val("p")
 args.malformed = getopt:val("m")
 args.csv = getopt:val("csv")
-args.stats_period = getopt:val("s")
 args.address = getopt:val("a")
 
 -- Display help
@@ -61,9 +57,6 @@ end
 -- Check arguments
 if args.port <= 0 or args.port > 65535 then
 	log:fatal("invalid port number")
-end
-if args.stats_period <= 0 then
-	log:fatal("stats_period must be grater than 0")
 end
 
 -- Convert IPs to binary
@@ -111,13 +104,6 @@ else
 	log:notice("using output PCAP "..args.write)
 end
 local write, writectx = output:receive()
-
--- Set up statistics
-local csv_output = nil
-if args.csv ~= "" then
-	csv_output = io.stdout
-end
-local stats = require("qstats").new(args.stats_period, csv_output, args.csv, log)
 
 local function matches_addresses(ip, len)
 	for _, addr in ipairs(addresses) do
@@ -170,10 +156,8 @@ while true do
 	if obj == nil then break end
 	if is_dnsq(obj) then
 		write(writectx, obj)
-		stats:receive(obj)
 	end
 end
-stats:finish()
 
 if args.write ~= "" then
 	output:close()
