@@ -31,6 +31,8 @@ local getopt = require("dnsjit.lib.getopt").new({
 		"format of output CSV (header)", "?" },
 })
 
+-- period_time_since_ms, period_time_until_ms, chunk_id, client_id, period_queries, period_qps
+
 local SNAPLEN = 66000
 local LINKTYPE = 12  -- DLT_RAW in Linux, see https://github.com/the-tcpdump-group/libpcap/blob/master/pcap/dlt.h
 local HEADERSLEN = 40 + 8  -- IPv6 header and UDP header
@@ -88,7 +90,7 @@ local write, writectx
 local outfilename
 local function open_pcap()
 	output:close()
-	outfilename = string.format(args.write, i_chunk)
+	outfilename = string.format(args.write, i_chunk)  -- TODO warn overwrite?
 	if output:open(outfilename, LINKTYPE, SNAPLEN) ~= 0 then
 		log:fatal("failed to open output PCAP "..outfilename)
 	else
@@ -136,6 +138,7 @@ local ct_4b = ffi.typeof("uint8_t[4]")
 local function chunk_init()
 	open_pcap()
 	-- assign random "unique" chunk ID
+	-- ID collision chance among all chunks: ~0.01% for 1k chunks; ~1.15% for 10k chunks
 	bytes[16] = math.random(0, 255)
 	bytes[17] = math.random(0, 255)
 	bytes[18] = math.random(0, 255)
