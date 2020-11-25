@@ -9,6 +9,7 @@ local log = require("dnsjit.core.log").new("filter-dnsq.lua")
 local getopt = require("dnsjit.lib.getopt").new({
 	{ "r", "read", "", "input file to read", "?" },
 	{ "s", "stats_period", 100, "period for printing stats (ms)", "?" },
+	{ nil, "csv", "", "path to the output CSV file (default: stdout)", "?" },
 })
 
 log:enable("all")
@@ -18,6 +19,7 @@ local args = {}
 getopt:parse()
 args.read = getopt:val("r")
 args.stats_period = getopt:val("s")
+args.csv = getopt:val("csv")
 
 -- Display help
 if getopt:val("help") then
@@ -44,7 +46,17 @@ layer:producer(input)
 local produce, pctx = layer:produce()
 
 -- Set up statistics
-local csv_output = io.stdout
+local csv_output
+if args.csv ~= "" then
+	csv_output = io.open(args.csv, 'w')
+	if csv_output == nil then
+		log:fatal('failed to open "'..args.csv..'" for writing')
+	else
+		log:notice('writing output CSV to "'..args.csv..'"')
+	end
+else
+	csv_output = io.stdout
+end
 
 local Stats = {}
 local StatsCounters = {}
@@ -197,3 +209,5 @@ while true do
 	stats:receive(obj)
 end
 stats:finish()
+
+csv_output:close()
