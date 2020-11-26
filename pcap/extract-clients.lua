@@ -89,12 +89,11 @@ local i_chunk = 0
 local write, writectx
 local outfilename
 local function open_pcap()
-	output:close()
 	outfilename = string.format(args.write, i_chunk)  -- TODO warn overwrite?
 	if output:open(outfilename, LINKTYPE, SNAPLEN) ~= 0 then
 		log:fatal("failed to open output PCAP "..outfilename)
 	else
-		log:notice("using output PCAP "..outfilename)
+		log:notice("writing output PCAP "..outfilename)
 	end
 	write, writectx = output:receive()
 end
@@ -134,6 +133,7 @@ end
 local clients = {}
 local i_client = 1
 local ct_4b = ffi.typeof("uint8_t[4]")
+local now_ms, chunk_since_ms, chunk_until_ms
 
 local function chunk_init()
 	open_pcap()
@@ -143,13 +143,33 @@ local function chunk_init()
 	bytes[17] = math.random(0, 255)
 	bytes[18] = math.random(0, 255)
 	bytes[19] = math.random(0, 255)
+	log:info(
+		string.format("    chunk ID: %02x%02x:%02x%02x",
+		bytes[16],
+		bytes[17],
+		bytes[18],
+		bytes[19]))
 
 	clients = {}
 	i_client = 1
 	i_chunk = i_chunk + 1
+
+	chunk_since_ms = now_ms
+	chunk_until_ms = now_ms + args.time * 1e3
 end
 
-local now_ms, next_chunk_ms, obj, obj_pcap_in, obj_ip, obj_udp, obj_pl, client, src_ip, ip_len
+local function chunk_finalize()
+	output:close()
+
+	local duration_s = (now_ms - chunk_since_ms) / 1e3
+
+	log:info(string.format("    since_ms: %d", chunk_since_ms))
+	log:info(string.format("    until_ms: %d", now_ms))
+	log:info(string.format("    duration_s: %.3f", duration_s))
+	log:info(string.format("    number of clients: %d", i_client))
+end
+
+local obj, obj_pcap_in, obj_ip, obj_udp, obj_pl, client, src_ip, ip_len
 while true do
 	obj = produce(pctx)
 	if obj == nil then break end
@@ -166,9 +186,11 @@ while true do
 	obj_pcap_in = obj:cast_to(object.PCAP)
 	if obj_ip ~= nil and obj_udp ~= nil and obj_pl ~= nil and obj_pcap_in ~= nil then
 		now_ms = tonumber(obj_pcap_in.ts.sec) * 1e3 + tonumber(obj_pcap_in.ts.nsec) * 1e-6
-		if next_chunk_ms == nil or now_ms >= next_chunk_ms then
+		if chunk_until_ms == nil or now_ms >= chunk_until_ms then
+			if chunk_until_ms ~= nil then
+				chunk_finalize()
+			end
 			chunk_init()
-			next_chunk_ms = now_ms + args.time * 1e3
 		end
 
 		src_ip = ffi.string(obj_ip.src, ip_len)
@@ -197,7 +219,7 @@ while true do
 	end
 end
 
-output:close()
+chunk_finalize()
 
 if args.time ~= math.huge and not args.keep then
 	log:notice("removing incomplete last chunk "..outfilename)
