@@ -106,15 +106,7 @@ local bytes = ffi.new("uint8_t[?]", SNAPLEN)
 bytes[0] = 0x60  -- IPv6 header
 -- UDP len in bytes[4]:bytes[5]
 bytes[6] = 0x11  -- next header: UDP
--- bytes[8]:bytes[23] -- source IPv6
-bytes[8] = 0x20
-bytes[9] = 0x01
-bytes[10] = 0x0d
-bytes[11] = 0xb8
-bytes[12] = 0xde
-bytes[13] = 0xad
-bytes[14] = 0xbe
-bytes[15] = 0xef
+bytes[8] = 0xfd  -- bytes[8]:bytes[23] source IPv6 fd00::
 bytes[39] = 0x01  -- dst IPv6 ::1
 obj_pcap_out.bytes = bytes
 
