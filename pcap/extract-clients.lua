@@ -15,6 +15,19 @@
 -- Other tools can then be used to merge these files to "scale up" the number
 -- of clients in a single time chunk.
 
+--- Check if a file or directory exists in this path
+local function exists(file)
+   local ok, err, code = os.rename(file, file)
+   if not ok then
+      if code == 13 then
+         -- Permission denied, but it exists
+         return true
+      end
+   end
+   return ok, err
+end
+
+local dir = os.getenv("PWD") or ""
 local bit = require("bit")
 local ffi = require("ffi")
 local input = require("dnsjit.input.pcap").new()
@@ -24,7 +37,7 @@ local object = require("dnsjit.core.objects")
 local log = require("dnsjit.core.log").new("extract-clients.lua")
 local getopt = require("dnsjit.lib.getopt").new({
 	{ "r", "read", "", "input file to read", "?" },
-	{ "w", "write", "clients%04d.pcap", "output filename template", "?" },
+	{ "O", "outdir", dir, "directory for client chunks (must exist)", "?" },
 	{ "t", "time", 0, "time duration of each chunk (in seconds, 0 means entire file)", "?" },
 	{ "k", "keep", false, "keep last chunk even if it's incomplete", "?" },
 	{ "", "csv", "time_s,period_time_since_ms,period_time_until_ms,period_queries,total_queries,period_qps,total_qps",
@@ -45,10 +58,10 @@ log:enable("all")
 local args = {}
 getopt:parse()
 args.read = getopt:val("r")
-args.write = getopt:val("w")
 args.time = getopt:val("t")
 args.keep = getopt:val("k")
 args.csv = getopt:val("csv")  -- TODO add statistics
+args.outdir = getopt:val("O")
 
 -- Display help
 if getopt:val("help") then
@@ -63,12 +76,10 @@ elseif args.time == 0 then
 	args.time = math.huge
 	log:notice("processing entire file as one chunk")
 else
-	log:notice("file will be split every "..args.time.." seconds")
+	log:notice("file will be split every " .. args.time .. " seconds")
 end
-if args.write == "" then
-	log:fatal("output filename template must be specified")
-elseif string.format(args.write, 0) == string.format(args.write, 1) and args.time ~= math.huge then
-	log:fatal("output filename must be a template, use %d to specify a number in filename")
+if args.outdir == "" or not exists(args.outdir .. "/") then
+	log.fatal("output directory \"" .. args.outdir .. "\" doesn't exist")
 end
 
 -- Set up input
@@ -86,16 +97,22 @@ local produce, pctx = layer:produce()
 
 
 local i_chunk = 0
+local chunk_id
 local write, writectx
 local outfilename
 local function open_pcap()
-	outfilename = string.format(args.write, i_chunk)  -- TODO warn overwrite?
+	outfilename = args.outdir .. "/" .. chunk_id .. ".pcap"
+	if exists(outfilename) then
+		log:warning("chunk_id collision detected! skipping: " .. outfilename)
+		return false
+	end
 	if output:open(outfilename, LINKTYPE, SNAPLEN) ~= 0 then
-		log:fatal("failed to open output PCAP "..outfilename)
+		log:fatal("failed to open chunk file " .. outfilename)
 	else
-		log:notice("writing output PCAP "..outfilename)
+		log:notice("writing chunk: " .. outfilename)
 	end
 	write, writectx = output:receive()
+	return true
 end
 
 
@@ -128,19 +145,16 @@ local ct_4b = ffi.typeof("uint8_t[4]")
 local now_ms, chunk_since_ms, chunk_until_ms
 
 local function chunk_init()
-	open_pcap()
-	-- assign random "unique" chunk ID
-	-- ID collision chance among all chunks: ~0.01% for 1k chunks; ~1.15% for 10k chunks
-	bytes[16] = math.random(0, 255)
-	bytes[17] = math.random(0, 255)
-	bytes[18] = math.random(0, 255)
-	bytes[19] = math.random(0, 255)
-	log:info(
-		string.format("    chunk ID: %02x%02x:%02x%02x",
-		bytes[16],
-		bytes[17],
-		bytes[18],
-		bytes[19]))
+	local opened
+	repeat
+		-- assign random "unique" chunk ID
+		bytes[16] = math.random(0, 255)
+		bytes[17] = math.random(0, 255)
+		bytes[18] = math.random(0, 255)
+		bytes[19] = math.random(0, 255)
+		chunk_id = string.format("%02x%02x%02x%02x", bytes[16], bytes[17], bytes[18], bytes[19])
+		opened = open_pcap()
+	until(opened)
 
 	clients = {}
 	i_client = 1
