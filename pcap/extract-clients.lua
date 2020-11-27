@@ -40,11 +40,7 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ "O", "outdir", dir, "directory for client chunks (must exist)", "?" },
 	{ "t", "time", 0, "time duration of each chunk (in seconds, 0 means entire file)", "?" },
 	{ "k", "keep", false, "keep last chunk even if it's incomplete", "?" },
-	{ "", "csv", "time_s,period_time_since_ms,period_time_until_ms,period_queries,total_queries,period_qps,total_qps",
-		"format of output CSV (header)", "?" },
 })
-
--- period_time_since_ms, period_time_until_ms, chunk_id, client_id, period_queries, period_qps
 
 local SNAPLEN = 66000
 local LINKTYPE = 12  -- DLT_RAW in Linux, see https://github.com/the-tcpdump-group/libpcap/blob/master/pcap/dlt.h
@@ -60,7 +56,6 @@ getopt:parse()
 args.read = getopt:val("r")
 args.time = getopt:val("t")
 args.keep = getopt:val("k")
-args.csv = getopt:val("csv")  -- TODO add statistics
 args.outdir = getopt:val("O")
 
 -- Display help
