@@ -1,11 +1,11 @@
 #!/usr/bin/env dnsjit
 
--- count-packets.lua: count number of packets in input PCAP
+-- count-packets-over-time.lua: count number of packets in input PCAP in time intervals
 
 local input = require("dnsjit.input.pcap").new()
 local layer = require("dnsjit.filter.layer").new()
 local object = require("dnsjit.core.objects")
-local log = require("dnsjit.core.log").new("filter-dnsq.lua")
+local log = require("dnsjit.core.log").new("count-packets-over-time.lua")
 local getopt = require("dnsjit.lib.getopt").new({
 	{ "r", "read", "", "input file to read", "?" },
 	{ "s", "stats_period", 100, "period for printing stats (ms)", "?" },
@@ -45,7 +45,7 @@ end
 layer:producer(input)
 local produce, pctx = layer:produce()
 
--- Set up statistics
+-- Set up CSV
 local csv_output
 if args.csv ~= "" then
 	csv_output = io.open(args.csv, 'w')
