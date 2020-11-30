@@ -38,7 +38,7 @@ local log = require("dnsjit.core.log").new("extract-clients.lua")
 local getopt = require("dnsjit.lib.getopt").new({
 	{ "r", "read", "", "input file to read", "?" },
 	{ "O", "outdir", dir, "directory for client chunks (must exist)", "?" },
-	{ "t", "time", 0, "time duration of each chunk (in seconds, 0 means entire file)", "?" },
+	{ "d", "duration", 0, "duration of each chunk (in seconds, 0 means entire file)", "?" },
 	{ "k", "keep", false, "keep last chunk even if it's incomplete", "?" },
 })
 
@@ -54,7 +54,7 @@ log:enable("all")
 local args = {}
 getopt:parse()
 args.read = getopt:val("r")
-args.time = getopt:val("t")
+args.duration = getopt:val("d")
 args.keep = getopt:val("k")
 args.outdir = getopt:val("O")
 
@@ -65,13 +65,13 @@ if getopt:val("help") then
 end
 
 -- Check arguments
-if args.time < 0 then
-	log:fatal("time duration can't be negative")
-elseif args.time == 0 then
-	args.time = math.huge
+if args.duration < 0 then
+	log:fatal("duration can't be negative")
+elseif args.duration == 0 then
+	args.duration = math.huge
 	log:notice("processing entire file as one chunk")
 else
-	log:notice("file will be split every " .. args.time .. " seconds")
+	log:notice("file will be split every " .. args.duration .. " seconds")
 end
 if args.outdir == "" or not exists(args.outdir .. "/") then
 	log.fatal("output directory \"" .. args.outdir .. "\" doesn't exist")
@@ -156,7 +156,7 @@ local function chunk_init()
 	i_chunk = i_chunk + 1
 
 	chunk_since_ms = now_ms
-	chunk_until_ms = now_ms + args.time * 1e3
+	chunk_until_ms = now_ms + args.duration * 1e3
 end
 
 local function chunk_finalize()
@@ -222,7 +222,7 @@ end
 
 chunk_finalize()
 
-if args.time ~= math.huge and not args.keep then
+if args.duration ~= math.huge and not args.keep then
 	log:notice("removing incomplete last chunk "..outfilename)
 	os.remove(outfilename)
 end
