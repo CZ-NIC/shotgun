@@ -12,12 +12,6 @@ local function exists(file)
    return ok, err
 end
 
---- Check if a directory exists in this path
-local function isdir(path)
-   -- "/" works on both Unix and Windows
-   return exists(path.."/")
-end
-
 local dir = os.getenv("PWD") or ""
 local object = require("dnsjit.core.objects")
 local log = require("dnsjit.core.log")
@@ -99,7 +93,7 @@ if string.find(TLS_PRIORITY, '"') ~= nil or string.find(TLS_PRIORITY, "'") ~= ni
 	log.fatal("tls priority string may not contain quotes");
 end
 local OUTDIR = getopt:val("O")
-if OUTDIR == "" or not isdir(OUTDIR) then
+if OUTDIR == "" or not exists(OUTDIR .. "/") then
 	log.fatal("output directory \"" .. OUTDIR .. "\" doesn't exist")
 end
 
