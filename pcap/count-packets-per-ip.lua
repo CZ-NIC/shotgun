@@ -94,15 +94,17 @@ log:info(string.format("duration of input PCAP (s): %.3f", duration_s))
 log:info(string.format("number of clients: %d", n_clients))
 
 csv_output:write("ip,ip_since_ms,ip_until_ms,packets,ip_chunk_qps\n")
-local format = '"%s",%d,%d,%d,%.2f\n'
 for ip, data in pairs(clients) do
-	csv_output:write(string.format(
-		format,
-		ip,
-		data["since_ms"],
-		data["until_ms"],
-		data["packets"],
-		data["packets"] / duration_s
-	))
+	csv_output:write('"')
+	csv_output:write(ip)
+	csv_output:write('",')
+	csv_output:write(string.format("%d", data["since_ms"]))
+	csv_output:write(',')
+	csv_output:write(string.format("%d", data["until_ms"]))
+	csv_output:write(',')
+	csv_output:write(string.format("%d", data["packets"]))
+	csv_output:write(',')
+	csv_output:write(string.format("%.2f", data["packets"] / duration_s))
+	csv_output:write('\n')
 end
 csv_output:close()
