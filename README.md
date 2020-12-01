@@ -2,188 +2,91 @@
 
 Realistic DNS benchmarking tool which supports multiple transport protocols:
 
+  - **DNS-over-TLS (DoT)**
+  - **DNS-over-HTTPS (DoH)**
   - UDP
   - TCP
-  - DNS-over-TLS (DoT)
-  - DNS-over-HTTPS (DoH)
 
-*DNS Shotgun is capable of simulating hundreds of thousands of clients.*
+*DNS Shotgun is capable of simulating hundreds of thousands of DoT/DoH
+clients.*
 
-Every client establishes its own connection when communicating over TCP-based
-protocol. This makes the tool uniquely suited for realistic benchmarking since
-its traffic patterns are very similar to real clients.
+Every client establishes its own connection(s) when communicating over
+TCP-based protocol. This makes the tool uniquely suited for realistic DoT/DoH
+benchmarks since its traffic patterns are very similar to real clients.
 
-## Current status (2020-09-14)
+DNS Shotgun exports a number of statistics, such as query latencies, number of
+handshakes and connections, response rate, response codes etc. in JSON format.
+The toolchain also provides scripts that can plot these into readable charts.
 
-- fully supported UDP, TCP and DNS-over-TLS with
-  [dnsjit](https://github.com/DNS-OARC/dnsjit) 1.0.0
-- fully supported DNS-over-HTTPS with development version of dnsjit
-- traffic can be replayed only over IPv6
-- user interface
-    - may be unstable
-    - only very basic UI available
-    - more complex scenarios are no supported yet
-      (e.g. simultaneously using multiple protocols)
-- pellet.py is functional, but it is very slow and requires python-dpkt from
-  master
+## Features
 
-## Overview
+- Supports DNS over UDP, TCP, TLS and HTTP/2
+- Allows mixed-protocol simultaneous benchmark/testing
+- Can bind to multiple source IP addresses
+- Customizable client behaviour (idle time, TLS versions, HTTP method, ...)
+- Replays captured queries over selected protocol(s) while keeping original timing
+- Suitable for high-performance realistic benchmarks
+- Tools to plot charts from output data to evaluate results
 
-DNS Shotgun is capable of simulating real client behaviour by replaying
-captured traffic over selected protocol(s). The timing of original queries as
-well as their content is kept intact.
+## Caveats
 
-This tool requires large amount of source PCAPs. These are ideally captured
-directly on your network to simulate the behaviour of your own clients. The
-captured PCAPs are then pre-processed into DNS Shotgun "pellets", which are
-input files that contain the selected amount of simulated clients based on the
-original traffic.
+- Requires captured traffic from clients
+- Setup for proper benchmarks can be quite complex
+- Isn't suitable for testing with very low number of clients/queries
+- Backward compatibility between versions isn't kept
 
-Realistic high-performance benchmarking requires complex setup, especially for
-TCP-based protocols. However, the authors of this tool have successfully used it
-to benchmark and test various DNS implementations with up to hundreds of
-thousands of clients (meaning _connections_ for TCP-based transports) using
-commodity hardware.
+## Documentation
 
-## Input data
+[https://knot.pages.nic.cz/shotgun](https://knot.pages.nic.cz/shotgun)
 
-To have a realistic simulation of clients, no synthetic queries are created.
-Instead, an input PCAP must be provided. There are the following assumptions:
+## Showcase
 
-- Each IP address represents a unique client.
-- The packets are ordered by ascending time.
-- Only UDP packets arriving to port 53 are used.
+The following charts highlight the unique capabilities of DNS Shotgun.
+Measurements are demonstrated using DNS over TCP.  In our test setup, DNS
+Shotgun was able to keep sending/receiving:
 
-The PCAP is then sliced into the requested time periods, and DNS queries are
-collected for each client. The output PCAP contains the exact same queries,
-only the msgid is renumbered to be sequential (to avoid issues with multiple
-in-flight TCP queries with potentially the same msgid).
+- 400k queries per second over
+- **500k simultaneously active TCP connections**, with about
+- 25k handshakes per second, which amounts to
+- 1.6M total established connections during the 60s test runtime.
 
-The input data can be created with:
+![Active Connections](docs/showcase/charts/connections.png)
+![Handshakes](docs/showcase/charts/handshakes.png)
+
+### Socket statistics on server
 
 ```
-./pellet.py input.pcap -c CLIENTS -t TIME -r RESOLVER_IP
+# ss -s
+Total: 498799 (kernel 0)
+TCP:   498678 (estab 498466, closed 52, orphaned 0, synrecv 0, timewait 54/0), ports 0
+
+Transport Total     IP        IPv6
+*        0         -         -
+RAW      4         1         3
+UDP      19        2         17
+TCP      498626    5         498621
+INET     498649    8         498641
+FRAG     0         0         0
 ```
 
-where `CLIENTS` is the number of required clients and `TIME` is the selected
-time period. `RESOLVER_IP` is necessary to extract only the traffic towards the
-resolver and not other upstream servers.
+### Test setup
 
-## Replaying the traffic
+- DNS over TCP against [TCP echo server](https://gitlab.nic.cz/knot/echo-server)
+- two physical servers: one for DNS Shotgun, another for the echo server
+- both servers have 16 CPUs, 32 GB RAM, 10GbE network card (up to 64 queues)
+- servers were connected directly to each other - no latency
+- TCP network stack was tuned and there was no firewall
 
-### UDP
+## License
 
-```
-./shotgun.lua -P udp -p 53 -s "::1" pellets.pcap
-```
+DNS Shotgun is released under GPLv3 or later.
 
-### TCP
+## Thanks
 
-```
-./shotgun.lua -P tcp -p 53 -s "::1" pellets.pcap
-./shotgun.lua -P tcp -p 53 -s "::1" -e 0  pellets.pcap  # no idle timeout
-```
+We'd like to thank the [Comcast Innovation
+Fund](https://innovationfund.comcast.com) for sponsoring the work to support
+the use of TCP, DoT and DoH protocols.
 
-### DNS-over-TLS (DoT)
-
-```
-./shotgun.lua -P dot -p 853 -s "::1" pellets.pcap
-./shotgun.lua -P dot -p 853 -s "::1" --tls-priority "NORMAL:-VERS-ALL:+VERS-TLS1.3" pellets.pcap
-./shotgun.lua -P dot -p 853 -s "::1" --tls-priority "NORMAL:%NO_TICKETS" pellets.pcap
-```
-
-### DNS-over-HTTPS (DoH)
-
-```
-./shotgun.lua -P doh -p 443 -s "::1" --tls-priority "NORMAL:-VERS-ALL:+VERS-TLS1.3" pellets.pcap
-./shotgun.lua -P doh -p 443 -s "::1" --tls-priority "NORMAL:-VERS-ALL:+VERS-TLS1.3" -M POST pellets.pcap
-```
-
-### High-performance benchmarking
-
-```
-./shotgun.lua \
-	-P tcp \
-	-s "fd00:dead:beef::cafe" \
-	-T 15 \
-	--bind-pattern "fd00:dead:beef::%x" \
-	--bind-num 8 \
-	pellets.pcap
-```
-
-To be able to scale-up to hundreds of thousands of TCP connections, multiple
-source IP addresses are needed. It's possible to utilize [unique-local
-addresses](https://en.wikipedia.org/wiki/Unique_local_address) in IPv6. Our rule
-of thumb is to use one IP per every 30k clients (when the port range is extended
-to allow 60k ephemeral ports).
-
-Check out the kernel documentation for tuning the network stack for TCP. Other tips:
-
-```
-ulimit -n 1000000
-sysctl -w net.ipv4.ip_local_port_range="1025 60999"
-stsctl -w net.core.rmem_default="8192000"
-```
-
-The entire setup process is quite complex and repetitive when taking multiple
-measurements. There is some ansible automation for DNS Shotgun in the
-[resolver-benchmarking](https://gitlab.nic.cz/knot/resolver-benchmarking)
-repository.
-
-## Docker container
-
-For ease of use, docker container with shotgun is available. Note that running
-``--privileged`` can improve its performance by a few percent, if you don't mind
-the security risk.
-
-```
-docker run registry.nic.cz/knot/shotgun:v20200914 --help
-```
-
-The following example can be used to test the prototype to simulate UDP clients.
-
-Process captured PCAP and extract clients 50k clients within 30 seconds of traffic:
-
-```
-docker run \
-	-v "$PWD:/data:rw" \
-	registry.nic.cz/knot/shotgun/pellet:v20200914 \
-	-o /data/pellets.pcap \
-	-c 1000 \
-	-t 10 \
-	-r $RESOLVER_IP \
-	/data/captured.pcap
-```
-
-Replay the clients against IPv6 localhost server:
-
-```
-docker run \
-	--network host \
-	-v "$PWD:/data:rw" \
-	registry.nic.cz/knot/shotgun:v20200914 \
-	-O /data \
-	-s "::1" \
-	/data/pellets.pcap
-```
-
-## Interpreting the results
-
-DNS Shotgun's output is one JSON file per every thread. These can be merged
-together and then various plots describing the latencies, connection statistics
-etc. can be generated using our utility scripts in the `tools/` directory.
-
-## Dependencies
-
-When using the sources, the following dependencies are needed.
-
-### pellet.py
-
-- python3
-- python-dpkt (latest from git, commit 2c6aada35 or newer)
-- python-dnspython
-
-### shotgun.lua
-
-- dnsjit 1.0.0 for UDP, TCP and DoT
-- development version of dnsjit for DoH
+DNS Shogun is built of top of the [dnsjit](https://github.com/DNS-OARC/dnsjit)
+engine. We'd like to thank DNS-OARC and Jerry Lundström for the development and
+continued support of dnsjit.
