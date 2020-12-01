@@ -137,7 +137,7 @@ end
 local clients = {}
 local i_client = 1
 local ct_4b = ffi.typeof("uint8_t[4]")
-local now_ms, chunk_since_ms, chunk_until_ms
+local now_ms, diff_ms, chunk_since_ms, chunk_until_ms
 
 local function chunk_init()
 	local opened
@@ -161,11 +161,7 @@ end
 
 local function chunk_finalize()
 	output:close()
-
 	local duration_s = (now_ms - chunk_since_ms) / 1e3
-
-	log:info(string.format("    since_ms: %d", chunk_since_ms))
-	log:info(string.format("    until_ms: %d", now_ms))
 	log:info(string.format("    duration_s: %.3f", duration_s))
 	log:info(string.format("    number of clients: %d", i_client))
 end
@@ -205,7 +201,11 @@ while true do
 		client["queries"] = client["queries"] + 1
 		ffi.copy(bytes + 20, client["addr"], 4)
 
-		obj_pcap_out.ts = obj_pcap_in.ts
+		-- ensure every chunk starts at time 0
+		diff_ms = now_ms - chunk_since_ms
+		obj_pcap_out.ts.sec = math.floor(diff_ms / 1e3)
+		obj_pcap_out.ts.nsec = math.floor((diff_ms % 1e3) * 1e6)
+
 		obj_pcap_out.len = HEADERSLEN + obj_pl.len
 		obj_pcap_out.caplen = obj_pcap_out.len
 
