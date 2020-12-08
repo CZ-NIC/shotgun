@@ -68,7 +68,7 @@ local BIND_IP_PATTERN = getopt:val("bind-pattern")
 local NUM_BIND_IP = getopt:val("bind-num")
 local REALTIME_DRIFT = getopt:val("drift")
 local MAX_CLIENTS_DNSSIM = 200000
-local CHANNEL_SIZE = 16384  -- empirically tested value suitable for UDP dnssim
+local CHANNEL_SIZE = 2048
 local MAX_BATCH_SIZE = 32  -- libuv default
 
 local PROTOCOLS = {
@@ -105,7 +105,7 @@ local function send_thread_main(thr)
 	-- output must be global (per thread) to be accesible in loadstring()
 	-- luacheck: globals output, ignore log
 	output = require("dnsjit.output.dnssim").new(thr:pop())
-	local log = require("dnsjit.core.log")
+	local log = require("dnsjit.core.log").new("ID TODO")
 
 	output:target(thr:pop(), thr:pop())
 	output:timeout(thr:pop())
@@ -130,11 +130,11 @@ local function send_thread_main(thr)
 		cmd = cmd .. "('" .. tls_priority .. "')"
 	elseif protocol == "https2" then
 		if type(output.https2) ~= "function" then
-			log.fatal("https2 isn't supported with this version of dnsjit")
+			log:fatal("https2 isn't supported with this version of dnsjit")
 		end
 		cmd = cmd .. "({ method = '" .. http_method .. "' }, '" .. tls_priority .. "')"
 	else
-		log.fatal("unknown protocol: " .. protocol)
+		log:fatal("unknown protocol: " .. protocol)
 	end
 	assert(loadstring(cmd))()
 
@@ -150,9 +150,28 @@ local function send_thread_main(thr)
 	end
 
 	local recv, rctx = output:receive()
+	local i_full = 0
 	while true do
 		local obj
 		local i = 0
+
+		if channel:full() then
+			i_full = i_full + 1
+			if i_full == 1 then
+				log:debug("buffer capacity reached")
+			elseif i_full == 4 then
+				log:info("buffer capacity reached")
+			elseif i_full == 16 then
+				log:warning("buffer capacity exceeded, threads may become blocked")
+			elseif i_full % 64 == 0 then
+				log:critical("buffer capacity exceeded, threads are blocked")
+			end
+		else
+			if i_full >= 16 then
+				log:notice("buffer capacity restored")
+			end
+			i_full = 0
+		end
 
 		-- read available data from channel
 		while i < batch_size do
