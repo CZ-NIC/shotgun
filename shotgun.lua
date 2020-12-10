@@ -68,7 +68,7 @@ local BIND_IP_PATTERN = getopt:val("bind-pattern")
 local NUM_BIND_IP = getopt:val("bind-num")
 local REALTIME_DRIFT = getopt:val("drift")
 local MAX_CLIENTS_DNSSIM = 200000
-local CHANNEL_SIZE = 16384  -- empirically tested value suitable for UDP dnssim
+local CHANNEL_SIZE = 2048
 local MAX_BATCH_SIZE = 32  -- libuv default
 
 local PROTOCOLS = {
@@ -150,9 +150,28 @@ local function send_thread_main(thr)
 	end
 
 	local recv, rctx = output:receive()
+	local i_full = 0
 	while true do
 		local obj
 		local i = 0
+
+		if channel:full() then
+			i_full = i_full + 1
+			if i_full == 1 then
+				log:debug("buffer capacity reached")
+			elseif i_full == 4 then
+				log:info("buffer capacity reached")
+			elseif i_full == 16 then
+				log:warning("buffer capacity exceeded, threads may become blocked")
+			elseif i_full % 64 == 0 then
+				log:critical("buffer capacity exceeded, threads are blocked")
+			end
+		else
+			if i_full >= 16 then
+				log:notice("buffer capacity restored")
+			end
+			i_full = 0
+		end
 
 		-- read available data from channel
 		while i < batch_size do
