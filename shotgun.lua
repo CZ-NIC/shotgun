@@ -105,7 +105,7 @@ local function send_thread_main(thr)
 	-- output must be global (per thread) to be accesible in loadstring()
 	-- luacheck: globals output, ignore log
 	output = require("dnsjit.output.dnssim").new(thr:pop())
-	local log = require("dnsjit.core.log")
+	local log = output:log(thr:pop())
 
 	output:target(thr:pop(), thr:pop())
 	output:timeout(thr:pop())
@@ -130,11 +130,11 @@ local function send_thread_main(thr)
 		cmd = cmd .. "('" .. tls_priority .. "')"
 	elseif protocol == "https2" then
 		if type(output.https2) ~= "function" then
-			log.fatal("https2 isn't supported with this version of dnsjit")
+			log:fatal("https2 isn't supported with this version of dnsjit")
 		end
 		cmd = cmd .. "({ method = '" .. http_method .. "' }, '" .. tls_priority .. "')"
 	else
-		log.fatal("unknown protocol: " .. protocol)
+		log:fatal("unknown protocol: " .. protocol)
 	end
 	assert(loadstring(cmd))()
 
@@ -200,15 +200,17 @@ local threads = {}
 local channels = {}
 
 -- send threads
-local outname = OUTDIR.."/shotgun-"..os.time().."-%02d.json"
+local outname = OUTDIR.."/shotgun-"..os.time().."-%s.json"
 for i = 1, SEND_THREADS do
 	channels[i] = channel.new(CHANNEL_SIZE)
 	ipsplit:receiver(channels[i])
+	local name = string.format("%s-%02d", proto, i)
 
 	threads[i] = thread.new()
 	threads[i]:start(send_thread_main)
 	threads[i]:push(channels[i])
 	threads[i]:push(MAX_CLIENTS_DNSSIM)
+	threads[i]:push(name)
 	threads[i]:push(TARGET_IP)
 	threads[i]:push(TARGET_PORT)
 	threads[i]:push(TIMEOUT)
@@ -217,7 +219,7 @@ for i = 1, SEND_THREADS do
 	threads[i]:push(PROTOCOL)
 	threads[i]:push(TLS_PRIORITY)
 	threads[i]:push(HTTP_METHOD)
-	threads[i]:push(string.format(outname, i))
+	threads[i]:push(string.format(outname, name))
 	threads[i]:push(MAX_BATCH_SIZE)
 	if BIND_IP_PATTERN ~= "" then
 		threads[i]:push(NUM_BIND_IP)
