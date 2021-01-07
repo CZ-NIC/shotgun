@@ -1,0 +1,30 @@
+local config = {}
+
+config.pcap = {{ pcap }}
+config.verbosity = {{ verbosity }}
+config.drift_s = {{ drift_s }}
+
+config.threads = {}
+{% for i, thread in enumerate(threads) %}
+	local thrconf = {}
+	thrconf.name = {{ thread.name }}
+	thrconf.channel_size = {{ thread.channel_size|default(2048) }}
+	thrconf.max_clients = {{ thread.max_clients|default(200000) }}
+	thrconf.target_ip = {{ thread.target_ip }}
+	thrconf.target_port = {{ thread.target_port }}
+	thrconf.timeout_s = {{ thread.timeout_s }}
+	thrconf.handshake_timeout_s = {{ thread.handshake_timeout_s }}
+	thrconf.idle_timeout_s = {{ thread.idle_timeout_s }}
+	thrconf.protocol_func = {{ thread.protocol_func }}
+	thrconf.tls_priority = {{ thread.tls_priority }}
+	thrconf.http_method = {{ thread.http_method }}
+	thrconf.output_file = {{ thread.output_file }}
+	thrconf.max_batch_size = {{ thread.max_batch_size|default(32) }}
+	thrconf.bind_ips = {}  -- TODO
+
+	config.threads[{{ i + 1 }}] = thrconf
+{% endfor %}
+
+return config
+
+# vim: syntax=lua
