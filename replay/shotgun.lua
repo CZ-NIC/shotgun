@@ -73,7 +73,7 @@ local function send_thread_main(thr)
 	output:idle_timeout(thr:pop())
 
 	local protocol_func = thr:pop()
-	local tls_priority = thr:pop()
+	local gnutls_priority = thr:pop()
 	local http_method = thr:pop()
 	local cmd = "output:" .. protocol_func
 
@@ -87,12 +87,12 @@ local function send_thread_main(thr)
 	elseif protocol_func == "tcp" then
 		cmd = cmd .. "()"
 	elseif protocol_func == "tls" then
-		cmd = cmd .. "('" .. tls_priority .. "')"
+		cmd = cmd .. "('" .. gnutls_priority .. "')"
 	elseif protocol_func == "https2" then
 		if type(output.https2) ~= "function" then
 			log:fatal("https2 isn't supported with this version of dnsjit")
 		end
-		cmd = cmd .. "({ method = '" .. http_method .. "' }, '" .. tls_priority .. "')"
+		cmd = cmd .. "({ method = '" .. http_method .. "' }, '" .. gnutls_priority .. "')"
 	else
 		log:fatal("unknown protocol_func: " .. protocol_func)
 	end
@@ -194,10 +194,10 @@ for i, thrconf in ipairs(config.threads) do
 	threads[i]:push(thrconf.handshake_timeout_s)
 	threads[i]:push(thrconf.idle_timeout_s)
 	threads[i]:push(thrconf.protocol_func)
-	threads[i]:push(thrconf.tls_priority)
+	threads[i]:push(thrconf.gnutls_priority)
 	threads[i]:push(thrconf.http_method)
 	threads[i]:push(thrconf.output_file)
-	threads[i]:push(thrconf.max_batch_size)
+	threads[i]:push(thrconf.batch_size)
 	threads[i]:push(#thrconf.bind_ips)
 	for _, bind_ip in thrconf.bind_ips do
 		threads[i]:push(bind_ip)
