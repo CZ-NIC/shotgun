@@ -56,9 +56,11 @@ def plot_client_query_scatter(ax, clients: Dict[str, int], color):
     x = []
     y = []
     s = []  # type: List[Union[float,int]]
+    sanity_nsamples = 0
+    step_multiplier = 10
     lmin = 0
-    lmax = 10
-    while lmax <= max(data):
+    lmax = step_multiplier
+    while lmin <= max(data):
         samples = list(n for n in data if lmin <= n < lmax)
         sanity_nsamples += len(samples)
         x.append(statistics.mean(samples))
@@ -68,8 +70,9 @@ def plot_client_query_scatter(ax, clients: Dict[str, int], color):
             '  [{:d}-{:d}) queries per client: {:d} ({:.2f} %) clients; {:d} queries total'
             .format(lmin, lmax, len(samples), y[-1], int(s[-1])))
         lmin = lmax
-        lmax *= 10
+        lmax *= step_multiplier
 
+    assert sanity_nsamples == len(data)
     logging.info(
         '  total: {:d} clients; {:d} queries'
         .format(len(data), int(sum(s))))
