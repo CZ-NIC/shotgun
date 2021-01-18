@@ -30,34 +30,6 @@ if config.verbosity > 4 then
 	log.enable("debug")
 end
 
--- TODO remove dead code
---local PROTOCOLS = {
---	udp = "udp",
---	tcp = "tcp",
---	tls = "tls",
---	dot = "tls",
---	https2 = "https2",
---	doh = "https2",
---}
---local proto = getopt:val("P")
---local PROTOCOL = PROTOCOLS[proto]
---if PROTOCOL == nil then
---	log.fatal("unknown protocol: "..proto)
---end
---local HTTP_METHOD = getopt:val("M")
---if HTTP_METHOD ~= "GET" and HTTP_METHOD ~= "POST" then
---	log.fatal("unsupported HTTP method: "..HTTP_METHOD)
---end
---local TLS_PRIORITY = getopt:val("tls-priority")
---if string.find(TLS_PRIORITY, '"') ~= nil or string.find(TLS_PRIORITY, "'") ~= nil then
---	log.fatal("tls priority string may not contain quotes");
---end
---local OUTDIR = getopt:val("O")
---if OUTDIR == "" or not exists(OUTDIR .. "/") then
---	log.fatal("output directory \"" .. OUTDIR .. "\" doesn't exist")
---end
---
---
 local function send_thread_main(thr)
 	local channel = thr:pop()
 	local running
@@ -199,7 +171,7 @@ for i, thrconf in ipairs(config.threads) do
 	threads[i]:push(thrconf.output_file)
 	threads[i]:push(thrconf.batch_size)
 	threads[i]:push(#thrconf.bind_ips)
-	for _, bind_ip in thrconf.bind_ips do
+	for _, bind_ip in ipairs(thrconf.bind_ips) do
 		threads[i]:push(bind_ip)
 	end
 end
