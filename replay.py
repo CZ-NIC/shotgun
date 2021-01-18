@@ -8,6 +8,8 @@ import logging
 import math
 import os
 import shutil
+import subprocess
+import sys
 from typing import Any, Dict, List, Optional, Tuple
 
 from jinja2 import Environment, FileSystemLoader
@@ -58,12 +60,13 @@ PROTOCOL_FUNC_PORTS = {
 }
 
 DIR = os.path.dirname(os.path.realpath(__file__))
-CONFIG_DIR = os.path.join(DIR, '..', 'configs')
-LUACONFIG_PATH = os.path.join(DIR, 'luaconfig.lua.j2')
+CONFIG_DIR = os.path.join(DIR, 'configs')
+REPLAY_DIR = os.path.join(DIR, 'replay')
+SHOTGUN_PATH = os.path.join(REPLAY_DIR, 'shotgun.lua')
 
 OUTDIR_DEFAULT_PREFIX = '/var/tmp/shotgun'
 
-JINJA_ENV = Environment(loader=FileSystemLoader(DIR))
+JINJA_ENV = Environment(loader=FileSystemLoader(REPLAY_DIR))
 
 
 def load_config(confname: str) -> str:
@@ -109,7 +112,7 @@ def bind_net_to_ips(bind_net: Optional[List[str]]) -> List[str]:
     return list(ips)
 
 
-def create_luaconfig(config: Dict[str, Any], threads: Dict[str, int], args: Any) -> None:
+def create_luaconfig(config: Dict[str, Any], threads: Dict[str, int], args: Any) -> str:
     data = {
         'pcap': args.read,
         'verbosity': args.verbosity,
@@ -169,6 +172,7 @@ def create_luaconfig(config: Dict[str, Any], threads: Dict[str, int], args: Any)
     with open(confpath, 'w') as f:
         f.write(template.render(data))
     logging.debug(f'luaconfig.lua written to: {confpath}')
+    return confpath
 
 
 def assign_threads(config: Dict[str, Any], nthreads: int) -> Dict[str, int]:
@@ -212,7 +216,7 @@ def make_outdir(outdir: Optional[str], force: bool) -> str:
     if force:
         shutil.rmtree(outdir, ignore_errors=True)
     os.makedirs(outdir)
-    logging.info(f"output directory: {outdir}")
+    logging.info(f"Output directory: {outdir}")
     return outdir
 
 
@@ -224,6 +228,15 @@ def get_log_level(verbosity: int) -> int:
     elif verbosity <= 3:
         return logging.INFO
     return logging.DEBUG
+
+
+def run_shotgun(luaconfig: str) -> None:
+    try:
+        subprocess.run([
+            os.path.join(REPLAY_DIR, 'shotgun.lua'),
+            luaconfig], check=True)
+    except subprocess.CalledProcessError as ex:
+        sys.exit(ex.returncode)
 
 
 def main():
@@ -254,13 +267,19 @@ def main():
         fill_config_defaults(config)
         threads = assign_threads(config, args.threads)
         args.outdir = make_outdir(args.outdir, args.force)
-        logging.info("(main): 1 thread(s)")
+        logging.info("Thread distribution:")
+        logging.info("  (main): 1 thread(s)")
         for kind, count in threads.items():
-            logging.info(f"{kind}: {count} thread(s)")
+            logging.info(f"  {kind}: {count} thread(s)")
 
-        create_luaconfig(config, threads, args)
+        luaconfig = create_luaconfig(config, threads, args)
     except KeyError as e:
         raise RuntimeError(f"configuration is missing required key: {e}")
+
+    logging.info("Configuration sucessfully created")
+    logging.info("Firing shotgun...")
+    run_shotgun(luaconfig)
+    # TODO merge
 
 
 if __name__ == '__main__':
