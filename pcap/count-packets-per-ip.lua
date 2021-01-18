@@ -93,7 +93,7 @@ local duration_s = (now_ms - chunk_since_ms) / 1e3
 log:info(string.format("duration of input PCAP (s): %.3f", duration_s))
 log:info(string.format("number of clients: %d", n_clients))
 
-csv_output:write("ip,ip_since_ms,ip_until_ms,packets,ip_chunk_qps\n")
+csv_output:write('"ip","ip_since_ms","ip_until_ms","packets","ip_chunk_qps"\n')
 for ip, data in pairs(clients) do
 	csv_output:write('"')
 	csv_output:write(ip)
