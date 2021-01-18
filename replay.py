@@ -230,13 +230,33 @@ def get_log_level(verbosity: int) -> int:
     return logging.DEBUG
 
 
-def run_shotgun(luaconfig: str) -> None:
+def run_or_exit(args: List[str], shell: bool = False) -> None:
+    if shell:
+        args = ' '.join(args)
     try:
-        subprocess.run([
-            os.path.join(REPLAY_DIR, 'shotgun.lua'),
-            luaconfig], check=True)
+        subprocess.run(args, check=True, shell=shell)
     except subprocess.CalledProcessError as ex:
         sys.exit(ex.returncode)
+
+
+def run_shotgun(luaconfig: str) -> None:
+    run_or_exit([
+        os.path.join(REPLAY_DIR, 'shotgun.lua'),
+        luaconfig,
+    ])
+
+
+def merge_data(datadir: str) -> None:
+    for filename in os.listdir(datadir):
+        fullpath = os.path.abspath(os.path.join(datadir, filename))
+        if not os.path.isdir(fullpath):
+            continue
+        logging.debug(f"Merging data in: {fullpath}")
+        run_or_exit([
+            os.path.join(DIR, 'tools', 'merge_data.py'),
+            '-o', f"{fullpath}.json",
+            f"{fullpath}/*.json",
+        ], shell=True)
 
 
 def main():
@@ -279,7 +299,7 @@ def main():
     logging.info("Configuration sucessfully created")
     logging.info("Firing shotgun...")
     run_shotgun(luaconfig)
-    # TODO merge
+    merge_data(os.path.join(args.outdir, 'data'))
 
 
 if __name__ == '__main__':
