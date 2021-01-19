@@ -68,12 +68,12 @@ def main():
     logger.setLevel(logging.WARNING)
 
     parser = argparse.ArgumentParser(
-        description="Plot time series from shotgun experiment")
+        description="Plot connections over time from shotgun experiment")
 
     parser.add_argument('json_file', nargs='+', help='Shotgun results JSON file(s)')
     parser.add_argument('-t', '--title', default='TCP Connections over Time',
                         help='Graph title')
-    parser.add_argument('-o', '--output', default='conn_stats.svg',
+    parser.add_argument('-o', '--output', default='connections.svg',
                         help='Output graph filename')
     args = parser.parse_args()
 

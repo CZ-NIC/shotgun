@@ -146,9 +146,9 @@ def main():
                 "Use older tooling or re-run the tests with newer shotgun.")
             sys.exit(1)
 
-        dirname = os.path.basename(os.path.dirname(os.path.normpath(json_path)))
+        name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
         latency, qps = merge_latency(data, args.since, args.until)
-        label = '{} ({} QPS)'.format(dirname, siname(qps))
+        label = '{} ({} QPS)'.format(name, siname(qps))
         plot_log_percentile_histogram(ax, latency, label)
 
     plt.legend()

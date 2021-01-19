@@ -96,7 +96,7 @@ def fill_config_defaults(config: Dict[str, Any]) -> None:
         except KeyError:
             raise RuntimeError(f'config error: unknown protocol "{protocol}" in [traffic.{name}]')
         conf.setdefault('cpu_factor', CPU_FACTORS[conf['protocol_func']])
-        conf.setdefault('weight', 1)
+        conf.setdefault('weight', 1)  # TODO set weight for luaconfig
 
 
 def bind_net_to_ips(bind_net: Optional[List[str]]) -> List[str]:
@@ -230,11 +230,9 @@ def get_log_level(verbosity: int) -> int:
     return logging.DEBUG
 
 
-def run_or_exit(args: List[str], shell: bool = False) -> None:
-    if shell:
-        args = ' '.join(args)
+def run_or_exit(args: List[str]) -> None:
     try:
-        subprocess.run(args, check=True, shell=shell)
+        subprocess.run(args, check=True)
     except subprocess.CalledProcessError as ex:
         sys.exit(ex.returncode)
 
@@ -246,17 +244,54 @@ def run_shotgun(luaconfig: str) -> None:
     ])
 
 
+def list_json_files(directory: str) -> List[str]:
+    return [
+        os.path.join(directory, filename)
+        for filename in os.listdir(directory)
+        if filename.endswith('.json')
+    ]
+
+
 def merge_data(datadir: str) -> None:
     for filename in os.listdir(datadir):
         fullpath = os.path.abspath(os.path.join(datadir, filename))
         if not os.path.isdir(fullpath):
             continue
-        logging.debug(f"Merging data in: {fullpath}")
-        run_or_exit([
-            os.path.join(DIR, 'tools', 'merge_data.py'),
+        logging.info(f"Merging data in: {fullpath}")
+        args = [
+            os.path.join(DIR, 'tools', 'merge-data.py'),
             '-o', f"{fullpath}.json",
-            f"{fullpath}/*.json",
-        ], shell=True)
+        ]
+        args.extend(list_json_files(fullpath))
+        run_or_exit(args)
+
+
+def plot_charts(config: Dict[str, Any], datadir: str) -> None:
+    if 'plot' not in config:
+        return
+
+    workdir = os.path.join(os.path.dirname(datadir), 'charts')
+    os.makedirs(workdir)
+    for name, conf in config['plot'].items():
+        if 'type' not in conf:
+            logging.error(f'missing "type" for plot.{name}')
+            continue
+        logging.info(f'Plotting {name}')
+        args = [os.path.join(DIR, 'tools', f'plot-{conf["type"]}.py')]
+        for key, value in conf.items():
+            if key == 'type':
+                continue
+            args.append(f'--{key}')
+            args.append(f'{value}')
+        if 'output' not in conf:
+            args.extend(['--output', f'{name}.svg'])
+        args.extend(list_json_files(datadir))
+        try:
+            subprocess.run(args, check=True, cwd=workdir)
+        except subprocess.CalledProcessError:
+            logging.error(f'plot {name} failed')
+        except FileNotFoundError:
+            logging.error(f'plot type "{conf["type"]}" invalid')
 
 
 def main():
@@ -299,7 +334,12 @@ def main():
     logging.info("Configuration sucessfully created")
     logging.info("Firing shotgun...")
     run_shotgun(luaconfig)
-    merge_data(os.path.join(args.outdir, 'data'))
+
+    datadir = os.path.join(args.outdir, 'data')
+    merge_data(datadir)
+    plot_charts(config, datadir)
+
+    logging.info(f"FINISHED Results in {args.outdir}")
 
 
 if __name__ == '__main__':

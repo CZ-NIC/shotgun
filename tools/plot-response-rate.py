@@ -120,7 +120,7 @@ def main():
     logger.setLevel(logging.WARNING)
 
     parser = argparse.ArgumentParser(
-        description="Plot time series from shotgun experiment")
+        description="Plot response rate from shotgun experiment")
 
     parser.add_argument('json_file', nargs='+', help='Shotgun results JSON file(s)')
     parser.add_argument('-t', '--title', default='Response Rate over Time',
@@ -155,8 +155,8 @@ def main():
 
         timespan = (data['stats_sum']['until_ms'] - data['stats_sum']['since_ms']) / 1000
         qps = data['stats_sum']['requests'] / timespan
-        dirname = os.path.basename(os.path.dirname(os.path.normpath(json_path)))
-        label = '{} ({} QPS)'.format(dirname, siname(qps))
+        name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
+        label = '{} ({} QPS)'.format(name, siname(qps))
         min_timespan = data['stats_interval_ms'] / 2
 
         plot_response_rate(
