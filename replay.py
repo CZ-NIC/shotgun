@@ -96,7 +96,7 @@ def fill_config_defaults(config: Dict[str, Any]) -> None:
         except KeyError:
             raise RuntimeError(f'config error: unknown protocol "{protocol}" in [traffic.{name}]')
         conf.setdefault('cpu_factor', CPU_FACTORS[conf['protocol_func']])
-        conf.setdefault('weight', 1)  # TODO set weight for luaconfig
+        conf.setdefault('weight', 1)
 
 
 def bind_net_to_ips(bind_net: Optional[List[str]]) -> List[str]:
@@ -153,6 +153,7 @@ def create_luaconfig(config: Dict[str, Any], threads: Dict[str, int], args: Any)
 
         thrconf['target_ip'] = thrconf['server']
         thrconf['target_port'] = thrconf[PROTOCOL_FUNC_PORTS[thrconf['protocol_func']]]
+        thrconf['weight'] = math.ceil(1000 * thrconf['weight'] / count)  # convert to integer
 
         for i in range(count):
             instconf = copy.deepcopy(thrconf)
@@ -181,7 +182,8 @@ def assign_threads(config: Dict[str, Any], nthreads: int) -> Dict[str, int]:
 
     nsenders = len(config['traffic'])
     if nthreads < nsenders + 1:
-        raise RuntimeError(f"minimum threads required for this config is {nsenders + 1}")
+        raise RuntimeError(
+            f"minimum threads required for this config is {nsenders + 1} (use -T/--threads)")
 
     nthreads = nthreads - 1  # one main thread for processing the input pcap
 

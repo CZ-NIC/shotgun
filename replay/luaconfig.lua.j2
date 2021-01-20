@@ -10,6 +10,7 @@ config.threads[{{ loop.index }}] = {
 	name = "{{ thread.name }}",
 	target_ip = "{{ thread.target_ip }}",
 	target_port = {{ thread.target_port|int }},
+	weight = {{ thread.weight }},
 	timeout_s = {{ thread.timeout_s|default(2)|int }},
 	handshake_timeout_s = {{ thread.handshake_timeout_s|default(5)|int }},
 	idle_timeout_s = {{ thread.idle_timeout_s|default(10)|int }},
