@@ -143,6 +143,7 @@ delay:realtime(config.drift_s)
 delay:producer(input)
 layer:producer(delay)
 ipsplit:overwrite_dst()
+ipsplit:random(0)  -- so we can use arbitrary weights
 
 -- setup threads
 local thread = require("dnsjit.core.thread")
@@ -153,7 +154,7 @@ local channels = {}
 ---- initialize send threads
 for i, thrconf in ipairs(config.threads) do
 	channels[i] = channel.new(thrconf.channel_size)
-	ipsplit:receiver(channels[i])
+	ipsplit:receiver(channels[i], thrconf.weight)
 
 	threads[i] = thread.new()
 	threads[i]:start(send_thread_main)
