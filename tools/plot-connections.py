@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import math
+import os
 import sys
 
 # pylint: disable=wrong-import-order,wrong-import-position
@@ -71,10 +72,14 @@ def main():
         description="Plot connections over time from shotgun experiment")
 
     parser.add_argument('json_file', nargs='+', help='Shotgun results JSON file(s)')
-    parser.add_argument('-t', '--title', default='TCP Connections over Time',
+    parser.add_argument('-t', '--title', default='Connections over Time',
                         help='Graph title')
     parser.add_argument('-o', '--output', default='connections.svg',
                         help='Output graph filename')
+    parser.add_argument('-k', '--kind', nargs='+',
+                        choices=['active', 'tcp_hs', 'tls_resumed', 'failed_hs'],
+                        default=['active', 'tcp_hs', 'tls_resumed', 'failed_hs'],
+                        help='Which data should be rendered')
     args = parser.parse_args()
 
     # initialize graph
@@ -99,14 +104,20 @@ def main():
         if data['discarded'] != 0:
             logging.warning("%d discarded packets may skew results!", data['discarded'])
 
-        plot(ax, data, label='Active',
-             eval_func=lambda stats: stats['conn_active'])
-        plot(ax, data, label='TCP Handshakes',
-             eval_func=lambda stats: stats['conn_handshakes'])
-        plot(ax, data, label='TLS session resumed',
-             eval_func=lambda stats: stats['conn_resumed'])
-        plot(ax, data, label='Handshakes (failed)',
-             eval_func=lambda stats: stats['conn_handshakes_failed'])
+        name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
+
+        if 'active' in args.kind:
+            plot(ax, data, label=f'Active ({name})',
+                 eval_func=lambda stats: stats['conn_active'])
+        if 'tcp_hs' in args.kind:
+            plot(ax, data, label=f'TCP Handshakes ({name})',
+                 eval_func=lambda stats: stats['conn_handshakes'])
+        if 'tls_resumed' in args.kind:
+            plot(ax, data, label=f'TLS Resumed ({name})',
+                 eval_func=lambda stats: stats['conn_resumed'])
+        if 'failed_hs' in args.kind:
+            plot(ax, data, label=f'Failed Handshakes ({name})',
+                 eval_func=lambda stats: stats['conn_handshakes_failed'])
 
     plt.legend()
     plt.savefig(args.output)
