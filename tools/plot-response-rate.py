@@ -59,6 +59,8 @@ def siname(n):
 
 def stat_field_rate(field):
     def inner(stats):
+        if stats['requests'] == 0:
+            return float('nan')
         return 100.0 * stats[field] / stats['requests']
     return inner
 
