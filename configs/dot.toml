@@ -1,0 +1,58 @@
+# DNS-over-TLS traffic senders.
+#
+# Below are some examples of DoT clients with various behaviours. You can use
+# these as inspiration to craft your own client-types. Only the well behaved
+# client is enabled for this default "dot" scenario.
+#
+# GnuTLS priority string can be used to control TLS protocol version, used
+# ciphers suites, TLS Session Resumption support etc. For more GnuTLS priority
+# options, refer to: https://gnutls.org/manual/html_node/Priority-Strings.html
+[traffic]
+
+# Well-behaved DoT clients utilizing both idle connection and TLS session resumption.
+[traffic.DoT]
+protocol = "dot"
+
+# DoT clients without TLS Session Resumption
+#[traffic.DoT-no_tickets]
+#protocol = "dot"
+#gnutls_priority = "NORMAL:%NO_TICKETS"
+
+# Aggressive DoT clients with TLS Session Resumption
+#[traffic.DoT-no_idle]
+#protocol = "dot"
+#idle_timeout_s = 0
+
+# Aggressive DoT clients without TLS Session Resumption
+#[traffic.DoT-no_idle-no_tickets]
+#protocol = "dot"
+#idle_timeout_s = 0
+#gnutls_priority = "NORMAL:%NO_TICKETS"
+
+# DoT clients with TLS 1.3
+#[traffic.DoT-tls1_3]
+#protocol = "dot"
+#gnutls_priority = "NORMAL:-VERS-ALL:+VERS-TLS1.3"
+
+
+[charts]
+
+[charts.latency]
+type = "latency"
+
+[charts.response-rate]
+type = "response-rate"
+
+[charts.connections]
+type = "connections"
+kind = "active"
+
+[charts.handshakes]
+type = "connections"
+kind = ["tcp_hs", "failed_hs"]
+title = "Handshakes over Time"
+
+[charts.resumptions]
+type = "connections"
+kind = ["tcp_hs", "tls_resumed"]
+title = "TLS Session Resumption for New Connections"

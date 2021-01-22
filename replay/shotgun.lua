@@ -143,7 +143,7 @@ delay:realtime(config.drift_s)
 delay:producer(input)
 layer:producer(delay)
 ipsplit:overwrite_dst()
-ipsplit:random(0)  -- so we can use arbitrary weights
+ipsplit:random()
 
 -- setup threads
 local thread = require("dnsjit.core.thread")
