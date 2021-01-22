@@ -1,0 +1,42 @@
+# DNS-over-HTTPS traffic senders using HTTP/2 over TLS.
+#
+# Below are configured two traffic senders that both represent well behaved
+# clients using either GET or POST method to send queries.
+#
+# For other client types, refer to DoT or TCP configuration examples. All
+# options used there also make sense for configuring DoH client behaviour, most
+# notably connection idle timeout, TLS session resumption or TLS versions.
+[traffic]
+
+# Well behaved DNS-over-HTTPS clients using GET method.
+[traffic.DoH-GET]
+protocol = "doh"
+http_method = "GET"
+
+# Well behvaed DNS-over-HTTPS clients using POST method.
+[traffic.DoH-POST]
+protocol = "doh"
+http_method = "POST"
+
+
+[charts]
+
+[charts.latency]
+type = "latency"
+
+[charts.response-rate]
+type = "response-rate"
+
+[charts.connections]
+type = "connections"
+kind = "active"
+
+[charts.handshakes]
+type = "connections"
+kind = ["tcp_hs", "failed_hs"]
+title = "Handshakes over Time"
+
+[charts.resumptions]
+type = "connections"
+kind = ["tcp_hs", "tls_resumed"]
+title = "TLS Session Resumption for New Connections"

@@ -1,0 +1,15 @@
+# Plain DNS over UDP traffic sender.
+[traffic]
+
+# DNS-over-UDP clients.
+[traffic.UDP]
+protocol = "udp"
+
+
+[charts]
+
+[charts.latency]
+type = "latency"
+
+[charts.response-rate]
+type = "response-rate"

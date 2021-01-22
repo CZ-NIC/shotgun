@@ -1,0 +1,29 @@
+# DNS-over-TCP traffic senders.
+[traffic]
+
+# Well behaved DNS-over-TCP clients utilizing idle connection (default).
+[traffic.TCP]
+protocol = "tcp"
+
+# Aggressive DNS-over-TCP clients that terminate connection as soon as queries are answered.
+#[traffic.TCP-no_idle]
+#protocol = "tcp"
+#idle_timeout_s = 0
+
+
+[charts]
+
+[charts.latency]
+type = "latency"
+
+[charts.response-rate]
+type = "response-rate"
+
+[charts.connections]
+type = "connections"
+kind = "active"
+
+[charts.handshakes]
+type = "connections"
+kind = ["tcp_hs", "failed_hs"]
+title = "Handshakes over Time"

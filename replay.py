@@ -269,14 +269,14 @@ def merge_data(datadir: str) -> None:
 
 
 def plot_charts(config: Dict[str, Any], datadir: str) -> None:
-    if 'plot' not in config:
+    if 'charts' not in config:
         return
 
     workdir = os.path.join(os.path.dirname(datadir), 'charts')
     os.makedirs(workdir)
-    for name, conf in config['plot'].items():
+    for name, conf in config['charts'].items():
         if 'type' not in conf:
-            logging.error(f'missing "type" for plot.{name}')
+            logging.error(f'missing "type" for chart.{name}')
             continue
         logging.info(f'Plotting {name}')
         args = [os.path.join(DIR, 'tools', f'plot-{conf["type"]}.py')]
@@ -284,16 +284,20 @@ def plot_charts(config: Dict[str, Any], datadir: str) -> None:
             if key == 'type':
                 continue
             args.append(f'--{key}')
-            args.append(f'{value}')
+            if isinstance(value, list):
+                for item in value:
+                    args.append(f'{item}')
+            else:
+                args.append(f'{value}')
         if 'output' not in conf:
             args.extend(['--output', f'{name}.svg'])
         args.extend(list_json_files(datadir))
         try:
             subprocess.run(args, check=True, cwd=workdir)
         except subprocess.CalledProcessError:
-            logging.error(f'plot {name} failed')
+            logging.error(f'chart {name} failed')
         except FileNotFoundError:
-            logging.error(f'plot type "{conf["type"]}" invalid')
+            logging.error(f'chart type "{conf["type"]}" invalid')
 
 
 def main():

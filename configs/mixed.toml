@@ -1,0 +1,62 @@
+# Complex scenario simulating clients using all types of supported protocols
+# (Do53 - UDP and TCP, DoH and DoT).
+#
+# Clients are randomly assigned exactly one of the configured traffic settings.
+# The assignment respects the configured weights. In the following example:
+#   60 % of clients use UDP
+#    5 % + 5 % of clients use TCP (with/without utilizing idle connections)
+#   10 % + 5 % of clients use DoT (with/without TLS Session Resumption)
+#   10 % + 5 % of clients use DoH (using GET or POST)
+#
+# You can use this example as a starting point to create your own
+# configurations with various clients and traffic distribution. Refer to other
+# example configs for more ideas of clients types.
+[traffic]
+
+# DNS-over-UDP clients.
+[traffic.UDP]
+protocol = "udp"
+weight = 60
+
+# Well-behaved DNS-over-TCP clients.
+[traffic.TCP]
+protocol = "tcp"
+weight = 5
+
+# Aggressive DNS-over-TCP clients.
+[traffic.TCP-no_idle]
+protocol = "tcp"
+weight = 5
+idle_timeout_s = 0
+
+# Well-behvaed DNS-over-TLS clients.
+[traffic.DoT]
+protocol = "dot"
+weight = 10
+
+# Well-behaved DNS-over-TLS clients without TLS Session Resumption.
+[traffic.DoT-no_tickets]
+protocol = "dot"
+weight = 5
+gnutls_priority = "NORMAL:%NO_TICKETS"
+
+# Well-behaved DNS-over-HTTPS clients using GET method.
+[traffic.DoH-GET]
+protocol = "doh"
+weight = 10
+http_method = "GET"
+
+# Well-behaved DNS-over-HTTPS clients using POST method.
+[traffic.DoH-POST]
+protocol = "doh"
+weight = 5
+http_method = "POST"
+
+
+[charts]
+
+[charts.latency]
+type = "latency"
+
+[charts.response-rate]
+type = "response-rate"
