@@ -138,7 +138,9 @@ local delay = require("dnsjit.filter.timing").new()
 local layer = require("dnsjit.filter.layer").new()
 local ipsplit = require("dnsjit.filter.ipsplit").new()
 local copy = require("dnsjit.filter.copy").new()
-input:open(config.pcap)
+if input:open(config.pcap) ~= 0 then
+	log.fatal("failed to open PCAP")
+end
 delay:realtime(config.drift_s)
 delay:producer(input)
 layer:producer(delay)
