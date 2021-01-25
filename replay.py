@@ -215,9 +215,23 @@ def make_outdir(outdir: Optional[str], force: bool) -> str:
     if outdir is None:
         ts = round(datetime.datetime.now().timestamp())
         outdir = os.path.join(OUTDIR_DEFAULT_PREFIX, str(ts))
-    if force:
-        shutil.rmtree(outdir, ignore_errors=True)
-    os.makedirs(outdir)
+    if os.path.exists(outdir):
+        if not os.path.isdir(outdir):
+            if force:
+                logging.info(f'Removing existing file at "{outdir}"')
+                os.remove(outdir)
+            else:
+                raise RuntimeError(
+                    "File exists at the specified output directory path, use -f/--force if you wish to remove it")  # noqa
+        if os.path.isdir(outdir) and len(os.listdir(outdir)) != 0:
+            if force:
+                logging.info(f'Removing existing directory "{outdir}"')
+                shutil.rmtree(outdir, ignore_errors=True)
+            else:
+                raise RuntimeError(
+                    "Output directory isn't empty, use -f/--force if you wish to remove it")
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
     logging.info(f"Output directory: {outdir}")
     return outdir
 
