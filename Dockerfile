@@ -31,4 +31,5 @@ RUN \
 
 COPY . /shotgun
 WORKDIR /shotgun
+ENV PATH="${PATH}:/shotgun"
 RUN pip3 install -r requirements.txt
