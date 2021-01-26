@@ -32,7 +32,7 @@ def siname(n):
 
 
 def init_plot(title):
-    _, ax = plt.subplots(figsize=(10, 7))
+    _, ax = plt.subplots(figsize=(8, 6))
 
     ax.set_xlabel('Time [s]')
     ax.set_ylabel('Number of connections')
@@ -45,7 +45,7 @@ def init_plot(title):
     return ax
 
 
-def plot(ax, data, label, eval_func, min_timespan=0):
+def plot(ax, data, label, eval_func, min_timespan=0, color=None):
     stats_periodic = data['stats_periodic'][:-1]  # omit the last often misleading datapoint
     time_offset = stats_periodic[0]['since_ms']
 
@@ -59,7 +59,9 @@ def plot(ax, data, label, eval_func, min_timespan=0):
         xvalues.append(time)
         yvalues.append(eval_func(stats))
 
-    ax.plot(xvalues, yvalues, label=label, marker='o', linestyle='--')
+    ax.plot(xvalues, yvalues, label=label, marker='o', linestyle='--', color=color)
+    ax.set_xlim(xmin=0)
+    ax.set_ylim(ymin=0)
 
 
 def main():
@@ -107,16 +109,16 @@ def main():
         name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
 
         if 'active' in args.kind:
-            plot(ax, data, label=f'Active ({name})',
+            plot(ax, data, label=f'Active ({name})', color='tab:blue',
                  eval_func=lambda stats: stats['conn_active'])
         if 'tcp_hs' in args.kind:
-            plot(ax, data, label=f'TCP Handshakes ({name})',
+            plot(ax, data, label=f'TCP Handshakes ({name})', color='tab:green',
                  eval_func=lambda stats: stats['conn_handshakes'])
         if 'tls_resumed' in args.kind:
-            plot(ax, data, label=f'TLS Resumed ({name})',
+            plot(ax, data, label=f'TLS Resumed ({name})', color='tab:orange',
                  eval_func=lambda stats: stats['conn_resumed'])
         if 'failed_hs' in args.kind:
-            plot(ax, data, label=f'Failed Handshakes ({name})',
+            plot(ax, data, label=f'Failed Handshakes ({name})', color='tab:gray',
                  eval_func=lambda stats: stats['conn_handshakes_failed'])
 
     plt.legend()
