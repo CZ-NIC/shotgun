@@ -27,8 +27,10 @@ RUN \
 	./autogen.sh && \
 	./configure --disable-dependency-tracking && \
 	make && \
+	make install && \
 	cd ..
 
 COPY . /shotgun
 WORKDIR /shotgun
+ENV PATH="${PATH}:/shotgun"
 RUN pip3 install -r requirements.txt
