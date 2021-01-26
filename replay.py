@@ -262,7 +262,7 @@ def run_shotgun(luaconfig: str) -> None:
 
 def list_json_files(directory: str) -> List[str]:
     return [
-        os.path.join(directory, filename)
+        os.path.abspath(os.path.join(directory, filename))
         for filename in os.listdir(directory)
         if filename.endswith('.json')
     ]
@@ -286,6 +286,7 @@ def plot_charts(config: Dict[str, Any], datadir: str) -> None:
     if 'charts' not in config:
         return
 
+    # TODO make it work with relative path to outdir
     workdir = os.path.join(os.path.dirname(datadir), 'charts')
     os.makedirs(workdir)
     for name, conf in config['charts'].items():
