@@ -10,7 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set
 
 from jinja2 import Environment, FileSystemLoader
 import toml
@@ -69,8 +69,8 @@ OUTDIR_DEFAULT_PREFIX = '/var/tmp/shotgun'
 JINJA_ENV = Environment(loader=FileSystemLoader(REPLAY_DIR))
 
 
-def load_config(confname: str) -> str:
-    def get_config_path(confname: str) -> str:
+def load_config(confname: str) -> Dict[str, Any]:
+    def get_config_path(confname: str) -> Optional[str]:
         if os.path.isfile(confname):
             return confname
         confname = os.path.join(CONFIG_DIR, confname + '.toml')
@@ -82,7 +82,7 @@ def load_config(confname: str) -> str:
     if path is None:
         raise FileNotFoundError(f"config file not found: \"{confname}\"")
 
-    return toml.load(path)
+    return dict(**toml.load(path))
 
 
 def fill_config_defaults(config: Dict[str, Any]) -> None:
@@ -93,21 +93,23 @@ def fill_config_defaults(config: Dict[str, Any]) -> None:
         protocol = conf['protocol']
         try:
             conf.setdefault('protocol_func', PROTOCOL_FUNCS[protocol])
-        except KeyError:
-            raise RuntimeError(f'config error: unknown protocol "{protocol}" in [traffic.{name}]')
+        except KeyError as e:
+            raise RuntimeError(
+                f'config error: unknown protocol "{protocol}" in [traffic.{name}]') from e
         conf.setdefault('cpu_factor', CPU_FACTORS[conf['protocol_func']])
         conf.setdefault('weight', 1)
 
 
 def bind_net_to_ips(bind_net: Optional[List[str]]) -> List[str]:
-    ips = set()
+    ips: Set[str] = set()
     if bind_net is None:
         return []
     for entry in bind_net:
         try:
             net = ipaddress.ip_network(entry)
-        except ValueError:
-            raise RuntimeError(f"bind_net: {entry} doesn't represent valid net or address")
+        except ValueError as e:
+            raise RuntimeError(
+                f"bind_net: {entry} doesn't represent valid net or address") from e
         ips = ips.union(set(net.hosts()))
     return list(ips)
 
@@ -141,8 +143,7 @@ def create_luaconfig(config: Dict[str, Any], threads: Dict[str, int], args: Any)
         if 'server' not in thrconf:
             if args.server is None:
                 raise RuntimeError("server must be set, use -s/--server")
-            else:
-                thrconf.setdefault('server', args.server)
+            thrconf.setdefault('server', args.server)
 
         datadir = os.path.join(args.outdir, 'data', kind)
         os.makedirs(datadir)
@@ -161,7 +162,7 @@ def create_luaconfig(config: Dict[str, Any], threads: Dict[str, int], args: Any)
             fname = os.path.join(datadir, instconf['name']) + '.json'
             instconf['output_file'] = fname
             instconf['bind_ips'] = []
-            for j in range(ips_per_thread):
+            for _ in range(ips_per_thread):
                 instconf['bind_ips'].append(ips.pop())
             data['threads'].append(instconf)
 
@@ -172,7 +173,7 @@ def create_luaconfig(config: Dict[str, Any], threads: Dict[str, int], args: Any)
     confpath = os.path.join(confdir, 'luaconfig.lua')
     with open(confpath, 'w') as f:
         f.write(template.render(data))
-    logging.debug(f'luaconfig.lua written to: {confpath}')
+    logging.debug('luaconfig.lua written to: %s', confpath)
     return confpath
 
 
@@ -188,7 +189,7 @@ def assign_threads(config: Dict[str, Any], nthreads: int) -> Dict[str, int]:
     nthreads = nthreads - 1  # one main thread for processing the input pcap
 
     # assign one thread to each sender
-    senders: Dict[str, Tuple[int, int]] = {}
+    senders: Dict[str, Dict[str, int]] = {}
     for name, conf in config['traffic'].items():
         target_cpu_weight = conf['weight'] * conf['cpu_factor']
         senders[name] = {'threads': 1, 'target_cpu_weight': target_cpu_weight}
@@ -218,21 +219,21 @@ def make_outdir(outdir: Optional[str], force: bool) -> str:
     if os.path.exists(outdir):
         if not os.path.isdir(outdir):
             if force:
-                logging.info(f'Removing existing file at "{outdir}"')
+                logging.info('Removing existing file at "%s"', outdir)
                 os.remove(outdir)
             else:
                 raise RuntimeError(
                     "File exists at the specified output directory path, use -f/--force if you wish to remove it")  # noqa
         if os.path.isdir(outdir) and len(os.listdir(outdir)) != 0:
             if force:
-                logging.info(f'Removing existing directory "{outdir}"')
+                logging.info('Removing existing directory "%s"', outdir)
                 shutil.rmtree(outdir, ignore_errors=True)
             else:
                 raise RuntimeError(
                     "Output directory isn't empty, use -f/--force if you wish to remove it")
     if not os.path.exists(outdir):
         os.makedirs(outdir)
-    logging.info(f"Output directory: {outdir}")
+    logging.info("Output directory: %s", outdir)
     return outdir
 
 
@@ -273,7 +274,7 @@ def merge_data(datadir: str) -> None:
         fullpath = os.path.abspath(os.path.join(datadir, filename))
         if not os.path.isdir(fullpath):
             continue
-        logging.info(f"Merging data in: {fullpath}")
+        logging.info("Merging data in: %s", fullpath)
         args = [
             os.path.join(DIR, 'tools', 'merge-data.py'),
             '-o', f"{fullpath}.json",
@@ -286,14 +287,13 @@ def plot_charts(config: Dict[str, Any], datadir: str) -> None:
     if 'charts' not in config:
         return
 
-    # TODO make it work with relative path to outdir
     workdir = os.path.join(os.path.dirname(datadir), 'charts')
     os.makedirs(workdir)
     for name, conf in config['charts'].items():
         if 'type' not in conf:
-            logging.error(f'missing "type" for chart.{name}')
+            logging.error('missing "type" for chart.%s', name)
             continue
-        logging.info(f'Plotting {name}')
+        logging.info('Plotting %s', name)
         args = [os.path.join(DIR, 'tools', f'plot-{conf["type"]}.py')]
         for key, value in conf.items():
             if key == 'type':
@@ -310,16 +310,16 @@ def plot_charts(config: Dict[str, Any], datadir: str) -> None:
         try:
             subprocess.run(args, check=True, cwd=workdir)
         except subprocess.CalledProcessError:
-            logging.error(f'chart {name} failed')
+            logging.error('chart %s failed', name)
         except FileNotFoundError:
-            logging.error(f'chart type "{conf["type"]}" invalid')
+            logging.error('chart type "%s" invalid', conf["type"])
 
 
 def main():
     parser = argparse.ArgumentParser(
         description='Replay client traffic over the configured protocols')
     parser.add_argument('-c', '--config', type=str, required=True,
-                        help='traffic configuration TOML (file path or one of defaults: TODO)')
+                        help='traffic configuration TOML (file path or one of defaults: udp, tcp, dot, doh, mixed)') # noqa
     parser.add_argument('-r', '--read', help='PCAP with clients', required=True)
     parser.add_argument('-s', '--server', help='target server IP')
     parser.add_argument('-O', '--outdir', help='output directory', type=str)
@@ -346,11 +346,11 @@ def main():
         logging.info("Thread distribution:")
         logging.info("  (main): 1 thread(s)")
         for kind, count in threads.items():
-            logging.info(f"  {kind}: {count} thread(s)")
+            logging.info("  %s: %d thread(s)", kind, count)
 
         luaconfig = create_luaconfig(config, threads, args)
     except KeyError as e:
-        raise RuntimeError(f"configuration is missing required key: {e}")
+        raise RuntimeError(f"configuration is missing required key: {e}") from e
 
     logging.info("Configuration sucessfully created")
     logging.info("Firing shotgun...")
@@ -360,14 +360,14 @@ def main():
     merge_data(datadir)
     plot_charts(config, datadir)
 
-    logging.info(f"FINISHED Results in {args.outdir}")
+    logging.info("FINISHED Results in %s", args.outdir)
 
 
 if __name__ == '__main__':
     try:
         main()
     except toml.TomlDecodeError as e:
-        logging.critical(f"TOML config syntax error: {e}")
+        logging.critical("TOML config syntax error: %s", e)
     except FileNotFoundError as e:
         logging.critical(e)
     except RuntimeError as e:
