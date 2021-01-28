@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+from itertools import cycle
 import json
 import logging
 import math
@@ -14,6 +15,11 @@ import matplotlib.pyplot as plt  # noqa
 
 
 JSON_VERSION = 20200527
+
+COLOR_ACTIVE = cycle(['royalblue', 'cornflowerblue', 'darkblue', 'lightsteelblue'])
+COLOR_TCP_HS = cycle(['forestgreen', 'limegreen', 'darkgreen', 'lightgreen'])
+COLOR_TLS_RESUMED = cycle(['orange', 'moccasin', 'darkorange', 'antiquewhite'])
+COLOR_FAILED_HS = cycle(['gray', 'silver', 'black', 'gainsboro'])
 
 
 sinames = ['', ' k', ' M', ' G', ' T']
@@ -109,16 +115,16 @@ def main():
         name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
 
         if 'active' in args.kind:
-            plot(ax, data, label=f'Active ({name})', color='tab:blue',
+            plot(ax, data, label=f'Active ({name})', color=next(COLOR_ACTIVE),
                  eval_func=lambda stats: stats['conn_active'])
         if 'tcp_hs' in args.kind:
-            plot(ax, data, label=f'TCP Handshakes ({name})', color='tab:green',
+            plot(ax, data, label=f'TCP Handshakes ({name})', color=next(COLOR_TCP_HS),
                  eval_func=lambda stats: stats['conn_handshakes'])
         if 'tls_resumed' in args.kind:
-            plot(ax, data, label=f'TLS Resumed ({name})', color='tab:orange',
+            plot(ax, data, label=f'TLS Resumed ({name})', color=next(COLOR_TLS_RESUMED),
                  eval_func=lambda stats: stats['conn_resumed'])
         if 'failed_hs' in args.kind:
-            plot(ax, data, label=f'Failed Handshakes ({name})', color='tab:gray',
+            plot(ax, data, label=f'Failed Handshakes ({name})', color=next(COLOR_FAILED_HS),
                  eval_func=lambda stats: stats['conn_handshakes_failed'])
 
     plt.legend()
