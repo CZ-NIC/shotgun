@@ -42,7 +42,7 @@ def siname(n):
 
 def init_plot(title):
     # plt.rcParams["font.family"] = "monospace"
-    _, ax = plt.subplots(figsize=(8, 8))
+    _, ax = plt.subplots(figsize=(9, 9))
 
     ax.set_xscale('log')
     ax.xaxis.set_major_formatter(mtick.FormatStrFormatter('%s'))
@@ -152,7 +152,7 @@ def main():
         plot_log_percentile_histogram(ax, latency, label)
 
     plt.legend()
-    plt.savefig(args.output, dpi=300)
+    plt.savefig(args.output)
 
 
 if __name__ == '__main__':
