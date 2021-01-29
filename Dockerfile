@@ -6,6 +6,7 @@ RUN \
 		python3 \
 		python3-pip \
 		tshark \
+		jq \
 		libck-dev \
 		libluajit-5.1-dev \
 		libpcap-dev \
