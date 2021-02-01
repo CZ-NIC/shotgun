@@ -29,7 +29,7 @@ protocol = "tcp"
 weight = 5
 idle_timeout_s = 0
 
-# Well-behvaed DNS-over-TLS clients.
+# Well-behaved DNS-over-TLS clients.
 [traffic.DoT]
 protocol = "dot"
 weight = 10
