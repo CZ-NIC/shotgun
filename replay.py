@@ -29,6 +29,7 @@ DEFAULT_TRAFFIC_FIELDS = [
     'server',
     'channel_size',
     'max_clients',
+    'batch_size',
 ]
 
 # Protocol aliases are translated into specific dnssim functions.
