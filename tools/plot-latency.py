@@ -42,7 +42,7 @@ def siname(n):
 
 def init_plot(title):
     # plt.rcParams["font.family"] = "monospace"
-    _, ax = plt.subplots(figsize=(8, 8))
+    _, ax = plt.subplots(figsize=(9, 9))
 
     ax.set_xscale('log')
     ax.xaxis.set_major_formatter(mtick.FormatStrFormatter('%s'))
@@ -146,13 +146,13 @@ def main():
                 "Use older tooling or re-run the tests with newer shotgun.")
             sys.exit(1)
 
-        dirname = os.path.basename(os.path.dirname(os.path.normpath(json_path)))
+        name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
         latency, qps = merge_latency(data, args.since, args.until)
-        label = '{} ({} QPS)'.format(dirname, siname(qps))
+        label = '{} ({} QPS)'.format(name, siname(qps))
         plot_log_percentile_histogram(ax, latency, label)
 
     plt.legend()
-    plt.savefig(args.output, dpi=300)
+    plt.savefig(args.output)
 
 
 if __name__ == '__main__':

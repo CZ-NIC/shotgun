@@ -1,1 +1,3 @@
-dpkt
+jinja2
+toml
+matplotlib

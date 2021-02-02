@@ -150,15 +150,23 @@ local function is_dnsq(obj)
 	return true
 end
 
+local npackets = 0
 local obj
 while true do
 	obj = produce(pctx)
 	if obj == nil then break end
 	if is_dnsq(obj) then
 		write(writectx, obj)
+		npackets = npackets + 1
 	end
 end
 
 if args.write ~= "" then
 	output:close()
+end
+
+if npackets == 0 then
+	log:fatal("no packets were matched by filter!")
+else
+	log:notice(string.format("%d packets matched filter", npackets))
 end

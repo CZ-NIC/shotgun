@@ -1,0 +1,34 @@
+local config = {}
+
+config.pcap = "{{ pcap }}"
+config.verbosity = {{ verbosity|int }}
+config.drift_s = {{ drift_s|default(1)|int }}
+
+config.threads = {}
+{% for thread in threads %}
+config.threads[{{ loop.index }}] = {
+	name = "{{ thread.name }}",
+	target_ip = "{{ thread.target_ip }}",
+	target_port = {{ thread.target_port|int }},
+	weight = {{ thread.weight }},
+	timeout_s = {{ thread.timeout_s|default(2)|int }},
+	handshake_timeout_s = {{ thread.handshake_timeout_s|default(5)|int }},
+	idle_timeout_s = {{ thread.idle_timeout_s|default(10)|int }},
+	protocol_func = "{{ thread.protocol_func|default('udp') }}",
+	gnutls_priority = "{{ thread.gnutls_priority|default('NORMAL') }}",
+	http_method = "{{ thread.http_method|default('GET') }}",
+	output_file = "{{ thread.output_file }}",
+	channel_size = {{ thread.channel_size|default(2048)|int }},
+	max_clients = {{ thread.max_clients|default(200000)|int }},
+	batch_size = {{ thread.batch_size|default(32)|int }},
+	bind_ips = {
+{%- for ip in thread.bind_ips %}
+		"{{ ip|string }}",
+{%- endfor %}
+	}
+}
+{% endfor %}
+
+return config
+
+-- vim: syntax=lua

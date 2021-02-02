@@ -220,6 +220,10 @@ while true do
 	end
 end
 
+if now_ms == nil then
+	log:fatal("no valid packets found")
+end
+
 chunk_finalize()
 
 if args.duration ~= math.huge and not args.keep then

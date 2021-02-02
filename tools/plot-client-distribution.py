@@ -26,7 +26,7 @@ COLORS = [matplotlib.colors.to_rgba(c)
 
 
 def init_plot(title):
-    _, ax = plt.subplots(figsize=(8, 8))
+    _, ax = plt.subplots(figsize=(9, 9))
 
     ax.set_xscale('log')
     ax.set_yscale('log')
@@ -82,6 +82,7 @@ def plot_client_query_scatter(ax, clients: Dict[str, int], color):
     s = [size * (SCALE_MAGIC / s_tot) for size in s]
 
     ax.scatter(x, y, s, color=color, alpha=0.5)
+    ax.scatter(x, y, linewidth=1, color=color, marker='x', alpha=0.5)
 
 
 def main():
@@ -121,7 +122,7 @@ def main():
             handles.append(plot_client_query_scatter(ax, clients_qps, color))
 
     ax.legend(lines, labels, loc="lower left")
-    plt.savefig(args.output, dpi=300)
+    plt.savefig(args.output)
     sys.exit(0)
 
 
