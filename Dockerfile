@@ -1,11 +1,12 @@
 FROM ubuntu:focal
-ARG SHOTGUN_VERSION=v20200914
-
 ENV DEBIAN_FRONTEND=noninteractive
-
 RUN \
 	apt-get update -qq && \
 	apt-get install -y -qqq \
+		python3 \
+		python3-pip \
+		tshark \
+		jq \
 		libck-dev \
 		libluajit-5.1-dev \
 		libpcap-dev \
@@ -21,17 +22,16 @@ RUN \
 		pkg-config \
 		git && \
 	rm -rf /var/lib/apt/lists/*
-
 RUN \
 	git clone https://github.com/DNS-OARC/dnsjit.git && \
 	cd dnsjit && \
 	./autogen.sh && \
 	./configure --disable-dependency-tracking && \
 	make && \
+	make install && \
 	cd ..
 
-RUN \
-	git clone -b $SHOTGUN_VERSION --depth=1 \
-	https://gitlab.labs.nic.cz/knot/shotgun.git
-
-ENTRYPOINT ["dnsjit/src/dnsjit", "shotgun/shotgun.lua"]
+COPY . /shotgun
+WORKDIR /shotgun
+ENV PATH="${PATH}:/shotgun"
+RUN pip3 install -r requirements.txt
