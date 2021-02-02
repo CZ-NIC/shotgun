@@ -50,8 +50,8 @@ Shotgun was able to keep sending/receiving:
 - 25k handshakes per second, which amounts to
 - 1.6M total established connections during the 60s test runtime.
 
-![Active Connections](docs/showcase/charts/connections.png)
-![Handshakes](docs/showcase/charts/handshakes.png)
+![Active Connections](docs/showcase/connections.png)
+![Handshakes](docs/showcase/handshakes.png)
 
 ### Socket statistics on server
 
