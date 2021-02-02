@@ -32,8 +32,11 @@ IP address is insufficient to achieve hundreds of thousands of clients.
 
 
 DNS Shotgun can bind to multiple sources addresses with the `-b/--bind-net`
-option. Multiple IP addresses can be specified. A network range using the CIDR
-notation can be used as well.
+option. You can specify either IP address or a newtork range using CIDR
+notation. Multiple values (either IPs, ranges or any combination of those) can
+be specified. When using CIDR notation, the network and broadcast address won't
+be used.
+
 
 ```
 $ replay.py -r pellets.pcap -c tcp -s fd00:dead:beef::cafe -b fd00:dead:beef::/124
