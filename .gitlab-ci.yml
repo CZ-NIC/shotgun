@@ -3,6 +3,7 @@ variables:
 
 stages:
   - test
+  - deploy
 
 .debian: &debian
   image: $CI_REGISTRY/knot/knot-resolver/ci/debian-buster:knot-3.0
@@ -31,3 +32,16 @@ test:luacheck:
   <<: *debian
   script:
     - ./ci/luacheck-run.sh
+
+# docs published to GitLab Pages: https://knot.pages.nic.cz/shotgun/
+pages:
+  image: $CI_REGISTRY/packaging/apkg/ci/python-current:apkg
+  stage: deploy
+  script:
+    - mkdocs build
+    - mv site public
+  artifacts:
+    paths:
+    - public
+   only:
+     - tags
