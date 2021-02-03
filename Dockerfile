@@ -26,7 +26,7 @@ RUN \
 	git clone https://github.com/DNS-OARC/dnsjit.git && \
 	cd dnsjit && \
 	./autogen.sh && \
-	./configure --disable-dependency-tracking && \
+	./configure && \
 	make && \
 	make install && \
 	cd ..
