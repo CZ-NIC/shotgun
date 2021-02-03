@@ -37,7 +37,7 @@ The toolchain also provides scripts that can plot these into readable charts.
 
 ## Documentation
 
-[https://knot.pages.nic.cz/shotgun](https://knot.pages.nic.cz/shotgun)
+[https://dns-shotgun.readthedocs.io](https://dns-shotgun.readthedocs.io)
 
 ## Showcase
 
