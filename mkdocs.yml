@@ -1,7 +1,7 @@
 site_name: DNS Shotgun
 theme:
   name: readthedocs
-  navigation_depth: 1
+  navigation_depth: 0
 nav:
   - "Overview": index.md
   - installation.md
