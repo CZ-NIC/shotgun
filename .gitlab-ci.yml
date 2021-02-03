@@ -41,5 +41,5 @@ docker:
     - docker push "$CI_REGISTRY_IMAGE:v$CI_COMMIT_TAG"
   tags:
     - dind
-  only:
-     - tags
+  #only:
+  #   - tags
