@@ -37,9 +37,9 @@ docker:
   stage: deploy
   script:
     - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
-    - docker build --no-cache -t "shotgun:v$CI_COMMIT_TAG" .
-    - docker push "shotgun:v$CI_COMMIT_TAG"
+    - docker build --no-cache -t "shotgun:vTEST" .
+    - docker push "shotgun:vTEST"
   tags:
     - dind
-  only:
-     - tags
+  #only:
+  #   - tags
