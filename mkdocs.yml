@@ -1,0 +1,25 @@
+site_name: DNS Shotgun
+theme:
+  name: readthedocs
+  navigation_depth: 1
+nav:
+  - "Overview": index.md
+  - installation.md
+  - key-concepts.md
+  - "Input Data":
+    - capturing-traffic.md
+    - extracting-clients.md
+    - analyzing-clients.md
+  - "Replay":
+    - configuration-presets.md
+    - configuration-file.md
+    - replaying-traffic.md
+    - performance-tuning.md
+    - troubleshooting.md
+  - "Interpreting Results":
+    - raw-output.md
+    - response-rate-chart.md
+    - latency-histogram.md
+    - connection-chart.md
+markdown_extensions:
+  - admonition
