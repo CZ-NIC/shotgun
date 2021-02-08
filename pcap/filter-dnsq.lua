@@ -178,7 +178,9 @@ else
 	log:notice(string.format("%d packets matched filter", npackets))
 	if not args.malformed then
 		if nmalformed > 0 then
-			log:notice("%0.f malformed DNS packets detected and omitted", nmalformed)
+			log:notice("%0.f malformed DNS packets detected and omitted "
+					.. "(%f %% of matching packets)",
+				nmalformed, nmalformed / (nmalformed + npackets) * 100)
 		else
 			log:info("0 malformed DNS packets detected")
 		end
