@@ -114,6 +114,7 @@ local function matches_addresses(ip, len)
 	return false
 end
 
+local nmalformed = 0
 -- Filtering function that picks only DNS queries
 local function is_dnsq(obj)
 	local payload = obj:cast_to(object.PAYLOAD)
@@ -138,13 +139,19 @@ local function is_dnsq(obj)
 	-- check that query isn't malformed
 	if dns.qdcount > 0 then  -- parse all questions
 		for _ = 1, dns.qdcount do
-			if dns:parse_q(dns_q, labels, 127) ~= 0 then return false end
+			if dns:parse_q(dns_q, labels, 127) ~= 0 then
+				nmalformed = nmalformed + 1
+				return false
+			end
 		end
 	end
 	local rrcount = dns.ancount + dns.nscount + dns.arcount
 	if rrcount > 0 then  -- parse all other RRs
 		for _ = 1, rrcount do
-			if dns:parse_rr(dns_rr, labels, 127) ~= 0 then return false end
+			if dns:parse_rr(dns_rr, labels, 127) ~= 0 then
+				nmalformed = nmalformed + 1
+				return false
+			end
 		end
 	end
 	return true
@@ -169,4 +176,11 @@ if npackets == 0 then
 	log:fatal("no packets were matched by filter!")
 else
 	log:notice(string.format("%d packets matched filter", npackets))
+	if not args.malformed then
+		if nmalformed > 0 then
+			log:notice("%0.f malformed DNS packets detected and omitted", nmalformed)
+		else
+			log:info("0 malformed DNS packets detected")
+		end
+	end
 end
