@@ -157,14 +157,16 @@ local function is_dnsq(obj)
 	return true
 end
 
-local npackets = 0
+local npackets_in = 0
+local npackets_out = 0
 local obj
 while true do
 	obj = produce(pctx)
 	if obj == nil then break end
+	npackets_in = npackets_in + 1
 	if is_dnsq(obj) then
 		write(writectx, obj)
-		npackets = npackets + 1
+		npackets_out = npackets_out + 1
 	end
 end
 
@@ -172,15 +174,16 @@ if args.write ~= "" then
 	output:close()
 end
 
-if npackets == 0 then
+if npackets_out == 0 then
 	log:fatal("no packets were matched by filter!")
 else
-	log:notice(string.format("%d packets matched filter", npackets))
+	log:notice("%0.f out of %0.f packets matched filter (%f %%)",
+		npackets_out, npackets_in, npackets_out / npackets_in * 100)
 	if not args.malformed then
 		if nmalformed > 0 then
 			log:notice("%0.f malformed DNS packets detected and omitted "
 					.. "(%f %% of matching packets)",
-				nmalformed, nmalformed / (nmalformed + npackets) * 100)
+				nmalformed, nmalformed / (nmalformed + npackets_out) * 100)
 		else
 			log:info("0 malformed DNS packets detected")
 		end
