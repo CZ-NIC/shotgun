@@ -99,6 +99,7 @@ local produce, pctx = layer:produce()
 
 -- Set up output
 if args.write == "" then
+	log:notice("no output specified, only counting packets")
 	output = require("dnsjit.output.null").new()
 elseif output:open(args.write, input:linktype(), input:snaplen()) ~= 0 then
 	log:fatal("failed to open output PCAP "..args.write)
