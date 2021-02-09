@@ -21,6 +21,7 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ "w", "write", "", "output file to write", "?" },
 	{ "p", "port", 53, "destination port to check for UDP DNS queries", "?" },
 	{ "m", "malformed", false, "include malformed queries", "?" },
+	{ "M", "only-malformed", false, "include only malformed queries", "?" },
 	{ "a", "address", "", "destination address (can be specified multiple times)", "?*" },
 })
 
@@ -45,6 +46,7 @@ args.interface = getopt:val("i")
 args.write = getopt:val("w")
 args.port = getopt:val("p")
 args.malformed = getopt:val("m")
+args.only_malformed = getopt:val("M")
 args.csv = getopt:val("csv")
 args.address = getopt:val("a")
 
@@ -141,7 +143,7 @@ local function is_dnsq(obj)
 		for _ = 1, dns.qdcount do
 			if dns:parse_q(dns_q, labels, 127) ~= 0 then
 				nmalformed = nmalformed + 1
-				return false
+				return args.only_malformed
 			end
 		end
 	end
@@ -150,11 +152,11 @@ local function is_dnsq(obj)
 		for _ = 1, rrcount do
 			if dns:parse_rr(dns_rr, labels, 127) ~= 0 then
 				nmalformed = nmalformed + 1
-				return false
+				return args.only_malformed
 			end
 		end
 	end
-	return true
+	return not args.only_malformed
 end
 
 local npackets_in = 0
@@ -179,7 +181,7 @@ if npackets_out == 0 then
 else
 	log:notice("%0.f out of %0.f packets matched filter (%f %%)",
 		npackets_out, npackets_in, npackets_out / npackets_in * 100)
-	if not args.malformed then
+	if not args.malformed and not args.only_malformed then
 		if nmalformed > 0 then
 			log:notice("%0.f malformed DNS packets detected and omitted "
 					.. "(%f %% of matching packets)",
