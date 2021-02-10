@@ -135,7 +135,7 @@ local function put_uint32_be(dst, offset, src)
 end
 
 local clients = {}
-local i_client = 1
+local i_client = 0
 local ct_4b = ffi.typeof("uint8_t[4]")
 local now_ms, diff_ms, chunk_since_ms, chunk_until_ms
 
@@ -152,18 +152,22 @@ local function chunk_init()
 	until(opened)
 
 	clients = {}
-	i_client = 1
+	i_client = 0
 	i_chunk = i_chunk + 1
 
-	chunk_since_ms = now_ms
-	chunk_until_ms = now_ms + args.duration * 1e3
+	chunk_since_ms = chunk_until_ms or now_ms
+	chunk_until_ms = chunk_since_ms + args.duration * 1e3
 end
 
 local function chunk_finalize()
 	output:close()
-	local duration_s = (now_ms - chunk_since_ms) / 1e3
+	local duration_s = (chunk_until_ms - chunk_since_ms) / 1e3
 	log:info(string.format("    duration_s: %.3f", duration_s))
 	log:info(string.format("    number of clients: %d", i_client))
+	if i_client == 0 then
+		log:warning("    deleting empty chunk, double check your data")
+		os.remove(outfilename)
+	end
 end
 
 local obj, obj_pcap_in, obj_ip, obj_udp, obj_pl, client, src_ip, ip_len, prev_ms
@@ -191,7 +195,7 @@ while true do
 			end
 		end
 		prev_ms = now_ms
-		if chunk_until_ms == nil or now_ms >= chunk_until_ms then
+		while chunk_until_ms == nil or now_ms >= chunk_until_ms do
 			if chunk_until_ms ~= nil then
 				chunk_finalize()
 			end
@@ -209,7 +213,6 @@ while true do
 		client["queries"] = client["queries"] + 1
 		ffi.copy(bytes + 20, client["addr"], 4)
 
-		-- ensure every chunk starts at time 0
 		diff_ms = now_ms - chunk_since_ms
 		obj_pcap_out.ts.sec = math.floor(diff_ms / 1e3)
 		obj_pcap_out.ts.nsec = math.floor((diff_ms % 1e3) * 1e6)
