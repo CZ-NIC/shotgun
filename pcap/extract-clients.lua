@@ -155,13 +155,13 @@ local function chunk_init()
 	i_client = 0
 	i_chunk = i_chunk + 1
 
-	chunk_since_ms = now_ms
-	chunk_until_ms = now_ms + args.duration * 1e3
+	chunk_since_ms = chunk_until_ms or now_ms
+	chunk_until_ms = chunk_since_ms + args.duration * 1e3
 end
 
 local function chunk_finalize()
 	output:close()
-	local duration_s = (now_ms - chunk_since_ms) / 1e3
+	local duration_s = (chunk_until_ms - chunk_since_ms) / 1e3
 	log:info(string.format("    duration_s: %.3f", duration_s))
 	log:info(string.format("    number of clients: %d", i_client))
 end
@@ -183,7 +183,7 @@ while true do
 	obj_pcap_in = obj:cast_to(object.PCAP)
 	if obj_ip ~= nil and obj_udp ~= nil and obj_pl ~= nil and obj_pcap_in ~= nil then
 		now_ms = tonumber(obj_pcap_in.ts.sec) * 1e3 + tonumber(obj_pcap_in.ts.nsec) * 1e-6
-		if chunk_until_ms == nil or now_ms >= chunk_until_ms then
+		while chunk_until_ms == nil or now_ms >= chunk_until_ms do
 			if chunk_until_ms ~= nil then
 				chunk_finalize()
 			end
@@ -201,7 +201,6 @@ while true do
 		client["queries"] = client["queries"] + 1
 		ffi.copy(bytes + 20, client["addr"], 4)
 
-		-- ensure every chunk starts at time 0
 		diff_ms = now_ms - chunk_since_ms
 		obj_pcap_out.ts.sec = math.floor(diff_ms / 1e3)
 		obj_pcap_out.ts.nsec = math.floor((diff_ms % 1e3) * 1e6)
