@@ -166,7 +166,7 @@ local function chunk_finalize()
 	log:info(string.format("    number of clients: %d", i_client))
 end
 
-local obj, obj_pcap_in, obj_ip, obj_udp, obj_pl, client, src_ip, ip_len
+local obj, obj_pcap_in, obj_ip, obj_udp, obj_pl, client, src_ip, ip_len, prev_ms
 while true do
 	obj = produce(pctx)
 	if obj == nil then break end
@@ -183,6 +183,14 @@ while true do
 	obj_pcap_in = obj:cast_to(object.PCAP)
 	if obj_ip ~= nil and obj_udp ~= nil and obj_pl ~= nil and obj_pcap_in ~= nil then
 		now_ms = tonumber(obj_pcap_in.ts.sec) * 1e3 + tonumber(obj_pcap_in.ts.nsec) * 1e-6
+		if prev_ms then
+			if (now_ms < prev_ms) then
+				log:fatal('non-monotonic packet timestamp detected, exiting '
+					.. '(current ts %f < previous %f)', now_ms, prev_ms)
+				break
+			end
+		end
+		prev_ms = now_ms
 		if chunk_until_ms == nil or now_ms >= chunk_until_ms then
 			if chunk_until_ms ~= nil then
 				chunk_finalize()
