@@ -21,6 +21,7 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ "w", "write", "", "output file to write", "?" },
 	{ "p", "port", 53, "destination port to check for UDP DNS queries", "?" },
 	{ "m", "malformed", false, "include malformed queries", "?" },
+	{ "M", "only-malformed", false, "include only malformed queries", "?" },
 	{ "a", "address", "", "destination address (can be specified multiple times)", "?*" },
 })
 
@@ -45,6 +46,7 @@ args.interface = getopt:val("i")
 args.write = getopt:val("w")
 args.port = getopt:val("p")
 args.malformed = getopt:val("m")
+args.only_malformed = getopt:val("M")
 args.csv = getopt:val("csv")
 args.address = getopt:val("a")
 
@@ -97,6 +99,7 @@ local produce, pctx = layer:produce()
 
 -- Set up output
 if args.write == "" then
+	log:notice("no output specified, only counting packets")
 	output = require("dnsjit.output.null").new()
 elseif output:open(args.write, input:linktype(), input:snaplen()) ~= 0 then
 	log:fatal("failed to open output PCAP "..args.write)
@@ -114,6 +117,7 @@ local function matches_addresses(ip, len)
 	return false
 end
 
+local nmalformed = 0
 -- Filtering function that picks only DNS queries
 local function is_dnsq(obj)
 	local payload = obj:cast_to(object.PAYLOAD)
@@ -138,26 +142,34 @@ local function is_dnsq(obj)
 	-- check that query isn't malformed
 	if dns.qdcount > 0 then  -- parse all questions
 		for _ = 1, dns.qdcount do
-			if dns:parse_q(dns_q, labels, 127) ~= 0 then return false end
+			if dns:parse_q(dns_q, labels, 127) ~= 0 then
+				nmalformed = nmalformed + 1
+				return args.only_malformed
+			end
 		end
 	end
 	local rrcount = dns.ancount + dns.nscount + dns.arcount
 	if rrcount > 0 then  -- parse all other RRs
 		for _ = 1, rrcount do
-			if dns:parse_rr(dns_rr, labels, 127) ~= 0 then return false end
+			if dns:parse_rr(dns_rr, labels, 127) ~= 0 then
+				nmalformed = nmalformed + 1
+				return args.only_malformed
+			end
 		end
 	end
-	return true
+	return not args.only_malformed
 end
 
-local npackets = 0
+local npackets_in = 0
+local npackets_out = 0
 local obj
 while true do
 	obj = produce(pctx)
 	if obj == nil then break end
+	npackets_in = npackets_in + 1
 	if is_dnsq(obj) then
 		write(writectx, obj)
-		npackets = npackets + 1
+		npackets_out = npackets_out + 1
 	end
 end
 
@@ -165,8 +177,18 @@ if args.write ~= "" then
 	output:close()
 end
 
-if npackets == 0 then
+if npackets_out == 0 then
 	log:fatal("no packets were matched by filter!")
 else
-	log:notice(string.format("%d packets matched filter", npackets))
+	log:notice("%0.f out of %0.f packets matched filter (%f %%)",
+		npackets_out, npackets_in, npackets_out / npackets_in * 100)
+	if not args.malformed and not args.only_malformed then
+		if nmalformed > 0 then
+			log:notice("%0.f malformed DNS packets detected and omitted "
+					.. "(%f %% of matching packets)",
+				nmalformed, nmalformed / (nmalformed + npackets_out) * 100)
+		else
+			log:info("0 malformed DNS packets detected")
+		end
+	end
 end
