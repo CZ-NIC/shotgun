@@ -135,7 +135,7 @@ local function put_uint32_be(dst, offset, src)
 end
 
 local clients = {}
-local i_client = 1
+local i_client = 0
 local ct_4b = ffi.typeof("uint8_t[4]")
 local now_ms, diff_ms, chunk_since_ms, chunk_until_ms
 
@@ -152,7 +152,7 @@ local function chunk_init()
 	until(opened)
 
 	clients = {}
-	i_client = 1
+	i_client = 0
 	i_chunk = i_chunk + 1
 
 	chunk_since_ms = now_ms
