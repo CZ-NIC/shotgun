@@ -27,6 +27,7 @@ local function exists(file)
    return ok, err
 end
 
+local seed_def = os.time() + os.clock() / 1e6
 local dir = os.getenv("PWD") or ""
 local bit = require("bit")
 local ffi = require("ffi")
@@ -40,13 +41,12 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ "O", "outdir", dir, "directory for client chunks (must exist)", "?" },
 	{ "d", "duration", 0, "duration of each chunk (in seconds, 0 means entire file)", "?" },
 	{ "k", "keep", false, "keep last chunk even if it's incomplete", "?" },
+	{ nil, "seed", seed_def, "seed for RNG", "?" },
 })
 
 local SNAPLEN = 66000
 local LINKTYPE = 12  -- DLT_RAW in Linux, see https://github.com/the-tcpdump-group/libpcap/blob/master/pcap/dlt.h
 local HEADERSLEN = 40 + 8  -- IPv6 header and UDP header
-
-math.randomseed(os.time() + os.clock() / 1e6)
 
 log:enable("all")
 
@@ -57,6 +57,8 @@ args.read = getopt:val("r")
 args.duration = getopt:val("d")
 args.keep = getopt:val("k")
 args.outdir = getopt:val("O")
+args.seed = getopt:val("seed")
+math.randomseed(args.seed)
 
 -- Display help
 if getopt:val("help") then
