@@ -44,6 +44,13 @@ created in a way that you can simply use `mergecap` utility to combine them.
 $ mergecap -w scaled.pcap $OUTPUT_DIR/*
 ```
 
+!!! warning
+    You can only merge chunks that were created with the same duration when
+    calling `extract-clients.lua`. Modifying the chunks in other ways, such as
+    attempting to shift or extend the traffic, will produce unexpected results.
+    For more information, see [this
+    discussion](https://gitlab.nic.cz/knot/shotgun/-/merge_requests/32#note_196879).
+
 ## Limiting the traffic
 
 It is also possible to take a pellets file and scale-down its traffic. This is
