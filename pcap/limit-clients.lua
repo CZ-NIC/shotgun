@@ -19,7 +19,7 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ "r", "read", "", "input file to read", "?" },
 	{ "w", "write", "", "output file to write", "?" },
 	{ "l", "limit", 1.0, "chance for each client to appear, 0 to 1", "?" },
-	{ "", "seed", 0, "seed for RNG", "?" },
+	{ nil, "seed", 0, "seed for RNG", "?" },
 })
 
 local SNAPLEN = 66000
