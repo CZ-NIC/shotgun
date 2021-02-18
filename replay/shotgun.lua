@@ -137,13 +137,26 @@ end
 
 
 ---- setup input
-local input = require("dnsjit.input.fpcap").new()
 local delay = require("dnsjit.filter.timing").new()
 local layer = require("dnsjit.filter.layer").new()
 local ipsplit = require("dnsjit.filter.ipsplit").new()
 local copy = require("dnsjit.filter.copy").new()
-if input:open(config.pcap) ~= 0 then
-	log.fatal("failed to open PCAP")
+local input
+
+if config.pcap == '-' then
+	input = require("dnsjit.input.fpcap").new()
+	if input:openfp(io.stdin) ~= 0 then
+		log.fatal("failed to open PCAP on stdin")
+	end
+else
+	input = require("dnsjit.input.mmpcap").new()
+	if input:open(config.pcap) ~= 0 then
+		log.notice("failed to open PCAP with mmap, fallback to fpcap")
+		input = require("dnsjit.input.fpcap").new()
+		if input:open(config.pcap) ~= 0 then
+			log.fatal("failed to open PCAP with fpcap")
+		end
+	end
 end
 delay:realtime(config.drift_s)
 delay:producer(input)
