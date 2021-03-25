@@ -62,13 +62,17 @@ def plot_client_query_scatter(ax, clients: Dict[str, int], color):
     lmax = step_multiplier
     while lmin <= max(data):
         samples = list(n for n in data if lmin <= n < lmax)
-        sanity_nsamples += len(samples)
-        x.append(statistics.mean(samples))
-        y.append(len(samples) / len(data) * 100)
-        s.append(sum(samples))
-        logging.info(
-            '  [{:d}-{:d}) queries per client: {:d} ({:.2f} %) clients; {:d} queries total'
-            .format(lmin, lmax, len(samples), y[-1], int(s[-1])))
+        if len(samples) == 0:  # an empty interval
+            logging.info(
+                '  [{:d}-{:d}) queries per client: 0 clients'.format(lmin, lmax))
+        else:
+            sanity_nsamples += len(samples)
+            x.append(statistics.mean(samples))
+            y.append(len(samples) / len(data) * 100)
+            s.append(sum(samples))
+            logging.info(
+                '  [{:d}-{:d}) queries per client: {:d} ({:.2f} %) clients; {:d} queries total'
+                .format(lmin, lmax, len(samples), y[-1], int(s[-1])))
         lmin = lmax
         lmax *= step_multiplier
 
