@@ -111,7 +111,11 @@ def bind_net_to_ips(bind_net: Optional[List[str]]) -> List[str]:
         except ValueError as e:
             raise RuntimeError(
                 f"bind_net: {entry} doesn't represent valid net or address") from e
-        ips = ips.union(set(net.hosts()))
+        hosts = set(net.hosts())
+        if hosts:
+            ips = ips.union(hosts)
+        else:  # workaround for missing /32 or /128 support, Python issue #28577
+            ips.add(net.network_address)
     return list(ips)
 
 
