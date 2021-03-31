@@ -124,7 +124,6 @@ def create_luaconfig(config: Dict[str, Any], threads: Dict[str, int], args: Any)
         'verbosity': args.verbosity,
         'threads': [],
     }
-    print(config)
     try:
         data['stop_after_s'] = config['input']['stop_after_s']
     except KeyError:
