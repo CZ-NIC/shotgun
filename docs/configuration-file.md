@@ -10,6 +10,7 @@ Configuration is written in [TOML](https://toml.io/en/). There are multiple sect
 - `[traffic]` contains one or more subsections that each define client behaviour, including protocol
 - `[charts]` is an optional section which can contain subsections that define charts that should be automatically plotted
 - `[defaults.traffic]` is an optional section that makes it possible specify defaults shared by all traffic senders
+- `[input]` is an optional section that specifies how to read input data
 
 ## [traffic] section
 
@@ -162,6 +163,7 @@ gnutls_priority = "NORMAL:%NO_TICKETS"
 Optionally specifies how to read input data.
 
 ```
+[input]
 pcap = /path/to/input.pcap
 stop_after_s = 600
 ```
@@ -179,6 +181,7 @@ Reading queries from PCAP will stop at first packet with timestamp >= `stop_afte
 Defaults to no limit, i.e. read all packets from PCAP.
 
 !!! warning
-    This option negatively impacts DNS Shotgun's read performance and slows down
-    PCAP processing by 50 %. If this performance penalty is unacceptable cut the
-    PCAP using external tools and remove this option.
+    Using the `stop_after_s` option negatively impacts DNS Shotgun's read
+    performance and slows down PCAP processing by 50 %. If this performance
+    penalty is unacceptable, cut the PCAP using external tools and avoid using
+    this option.
