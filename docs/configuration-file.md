@@ -156,3 +156,29 @@ behavior to not use TLS Session Resumption, you can use:
 [defaults.traffic]
 gnutls_priority = "NORMAL:%NO_TICKETS"
 ```
+
+## [input] section
+
+Optionally specifies how to read input data.
+
+```
+pcap = /path/to/input.pcap
+stop_after_s = 600
+```
+
+### pcap
+
+Path to PCAP file, overrides value specified by `--read` command line option.
+Intended as shortcut when re-running test with the same dataset again and again.
+
+### stop_after_s
+
+Time limit for test, in seconds (integer).
+Reading queries from PCAP will stop at first packet with timestamp >= `stop_after_s`.
+
+Defaults to no limit, i.e. read all packets from PCAP.
+
+!!! warning
+    This option negatively impacts DNS Shotgun's read performance and slows down
+    PCAP processing by 50 %. If this performance penalty is unacceptable cut the
+    PCAP using external tools and remove this option.
