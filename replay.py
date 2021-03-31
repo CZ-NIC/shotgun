@@ -121,10 +121,20 @@ def bind_net_to_ips(bind_net: Optional[List[str]]) -> List[str]:
 
 def create_luaconfig(config: Dict[str, Any], threads: Dict[str, int], args: Any) -> str:
     data = {
-        'pcap': args.read,
         'verbosity': args.verbosity,
         'threads': [],
     }
+    try:
+        data['stop_after_s'] = config['input']['stop_after_s']
+    except KeyError:
+        pass
+
+    try:
+        data['pcap'] = config['input']['pcap']
+    except KeyError:
+        if not args.read:
+            raise RuntimeError("pcap must be set, use -r/--read") from None
+        data['pcap'] = args.read
 
     # FIXME: IP assignment could be weight-based to be more precise (number of
     # threads scales also by cpu_factor, which is irrelevant for IP distribution).
@@ -325,7 +335,7 @@ def main():
         description='Replay client traffic over the configured protocols')
     parser.add_argument('-c', '--config', type=str, required=True,
                         help='traffic configuration TOML (file path or one of defaults: udp, tcp, dot, doh, mixed)') # noqa
-    parser.add_argument('-r', '--read', help='PCAP with clients', required=True)
+    parser.add_argument('-r', '--read', help='PCAP with clients')
     parser.add_argument('-s', '--server', help='target server IP')
     parser.add_argument('-O', '--outdir', help='output directory', type=str)
     parser.add_argument('-f', '--force', action='store_true',
