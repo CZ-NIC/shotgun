@@ -207,6 +207,12 @@ local recv, rctx = copy:receive()
 while true do
 	local obj = prod(pctx)
 	if obj == nil then break end
+	if config.stop_after_s then
+		local obj_pcap_in = obj:cast_to(object.PCAP)
+		if obj_pcap_in.ts.sec >= config.stop_after_s then
+			break
+		end
+	end
 	recv(rctx, obj)
 end
 
