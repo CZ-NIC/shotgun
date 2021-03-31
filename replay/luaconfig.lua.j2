@@ -3,6 +3,7 @@ local config = {}
 config.pcap = "{{ pcap }}"
 config.verbosity = {{ verbosity|int }}
 config.drift_s = {{ drift_s|default(1)|int }}
+config.stop_after_s = {{ stop_after_s|default('nil') }}
 
 config.threads = {}
 {% for thread in threads %}
