@@ -2,6 +2,7 @@
 
 import argparse
 import collections
+import itertools
 import json
 import logging
 import math
@@ -10,6 +11,7 @@ import sys
 
 # pylint: disable=wrong-import-order,wrong-import-position
 import matplotlib
+import matplotlib.colors as mcolors
 from matplotlib.ticker import MultipleLocator
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt  # noqa
@@ -41,6 +43,15 @@ RCODES = {
     22: StatRcode('rcode_badtrunc', 'BADTRUNC'),
     23: StatRcode('rcode_badcookie', 'BADCOOKIE'),
 }
+
+RCODE_MARKERS = {
+    1: 'f',
+    2: 's',
+    3: 'n',
+    4: 'i',
+    5: 'r',
+}
+
 
 sinames = ['', ' k', ' M', ' G', ' T']
 
@@ -95,7 +106,9 @@ def set_axes_limits(ax):
     ax.set_ylim(bottom, top)
 
 
-def plot_response_rate(ax, data, label, eval_func=None, min_timespan=0):
+def plot_response_rate(
+        ax, data, label,
+        eval_func=None, min_timespan=0, marker='o', linestyle='--', color=None):
     stats_periodic = data['stats_periodic']
     time_offset = stats_periodic[0]['since_ms']
 
@@ -112,7 +125,7 @@ def plot_response_rate(ax, data, label, eval_func=None, min_timespan=0):
         xvalues.append(time)
         yvalues.append(eval_func(stats))
 
-    ax.plot(xvalues, yvalues, label=label, marker='o', linestyle='--')
+    ax.plot(xvalues, yvalues, label=label, marker=marker, linestyle=linestyle, color=color)
 
 
 def main():
@@ -136,7 +149,8 @@ def main():
     # initialize graph
     ax = init_plot(args.title)
 
-    for json_path in args.json_file:
+    colors = list(mcolors.TABLEAU_COLORS.keys()) + list(mcolors.BASE_COLORS.keys())
+    for json_path, color in itertools.zip_longest(args.json_file, colors[:len(args.json_file)]):
         try:
             with open(json_path) as f:
                 data = json.load(f)
@@ -165,12 +179,14 @@ def main():
             ax,
             data,
             label,
-            min_timespan=min_timespan)
+            min_timespan=min_timespan,
+            color=color)
 
         if args.rcode:
             for rcode in args.rcode:
                 try:
                     stat_rcode = RCODES[rcode]
+                    symbol = RCODE_MARKERS.get(rcode, str(rcode))
                 except KeyError:
                     logging.error("Unknown RCODE: %d", rcode)
                     continue
@@ -183,7 +199,10 @@ def main():
                     data,
                     rcode_label,
                     eval_func=eval_func,
-                    min_timespan=min_timespan)
+                    min_timespan=min_timespan,
+                    marker=f'${symbol}$',
+                    linestyle='dotted',
+                    color=color)
 
     set_axes_limits(ax)
 
