@@ -42,6 +42,7 @@ RCODES = {
     21: StatRcode('rcode_badalg', 'BADALG'),
     22: StatRcode('rcode_badtrunc', 'BADTRUNC'),
     23: StatRcode('rcode_badcookie', 'BADCOOKIE'),
+    100000: StatRcode('rcode_other', 'other'),
 }
 
 RCODES_TO_NUM = {
@@ -55,6 +56,7 @@ RCODE_MARKERS = {
     3: 'n',
     4: 'i',
     5: 'r',
+    100000: '?'
 }
 
 RCODE_COLORS = {
@@ -81,7 +83,8 @@ RCODE_COLORS = {
     20: '#536267',
     21: '#a03623',
     22: '#b7e1a1',
-    23: '#0a888a'
+    23: '#0a888a',
+    100000: '#000000'
 }
 
 sinames = ['', ' k', ' M', ' G', ' T']
@@ -234,7 +237,7 @@ def process_file(json_path, json_color, args, ax):
     if draw_rcodes:
         if len(args.json_file) > 1:
             # same color for all rcodes from one JSON
-            cur_rcode_colors = [json_color] * (max(draw_rcodes) + 1)
+            cur_rcode_colors = collections.defaultdict(lambda: json_color)
         else:
             # single JSON - different color for each RCODE
             cur_rcode_colors = RCODE_COLORS
