@@ -44,6 +44,11 @@ RCODES = {
     23: StatRcode('rcode_badcookie', 'BADCOOKIE'),
 }
 
+RCODES_TO_NUM = {
+        rcodestat.field: number
+        for number, rcodestat in RCODES.items()
+}
+
 RCODE_MARKERS = {
     1: 'f',
     2: 's',
@@ -170,6 +175,8 @@ def main():
                         help='Output graph filename')
     parser.add_argument('-r', '--rcode', nargs='*', type=int,
                         help='RCODE(s) to plot in addition to answer rate')
+    parser.add_argument('-R', '--rcodes-above-pct', type=float,
+                        help='Plot RCODE(s) which represent > specified percentage of all answers')
     args = parser.parse_args()
 
     # initialize graph
@@ -208,14 +215,23 @@ def main():
             min_timespan=min_timespan,
             color=color)
 
-        if args.rcode:
+        draw_rcodes = set(args.rcode or [])
+        if args.rcodes_above_pct is not None:
+            threshold = data['stats_sum']['answers'] * args.rcodes_above_pct / 100
+            rcodes_above_limit = set(RCODES_TO_NUM[key]
+                                     for key, cnt
+                                     in data['stats_sum'].items()
+                                     if key.startswith('rcode_') and cnt > threshold)
+            draw_rcodes = draw_rcodes.union(rcodes_above_limit)
+
+        if draw_rcodes:
             if len(args.json_file) > 1:
                 # same color for all rcodes from one JSON
-                cur_rcode_colors = [color] * (max(args.rcode) + 1)
+                cur_rcode_colors = [color] * (max(draw_rcodes) + 1)
             else:
                 # single JSON - different color for each RCODE
                 cur_rcode_colors = RCODE_COLORS
-            for rcode in args.rcode:
+            for rcode in draw_rcodes:
                 try:
                     stat_rcode = RCODES[rcode]
                     symbol = RCODE_MARKERS.get(rcode, str(rcode))
