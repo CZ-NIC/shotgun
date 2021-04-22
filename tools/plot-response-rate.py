@@ -162,6 +162,18 @@ def plot_response_rate(
     ax.plot(xvalues, yvalues, label=label, marker=marker, linestyle=linestyle, color=color)
 
 
+def rcode_to_int(rcode: str) -> int:
+    try:
+        return int(rcode)
+    except ValueError:
+        pass
+
+    try:
+        return RCODES_TO_NUM[f'rcode_{rcode.lower()}']
+    except KeyError:
+        raise argparse.ArgumentTypeError(f'unsupported rcode "{rcode}"') from None
+
+
 def main():
     logging.basicConfig(format='%(asctime)s %(levelname)8s  %(message)s', level=logging.DEBUG)
     logger = logging.getLogger('matplotlib')
@@ -176,7 +188,7 @@ def main():
                         help='Graph title')
     parser.add_argument('-o', '--output', default='response_rate.svg',
                         help='Output graph filename')
-    parser.add_argument('-r', '--rcode', nargs='*', type=int,
+    parser.add_argument('-r', '--rcode', nargs='*', type=rcode_to_int,
                         help='RCODE(s) to plot in addition to answer rate')
     parser.add_argument('-R', '--rcodes-above-pct', type=float,
                         help='Plot RCODE(s) which represent > specified percentage of all answers')
@@ -246,7 +258,7 @@ def process_file(json_path, json_color, args, ax):
                 stat_rcode = RCODES[rcode]
                 symbol = RCODE_MARKERS.get(rcode, str(rcode))
             except KeyError:
-                logging.error("Unknown RCODE: %d", rcode)
+                logging.error("Unsupported RCODE: %s", rcode)
                 continue
 
             eval_func = stat_field_rate(stat_rcode.field)
