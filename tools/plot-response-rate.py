@@ -52,6 +52,32 @@ RCODE_MARKERS = {
     5: 'r',
 }
 
+RCODE_COLORS = {
+    0: 'tab:green',
+    1: 'tab:brown',
+    2: 'tab:red',
+    3: 'tab:blue',
+    4: 'tab:pink',
+    5: 'tab:orange',
+    6: 'tab:purple',
+    7: 'tab:olive',
+    8: 'tab:cyan',
+    9: '#f0944d',
+    10: '#840000',
+    11: '#bc13fe',
+    12: '#601ef9',
+    13: '#bbf90f',
+    14: '#fffd01',
+    15: '#4f738e',
+    16: '#ac7e04',
+    17: '#5d1451',
+    18: '#fdb0c0',
+    19: '#fd3c06',
+    20: '#536267',
+    21: '#a03623',
+    22: '#b7e1a1',
+    23: '#0a888a'
+}
 
 sinames = ['', ' k', ' M', ' G', ' T']
 
@@ -183,6 +209,12 @@ def main():
             color=color)
 
         if args.rcode:
+            if len(args.json_file) > 1:
+                # same color for all rcodes from one JSON
+                cur_rcode_colors = [color] * (max(args.rcode) + 1)
+            else:
+                # single JSON - different color for each RCODE
+                cur_rcode_colors = RCODE_COLORS
             for rcode in args.rcode:
                 try:
                     stat_rcode = RCODES[rcode]
@@ -202,7 +234,7 @@ def main():
                     min_timespan=min_timespan,
                     marker=f'${symbol}$',
                     linestyle='dotted',
-                    color=color)
+                    color=cur_rcode_colors[rcode])
 
     set_axes_limits(ax)
 
