@@ -42,6 +42,12 @@ RCODES = {
     21: StatRcode('rcode_badalg', 'BADALG'),
     22: StatRcode('rcode_badtrunc', 'BADTRUNC'),
     23: StatRcode('rcode_badcookie', 'BADCOOKIE'),
+    100000: StatRcode('rcode_other', 'other'),
+}
+
+RCODES_TO_NUM = {
+        rcodestat.field: number
+        for number, rcodestat in RCODES.items()
 }
 
 RCODE_MARKERS = {
@@ -50,6 +56,7 @@ RCODE_MARKERS = {
     3: 'n',
     4: 'i',
     5: 'r',
+    100000: '?'
 }
 
 RCODE_COLORS = {
@@ -76,7 +83,8 @@ RCODE_COLORS = {
     20: '#536267',
     21: '#a03623',
     22: '#b7e1a1',
-    23: '#0a888a'
+    23: '#0a888a',
+    100000: '#000000'
 }
 
 sinames = ['', ' k', ' M', ' G', ' T']
@@ -154,6 +162,18 @@ def plot_response_rate(
     ax.plot(xvalues, yvalues, label=label, marker=marker, linestyle=linestyle, color=color)
 
 
+def rcode_to_int(rcode: str) -> int:
+    try:
+        return int(rcode)
+    except ValueError:
+        pass
+
+    try:
+        return RCODES_TO_NUM[f'rcode_{rcode.lower()}']
+    except KeyError:
+        raise argparse.ArgumentTypeError(f'unsupported rcode "{rcode}"') from None
+
+
 def main():
     logging.basicConfig(format='%(asctime)s %(levelname)8s  %(message)s', level=logging.DEBUG)
     logger = logging.getLogger('matplotlib')
@@ -168,8 +188,10 @@ def main():
                         help='Graph title')
     parser.add_argument('-o', '--output', default='response_rate.svg',
                         help='Output graph filename')
-    parser.add_argument('-r', '--rcode', nargs='*', type=int,
+    parser.add_argument('-r', '--rcode', nargs='*', type=rcode_to_int,
                         help='RCODE(s) to plot in addition to answer rate')
+    parser.add_argument('-R', '--rcodes-above-pct', type=float,
+                        help='Plot RCODE(s) which represent > specified percentage of all answers')
     args = parser.parse_args()
 
     # initialize graph
@@ -178,68 +200,79 @@ def main():
     colors = list(mcolors.TABLEAU_COLORS.keys()) + list(mcolors.BASE_COLORS.keys())
     for json_path, color in itertools.zip_longest(args.json_file, colors[:len(args.json_file)]):
         try:
-            with open(json_path) as f:
-                data = json.load(f)
-        except FileNotFoundError as exc:
-            logging.critical('%s', exc)
+            process_file(json_path, color, args, ax)
+        except (FileNotFoundError, NotImplementedError) as exc:
+            logging.critical('%s: %s', json_path, exc)
             sys.exit(1)
-
-        try:
-            assert data['version'] == JSON_VERSION
-        except (KeyError, AssertionError):
-            logging.critical(
-                "Older formats of JSON data aren't supported. "
-                "Use older tooling or re-run the tests with newer shotgun.")
-            sys.exit(1)
-
-        if data['discarded'] != 0:
-            logging.warning("%d discarded packets may skew results!", data['discarded'])
-
-        timespan = (data['stats_sum']['until_ms'] - data['stats_sum']['since_ms']) / 1000
-        qps = data['stats_sum']['requests'] / timespan
-        name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
-        label = '{} ({} QPS)'.format(name, siname(qps))
-        min_timespan = data['stats_interval_ms'] / 2
-
-        plot_response_rate(
-            ax,
-            data,
-            label,
-            min_timespan=min_timespan,
-            color=color)
-
-        if args.rcode:
-            if len(args.json_file) > 1:
-                # same color for all rcodes from one JSON
-                cur_rcode_colors = [color] * (max(args.rcode) + 1)
-            else:
-                # single JSON - different color for each RCODE
-                cur_rcode_colors = RCODE_COLORS
-            for rcode in args.rcode:
-                try:
-                    stat_rcode = RCODES[rcode]
-                    symbol = RCODE_MARKERS.get(rcode, str(rcode))
-                except KeyError:
-                    logging.error("Unknown RCODE: %d", rcode)
-                    continue
-
-                eval_func = stat_field_rate(stat_rcode.field)
-                rcode_label = '{} {}'.format(label, stat_rcode.label)
-
-                plot_response_rate(
-                    ax,
-                    data,
-                    rcode_label,
-                    eval_func=eval_func,
-                    min_timespan=min_timespan,
-                    marker=f'${symbol}$',
-                    linestyle='dotted',
-                    color=cur_rcode_colors[rcode])
 
     set_axes_limits(ax)
 
     plt.legend()
     plt.savefig(args.output)
+
+
+def process_file(json_path, json_color, args, ax):
+    with open(json_path) as f:
+        data = json.load(f)
+    try:
+        assert data['version'] == JSON_VERSION
+    except (KeyError, AssertionError):
+        raise NotImplementedError(
+            "Older formats of JSON data aren't supported. "
+            "Use older tooling or re-run the tests with newer shotgun.") from None
+
+    if data['discarded'] != 0:
+        logging.warning("%d discarded packets may skew results!", data['discarded'])
+
+    timespan = (data['stats_sum']['until_ms'] - data['stats_sum']['since_ms']) / 1000
+    qps = data['stats_sum']['requests'] / timespan
+    name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
+    label = '{} ({} QPS)'.format(name, siname(qps))
+    min_timespan = data['stats_interval_ms'] / 2
+
+    plot_response_rate(
+        ax,
+        data,
+        label,
+        min_timespan=min_timespan,
+        color=json_color)
+
+    draw_rcodes = set(args.rcode or [])
+    if args.rcodes_above_pct is not None:
+        threshold = data['stats_sum']['answers'] * args.rcodes_above_pct / 100
+        rcodes_above_limit = set(RCODES_TO_NUM[key]
+                                 for key, cnt
+                                 in data['stats_sum'].items()
+                                 if key.startswith('rcode_') and cnt > threshold)
+        draw_rcodes = draw_rcodes.union(rcodes_above_limit)
+
+    if draw_rcodes:
+        if len(args.json_file) > 1:
+            # same color for all rcodes from one JSON
+            cur_rcode_colors = collections.defaultdict(lambda: json_color)
+        else:
+            # single JSON - different color for each RCODE
+            cur_rcode_colors = RCODE_COLORS
+        for rcode in draw_rcodes:
+            try:
+                stat_rcode = RCODES[rcode]
+                symbol = RCODE_MARKERS.get(rcode, str(rcode))
+            except KeyError:
+                logging.error("Unsupported RCODE: %s", rcode)
+                continue
+
+            eval_func = stat_field_rate(stat_rcode.field)
+            rcode_label = '{} {}'.format(label, stat_rcode.label)
+
+            plot_response_rate(
+                ax,
+                data,
+                rcode_label,
+                eval_func=eval_func,
+                min_timespan=min_timespan,
+                marker=f'${symbol}$',
+                linestyle='dotted',
+                color=cur_rcode_colors[rcode])
 
 
 if __name__ == '__main__':
