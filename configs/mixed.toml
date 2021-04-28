@@ -60,3 +60,7 @@ type = "latency"
 
 [charts.response-rate]
 type = "response-rate"
+
+[charts.response-rate-rcodes]
+type = "response-rate"
+rcodes-above-pct = 0
