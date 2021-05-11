@@ -5,6 +5,7 @@ import csv
 import logging
 import math
 import os
+import statistics
 import sys
 from typing import Dict, Tuple
 
@@ -77,6 +78,31 @@ def parse_csv(csv_f, since: float, until: float) -> Tuple[float, Dict[float, flo
     return period, data
 
 
+def xyrate_average(xyrate: Dict[float, float], orig_period: float, avg_n_samples: int) \
+        -> Dict[float, float]:
+    """
+    Transform dictionary with [X]=Y values by averaging Y values of avg_n_samples
+    consecutive points on X (time) axis.
+    """
+    orig_start_time = min(xyrate)
+    # first sample is at the end of first period
+    # our new average should point to the middle of all samples we are averaging over
+    avg_start_time = (orig_start_time - orig_period) + (avg_n_samples * orig_period / 2)
+
+    # flaten XY chart to a to sorted list, [0] corresponds to orig_start_time
+    orig_rate_vals = list(xyrate[time] for time in sorted(xyrate))
+    avg_xy = {}
+    avg_idx = 0
+    avg_last_idx = int(len(orig_rate_vals) / avg_n_samples)  # ignore incomplete samples at the end
+    while avg_idx < avg_last_idx:
+        orig_idx = avg_idx * avg_n_samples
+        # beware: indexing from 0, sample 0 is at the end of the first period
+        avg_now = avg_start_time + orig_period * (orig_idx + 1)
+        avg_xy[avg_now] = statistics.mean(orig_rate_vals[orig_idx:orig_idx + avg_n_samples])
+        avg_idx += 1
+    return avg_xy
+
+
 def main():
     logging.basicConfig(format='%(asctime)s %(levelname)8s  %(message)s', level=logging.DEBUG)
     logger = logging.getLogger('matplotlib')
@@ -95,6 +121,8 @@ def main():
                         help='Omit data before this time (secs since test start)')
     parser.add_argument('--until', type=float, default=float('+inf'),
                         help='Omit data after this time (secs since test start)')
+    parser.add_argument('--average', type=float,
+                        help='Average samples over specified period (secs)')
 
     args = parser.parse_args()
 
@@ -115,6 +143,20 @@ def main():
         else:
             period_str = 'variable sampling period'
 
+        if args.average:
+            if not math.isfinite(period):
+                logging.critical('file %s: refusing to average samples with a variable '
+                                 'sampling period', csv_path)
+                sys.exit(2)
+            n_samples = args.average / period
+            if abs(round(n_samples) - n_samples) > 0.0001:
+                logging.critical('file %s: averaging period %f is not an integer multiple '
+                                 'of the original period %f', csv_path, args.average, period)
+                sys.exit(3)
+            n_samples = round(n_samples)
+            period_str = f'avg {n_samples} samples with period {round(period, 4)} s ' \
+                         f'= new period {round(n_samples * period, 4)} s'
+            xyrate = xyrate_average(xyrate, period, n_samples)
         plot(ax, xyrate, f'{name} ({period_str})', args.since, args.until)
 
     plt.legend()
