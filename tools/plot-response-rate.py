@@ -188,6 +188,8 @@ def main():
                         help='Graph title')
     parser.add_argument('-o', '--output', default='response_rate.svg',
                         help='Output graph filename')
+    parser.add_argument('-T', '--skip-total', action='store_const', const='True',
+                        help='Plot line for total response rate (default)')
     parser.add_argument('-r', '--rcode', nargs='*', type=rcode_to_int,
                         help='RCODE(s) to plot in addition to answer rate')
     parser.add_argument('-R', '--rcodes-above-pct', type=float,
@@ -230,12 +232,13 @@ def process_file(json_path, json_color, args, ax):
     label = '{} ({} QPS)'.format(name, siname(qps))
     min_timespan = data['stats_interval_ms'] / 2
 
-    plot_response_rate(
-        ax,
-        data,
-        label,
-        min_timespan=min_timespan,
-        color=json_color)
+    if not args.skip_total:
+        plot_response_rate(
+            ax,
+            data,
+            label,
+            min_timespan=min_timespan,
+            color=json_color)
 
     draw_rcodes = set(args.rcode or [])
     if args.rcodes_above_pct is not None:
