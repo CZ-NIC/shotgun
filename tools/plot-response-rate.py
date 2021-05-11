@@ -106,7 +106,11 @@ def stat_field_rate(field):
     def inner(stats):
         if stats['requests'] == 0:
             return float('nan')
-        return 100.0 * stats[field] / stats['requests']
+        if callable(field):
+            field_val = field(stats)
+        else:
+            field_val = stats[field]
+        return 100.0 * field_val / stats['requests']
     return inner
 
 
@@ -188,10 +192,14 @@ def main():
                         help='Graph title')
     parser.add_argument('-o', '--output', default='response_rate.svg',
                         help='Output graph filename')
+    parser.add_argument('-T', '--skip-total', action='store_const', const='True',
+                        help='Plot line for total response rate (default)')
     parser.add_argument('-r', '--rcode', nargs='*', type=rcode_to_int,
                         help='RCODE(s) to plot in addition to answer rate')
     parser.add_argument('-R', '--rcodes-above-pct', type=float,
                         help='Plot RCODE(s) which represent > specified percentage of all answers')
+    parser.add_argument('-s', '--sum-rcodes', nargs='*', type=rcode_to_int,
+                        help='Plot sum of RCODE(s)')
     args = parser.parse_args()
 
     # initialize graph
@@ -230,14 +238,16 @@ def process_file(json_path, json_color, args, ax):
     label = '{} ({} QPS)'.format(name, siname(qps))
     min_timespan = data['stats_interval_ms'] / 2
 
-    plot_response_rate(
-        ax,
-        data,
-        label,
-        min_timespan=min_timespan,
-        color=json_color)
+    if not args.skip_total:
+        plot_response_rate(
+            ax,
+            data,
+            label,
+            min_timespan=min_timespan,
+            color=json_color)
 
     draw_rcodes = set(args.rcode or [])
+    sum_rcodes = set(args.sum_rcodes or [])
     if args.rcodes_above_pct is not None:
         threshold = data['stats_sum']['answers'] * args.rcodes_above_pct / 100
         rcodes_above_limit = set(RCODES_TO_NUM[key]
@@ -273,6 +283,22 @@ def process_file(json_path, json_color, args, ax):
                 marker=f'${symbol}$',
                 linestyle='dotted',
                 color=cur_rcode_colors[rcode])
+
+    if sum_rcodes:
+        def sum_rate(stats):
+            return sum(stats[RCODES[ircode].field] for ircode in sum_rcodes)
+        eval_func = stat_field_rate(sum_rate)
+
+        sum_label = " ".join(RCODES[ircode].label for ircode in sum_rcodes)
+        plot_response_rate(
+            ax,
+            data,
+            f'{label} {sum_label}',
+            eval_func=eval_func,
+            min_timespan=min_timespan,
+            marker='$\\sum$',
+            linestyle='dotted',
+            color=json_color)
 
 
 if __name__ == '__main__':
