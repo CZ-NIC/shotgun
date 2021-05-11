@@ -222,7 +222,15 @@ def process_file(json_path, json_color, args, ax):
             "Use older tooling or re-run the tests with newer shotgun.") from None
 
     if data['discarded'] != 0:
-        logging.warning("%d discarded packets may skew results!", data['discarded'])
+        proportion_all_perc = data['discarded'] / data['stats_sum']['requests'] * 100
+        proportion_one_sec_perc = (
+            data['discarded']
+            / min(sample['requests'] for sample in data['stats_periodic'])
+            * 100)
+        logging.warning("%d discarded packets may skew results! Discarded %.1f %% of all "
+                        "requests; theoretical worst case %.1f %% in one %d ms sample",
+                        data['discarded'], proportion_all_perc, proportion_one_sec_perc,
+                        data['stats_interval_ms'])
 
     timespan = (data['stats_sum']['until_ms'] - data['stats_sum']['since_ms']) / 1000
     qps = data['stats_sum']['requests'] / timespan
