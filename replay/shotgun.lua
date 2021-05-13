@@ -215,6 +215,7 @@ while true do
 	end
 	recv(rctx, obj)
 end
+log.notice('processed %.0f packets from input PCAP', input:packets())
 
 -- teardown
 for i, _ in ipairs(config.threads) do
