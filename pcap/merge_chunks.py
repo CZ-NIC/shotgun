@@ -28,7 +28,7 @@ def main():
                         help='Number of chunks to randomly select from source_dirs and merge')
     parser.add_argument('source_dirs', nargs='+', type=readable_directory,
                         help='Paths to directories with PCAP chunks')
-    parser.add_argument('--seed', default=0, type=positive_int,
+    parser.add_argument('--seed', default=0, type=int,
                         help='Randomization seed (default: 0)')
     args = parser.parse_args()
 
