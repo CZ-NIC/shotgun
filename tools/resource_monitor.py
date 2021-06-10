@@ -98,7 +98,9 @@ def get_cgroup_paths(base: str, glob=None):
         raise NotADirectoryError(f'base cgroup path {base} must be a directory')
 
     if glob:
-        cgrps = list(base_path.glob(glob))
+        cgrps = list(path
+                     for path in base_path.glob(glob)
+                     if path.is_dir())
         if len(cgrps) == 0:
             raise ValueError(f'no cgroups found with base dir {base} glob {glob}')
     else:
