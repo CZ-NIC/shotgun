@@ -126,11 +126,13 @@ def main():
     logging.basicConfig(level=logging.DEBUG, format='%(levelname)s  %(message)s')
     signal.signal(signal.SIGINT, sigint)
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-i", "--interval", type=float, default=1,
                         help="interval between samples in seconds")
     parser.add_argument("--cgroup-base-dir", type=Path, required=True,
-                        help="base cgroup path, e.g. /sys/fs/cgroup/system.slice")
+                        default="/sys/fs/cgroup/system.slice",
+                        help="base cgroup path, glob is applied here")
     parser.add_argument("--cgroup-glob", type=str, default=None,
                         help='glob for sub-cgroups to monitor, e.g. docker-*.scope')
     parser.add_argument("--output", type=str, default=None,
