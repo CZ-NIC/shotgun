@@ -34,7 +34,7 @@ RUN \
 COPY . /shotgun
 WORKDIR /shotgun
 ENV PATH="${PATH}:/shotgun"
-RUN cd reply/dnssim && \
+RUN cd replay/dnssim && \
   ./autogen.sh && \
   ./configure && \
   make && \
