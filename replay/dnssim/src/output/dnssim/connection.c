@@ -1,3 +1,7 @@
+/*  Copyright (C) 2019-2021 CZ.NIC, z.s.p.o. <knot-resolver@labs.nic.cz>
+ *  SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #include "config.h"
 
 #include "output/dnssim.h"

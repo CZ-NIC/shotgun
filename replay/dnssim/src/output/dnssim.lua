@@ -1,3 +1,6 @@
+--  Copyright (C) 2019-2021 CZ.NIC, z.s.p.o. <knot-resolver@labs.nic.cz>
+--  SPDX-License-Identifier: GPL-3.0-or-later
+
 -- shotgun.output.dnssim
 -- Simulate independent DNS clients over various transports
 --   output = require("shotgun.output.dnssim").new()

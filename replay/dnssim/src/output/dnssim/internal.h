@@ -1,3 +1,7 @@
+/*  Copyright (C) 2019-2021 CZ.NIC, z.s.p.o. <knot-resolver@labs.nic.cz>
+ *  SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #ifndef __dnsjit_output_dnssim_internal_h
 #define __dnsjit_output_dnssim_internal_h
 
