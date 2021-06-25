@@ -141,8 +141,7 @@ void output_dnssim_stats_finish(output_dnssim_t* self);
 core_receiver_t output_dnssim_receiver();
 ]]
 
-local bit = require("bit")
-local object = require("dnsjit.core.objects")
+require("dnsjit.core.objects")
 local C = ffi.C
 
 local DnsSim = {}
@@ -305,9 +304,9 @@ function DnsSim:https2(http2_options, tls_priority)
         C.output_dnssim_tls_priority(self.obj, tls_priority)
     end
 
-    uri_path = "/dns-query"
-    zero_out_msgid = true
-    method = "GET"
+    local uri_path = "/dns-query"
+    local zero_out_msgid = true
+    local method = "GET"
 
     if http2_options ~= nil then
         if type(http2_options) ~= "table" then
@@ -341,7 +340,7 @@ function DnsSim:timeout(seconds)
     if seconds == nil then
         seconds = 2
     end
-    timeout_ms = math.floor(seconds * 1000)
+    local timeout_ms = math.floor(seconds * 1000)
     C.output_dnssim_timeout_ms(self.obj, timeout_ms)
 end
 
@@ -408,7 +407,7 @@ function DnsSim:stats_collect(seconds)
     if seconds == nil then
         self.obj._log:fatal("number of seconds must be set for stats_collect()")
     end
-    interval_ms = math.floor(seconds * 1000)
+    local interval_ms = math.floor(seconds * 1000)
     C.output_dnssim_stats_collect(self.obj, interval_ms)
 end
 
@@ -425,8 +424,8 @@ function DnsSim:export(filename)
         return
     end
 
-    local function write_stats(file, stats)
-        file:write(
+    local function write_stats(f, stats)
+        f:write(
             "{ ",
                 '"since_ms":', tonumber(stats.since_ms), ',',
                 '"until_ms":', tonumber(stats.until_ms), ',',
@@ -458,11 +457,11 @@ function DnsSim:export(filename)
                 '"rcode_badcookie":', tonumber(stats.rcode_badcookie), ',',
                 '"rcode_other":', tonumber(stats.rcode_other), ',',
                 '"latency":[')
-        file:write(tonumber(stats.latency[0]))
+        f:write(tonumber(stats.latency[0]))
         for i=1,tonumber(self.obj.timeout_ms) do
-            file:write(',', tonumber(stats.latency[i]))
+            f:write(',', tonumber(stats.latency[i]))
         end
-        file:write("]}")
+        f:write("]}")
     end
 
     file:write(
