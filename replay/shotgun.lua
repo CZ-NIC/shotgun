@@ -2,7 +2,7 @@
 
 local object = require("dnsjit.core.objects")
 local log = require("dnsjit.core.log")
-local dnssim = require("dnsjit.output.dnssim")
+local dnssim = require("shotgun.output.dnssim")
 
 local DNSSIM_REQ_VERSION = 20210129
 local has_check_version, version = pcall(dnssim.check_version, DNSSIM_REQ_VERSION)
