@@ -34,4 +34,10 @@ RUN \
 COPY . /shotgun
 WORKDIR /shotgun
 ENV PATH="${PATH}:/shotgun"
+RUN cd reply/dnssim && \
+  ./autogen.sh && \
+  ./configure && \
+  make && \
+  make install && \
+  cd ../..
 RUN pip3 install -r requirements.txt
