@@ -19,6 +19,7 @@ AC_CHECK_HEADER([dnsjit/version.h],, [AC_MSG_ERROR([dnsjit development headers n
 # Check for dependencies
 PKG_CHECK_MODULES([libuv], [libuv])
 PKG_CHECK_MODULES([libnghttp2], [libnghttp2])
+AC_CHECK_LIB([gnutls], [gnutls_init],, [AC_MSG_ERROR([libgnutls not found])])
 
 # Output Makefiles
 AC_CONFIG_FILES([
