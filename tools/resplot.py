@@ -32,7 +32,6 @@ def init_plot(title):
 
 def plot(stats, name, time_zero, until_relative, avg_interval):
     logging.info('plotting %s', name)
-    ax = init_plot(name)
 
     xvalues = []
     yvalues = []
@@ -58,6 +57,11 @@ def plot(stats, name, time_zero, until_relative, avg_interval):
                 sum_values = 0
                 # TODO: last point
 
+    # skip all-zeros
+    if sum(yvalues) == 0:
+        return
+    print(name, sum(yvalues))
+    ax = init_plot(name)
     ax.set_xlim(xmin=0, xmax=until_relative)
     ax.plot(xvalues, yvalues, label=name, marker='x', linestyle='dotted')
 
@@ -84,7 +88,7 @@ if __name__ == '__main__':
     for cgrp in stats:
         for stat in stats[cgrp]:
             ### TODO: handle multiple groups with the same set of names (put cgrp name in title & filename?)
-            if ('net.' in stat or 'disk.' in stat) and (stat not in {'net.ens5.rx.packets', 'net.ens5.rx.drop', 'net.ens5.tx.packets', 'net.ens5.tx.drop'}):
+            if (('net.' in stat or 'disk.' in stat) and (stat not in {'net.ens5.rx.packets', 'net.ens5.rx.drop', 'net.ens5.tx.packets', 'net.ens5.tx.drop'}) or (stat.startswith('cpu') and not stat.startswith('cpu.'))):
             #if not 'usage' in stat:
                 continue
             plot(stats[cgrp][stat], f'{stat}-{cgrp}', time_zero, time_end - time_zero + 10, average)

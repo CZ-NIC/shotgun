@@ -173,7 +173,7 @@ class CPUStat:
         new_data = self.parse(record)
         for key in new_data:
             per_sec = (new_data[key] - self.last_data[key]) / 10**6 / (now - self.last_ts) * 100  # %
-            yield (f'cpu.{key.replace("usec", "percent")}', self.last_ts, now, per_sec)
+            yield (f'cpu.{key.replace("usec", "percent")}.cg', self.last_ts, now, per_sec)
         self.last_ts = now
         self.last_data = new_data
 
@@ -234,16 +234,64 @@ class DiskStat:
         self.last_ts = now
         self.last_data = new_data
 
+class DeltaDict(dict):
+    def __sub__(self, other):
+        assert len(self) == len(other)
+        return DeltaDict({key: my_val - other[key] for key, my_val in self.items()})
+
+class ProcStat:
+    """/proc/stat; cumulative values; parses sum over all CPUs only"""
+    def __init__(self, record):
+        self.last_ts = record['ts']
+        self.last_data = self.parse(record)
+
+    def parse(self, record):
+        data = {}  # interface -> tx/rx-stat -> value
+        lines = record['text'].split('\n')
+        # taken from man 5 proc
+        cpu_column_names = ('user', 'nice', 'system', 'idle', 'iowait', 'irq', 'softirq', 'steal', 'guest', 'guest_nice')
+        for line in lines:
+            if not line:
+                continue
+
+            in_columns = line.split()
+            name = in_columns[0]
+            if not name.startswith('cpu'):
+                continue
+            assert len(in_columns) >= 11, 'unexpected line format'
+
+            data[name] = DeltaDict({col_name: int(value) for col_name, value in zip(cpu_column_names, in_columns[1:])})
+        return data
+
+    def process(self, record):
+        now = record['ts']
+        if now == self.last_ts:
+            return  # nothing to do, we need another data point
+
+        new_data = self.parse(record)
+        n_cpus = len(new_data) - 1  # - total
+        for cpu_name in new_data:
+            assert cpu_name in self.last_data, 'CPU disappeared'
+            cpu_deltas = new_data[cpu_name] - self.last_data[cpu_name]
+            cpu_sumtime = sum(cpu_deltas.values())  # sum of all tics = 100 % for ALL cpus
+            for metric, value in cpu_deltas.items():
+                percent = cpu_deltas[metric] / cpu_sumtime * 100 * n_cpus  # 100 % = 1 CPU
+                yield (f'{cpu_name}.{metric}_percent', self.last_ts, now, percent)
+        self.last_ts = now
+        self.last_data = new_data
+
+
 path_parsers = {
-    'memory.current': MemoryCurrent,
-    'memory.pressure': MemoryPressure,
+#    'memory.current': MemoryCurrent,
+#    'memory.pressure': MemoryPressure,
     'cpu.pressure': CPUPressure,
     'cpu.stat': CPUStat,
-    'io.pressure': IOPressure,
-    'dev': NetworkDevIO,
-    'diskstats': DiskStat,
-    'sockstat': SockStat,
-    'sockstat6': SockStat,
+#    'io.pressure': IOPressure,
+#    'dev': NetworkDevIO,
+#    'diskstats': DiskStat,
+#    'sockstat': SockStat,
+#    'sockstat6': SockStat,
+    'stat': ProcStat,
 }
 
 def parse_all(infile):
