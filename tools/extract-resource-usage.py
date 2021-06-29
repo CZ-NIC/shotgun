@@ -10,12 +10,6 @@ from pprint import pprint
 import re
 import sys
 
-### TODO: rip out matplotplib
-# pylint: disable=wrong-import-order,wrong-import-position
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt  # noqa
-
 def load_json(infile):
     """parse newline separated stream of JSON objects"""
     for line in infile:
@@ -51,6 +45,32 @@ class MemoryCurrent:
 
     def process(self, record):
         yield ('memory.current', record['ts'], record['ts'], self.parse(record))
+
+class SockStat:
+    """parse current memory.current value (point in time), stateless"""
+    def __init__(self, _):
+        pass
+
+    def parse(self, record):
+        data = {}  # protocol: metric: value
+        for line in record['text'].split('\n'):
+            if not line:
+                continue
+            protocol, metrics_text = line.split(': ')
+            metrics = metrics_text.split()
+            assert len(metrics) >= 2 and len(metrics) % 2 == 0
+            data[protocol] = {}
+            for m_idx in range(0, len(metrics), 2):
+                metric_name = metrics[m_idx]
+                metric_val = int(metrics[m_idx + 1])
+                data[protocol][metric_name] = metric_val
+        return data
+
+    def process(self, record):
+        data = self.parse(record)
+        for protocol, metrics in data.items():
+            for metric, value in metrics.items():
+                yield (f'sockstat.{protocol}.{metric}', record['ts'], record['ts'], data[protocol][metric])
 
 class Pressure:
     """parse cpu/memory/io.some values; cumulative values"""
@@ -129,7 +149,7 @@ class CPUStat:
 
     def parse(self, record):
         data = {}  # interface -> tx/rx-stat -> value
-        lines = record['text'].split('\n')[2:]
+        lines = record['text'].split('\n')
         line_names = ('usage_usec', 'user_usec', 'system_usec')
         for line in lines:
             if not line:
@@ -152,7 +172,7 @@ class CPUStat:
 
         new_data = self.parse(record)
         for key in new_data:
-            per_sec = (new_data[key] - self.last_data[key]) / (now - self.last_ts) * 100  # %
+            per_sec = (new_data[key] - self.last_data[key]) / 10**6 / (now - self.last_ts) * 100  # %
             yield (f'cpu.{key.replace("usec", "percent")}', self.last_ts, now, per_sec)
         self.last_ts = now
         self.last_data = new_data
@@ -222,6 +242,8 @@ path_parsers = {
     'io.pressure': IOPressure,
     'dev': NetworkDevIO,
     'diskstats': DiskStat,
+    'sockstat': SockStat,
+    'sockstat6': SockStat,
 }
 
 def parse_all(infile):
@@ -287,10 +309,11 @@ def plot(stats, name):
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    logging.getLogger('matplotlib').setLevel(logging.WARNING)
     with open(sys.argv[1]) as infile:
         stats = parse_all(infile)
-    #pprint(stats)
-    for cgrp in stats:
-        for stat in stats[cgrp]:
-            plot(stats[cgrp][stat], stat)
+    with open('resmon-extracted.json', 'w') as statfile:
+        json.dump(stats, statfile)
+    ##pprint(stats)
+    #for cgrp in stats:
+    #    for stat in stats[cgrp]:
+    #        plot(stats[cgrp][stat], stat)
