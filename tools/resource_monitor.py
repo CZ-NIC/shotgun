@@ -24,7 +24,7 @@ PATHS_CGROUP = ['io.pressure', 'io.stat',
                 'memory.pressure', 'memory.stat', 'memory.current']
 
 PATHS_SYSTEMWIDE = ['/proc/net/dev', '/proc/net/sockstat', '/proc/net/sockstat6',
-                    '/proc/diskstats']
+                    '/proc/diskstats', '/proc/stat']
 # globals for signal handler
 RUNNING = True
 PRODUCERS = []  # type: List[asyncio.Task]
