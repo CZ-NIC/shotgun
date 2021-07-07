@@ -44,12 +44,18 @@ def siname(n):
 
 def init_plot(title):
     # plt.rcParams["font.family"] = "monospace"
-    _, ax = plt.subplots(figsize=(9, 9))
+    fig, ax = plt.subplots(figsize=(16, 9))
+    fig.tight_layout(pad=2)
 
     ax.set_xscale('log')
-    ax.xaxis.set_major_formatter(mtick.FormatStrFormatter('%s'))
+    ax.xaxis.set_major_formatter(mtick.FormatStrFormatter('%.1f'))
+    ax.xaxis.set_minor_formatter(mtick.FormatStrFormatter('%.1f'))
+    ax.set_xlim(0.1, 100)
+    ax.tick_params(axis='x', which='both', labelrotation=90)
+
     ax.set_yscale('log')
-    ax.yaxis.set_major_formatter(mtick.FormatStrFormatter('%s'))
+    ax.yaxis.set_major_formatter(mtick.FormatStrFormatter('%.1f'))
+    ax.yaxis.set_minor_formatter(mtick.FormatStrFormatter('%.1f'))
 
     ax.grid(True, which='major')
     ax.grid(True, which='minor', linestyle='dotted', color='#DDDDDD')
