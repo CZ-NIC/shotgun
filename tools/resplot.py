@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt  # noqa
 
 
 def init_plot(title):
-    _, ax = plt.subplots(figsize=(16, 9))
+    fig, ax = plt.subplots(figsize=(16, 9))
 
     ax.set_xlabel('Time [s]')
     #ax.set_ylabel('Packets per sampling period')
@@ -27,18 +27,18 @@ def init_plot(title):
     ax.grid(True, axis='y', which='both', linestyle='dotted')
     plt.minorticks_on()
 
-    return ax
+    return fig, ax
 
 
-def plot(stats, name, time_zero, until_relative, avg_interval):
-    logging.info('plotting %s', name)
-
+def plot(ax, stats, name, time_zero, until_relative, avg_interval):
     xvalues = []
     yvalues = []
     if not avg_interval:
         for _, time_s, rate in stats:
-            xvalues.append(time_s - time_zero)
-            yvalues.append(rate)
+            reltime = time_s - time_zero
+            if reltime > 0:
+                xvalues.append(reltime)
+                yvalues.append(rate)
     else:
         cur_interval_start = None
         sum_count = 0
@@ -57,38 +57,59 @@ def plot(stats, name, time_zero, until_relative, avg_interval):
                 sum_values = 0
                 # TODO: last point
 
-    # skip all-zeros
-    if sum(yvalues) == 0:
-        return
-    print(name, sum(yvalues))
-    ax = init_plot(name)
     ax.set_xlim(xmin=0, xmax=until_relative)
     ax.plot(xvalues, yvalues, label=name, marker='x', linestyle='dotted')
 
-    plt.savefig(f'{name}.svg')
-    plt.close('all')
 
-
+def normalize_chart_id(orig_id: str):
+    if not 'docker-' in orig_id:
+        return orig_id
+    return re.sub('docker-.*scope', 'docker', orig_id)
 
 if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="Plot resource usage")
+
+    parser.add_argument('result_dirs', nargs='+', help='Ansible result dirs')
+    parser.add_argument('--average', type=float, help='interval to average over')
+    args = parser.parse_args()
+
     logging.basicConfig(level=logging.INFO)
     logging.getLogger('matplotlib').setLevel(logging.WARNING)
-    with open(sys.argv[1], 'r') as shotfile:
-        shotgun_res = json.load(shotfile)
-    if len(sys.argv) > 2:
-        average = float(sys.argv[2])
-    else:
-        average = None
-    # offset for time 0
-    time_zero = shotgun_res['stats_sum']['since_ms'] / 1000
-    time_end = shotgun_res['stats_sum']['until_ms'] / 1000
-    with open('resmon-extracted.json', 'r') as statfile:
-        stats = json.load(statfile)
-    #pprint(stats)
-    for cgrp in stats:
-        for stat in stats[cgrp]:
-            ### TODO: handle multiple groups with the same set of names (put cgrp name in title & filename?)
-            if (('net.' in stat or 'disk.' in stat) and (stat not in {'net.ens5.rx.packets', 'net.ens5.rx.drop', 'net.ens5.tx.packets', 'net.ens5.tx.drop'}) or (stat.startswith('cpu') and not stat.startswith('cpu.'))):
-            #if not 'usage' in stat:
-                continue
-            plot(stats[cgrp][stat], f'{stat}-{cgrp}', time_zero, time_end - time_zero + 10, average)
+    charts = {}
+
+    for dirname in args.result_dirs:
+        with open(Path(dirname) / 'resmon-extracted.json', 'r') as statfile:
+            stats = json.load(statfile)
+        with open(Path(dirname) / 'results-shotgun/data/UDP.json') as shotgun_json:
+            shotgun_res = json.load(shotgun_json)
+        # offset for time 0
+        time_zero = shotgun_res['stats_sum']['since_ms'] / 1000
+        time_end = shotgun_res['stats_sum']['until_ms'] / 1000
+        #pprint(stats)
+        for cgrp in stats:
+            for stat in stats[cgrp]:
+                chart_id = normalize_chart_id(f'{stat}-{cgrp}')
+                ### TODO: handle multiple groups with the same set of names (put cgrp name in title & filename?)
+                #if (('net.' in stat or 'disk.' in stat) and (stat not in {'rx.packets', 'rx.drop', 'tx.packets', 'tx.drop'}) or 
+                if (stat.startswith('cpu') and not stat.startswith('cpu.')):
+                    continue
+                # skip all-zeros
+                if sum(yval for _, _, yval in stats[cgrp][stat]) == 0:
+                    continue
+                if chart_id not in charts:
+                    charts[chart_id] = init_plot(chart_id)
+
+                logging.info('plotting %s: %s', dirname, chart_id)
+                plot(charts[chart_id][1], stats[cgrp][stat], dirname, time_zero, time_end - time_zero + 10, args.average)
+
+    for chart_id, chart_objs in charts.items():
+        fig = chart_objs[0]
+        fig.legend()
+        fig.tight_layout()
+        logging.info('saving %s', chart_id)
+        fig.savefig(f'{chart_id}.svg')
+        #fig.close()
+
+
