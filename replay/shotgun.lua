@@ -45,7 +45,7 @@ local function send_thread_main(thr)
 
 	-- output must be global (per thread) to be accesible in loadstring()
 	-- luacheck: globals output, ignore log
-	output = require("dnsjit.output.dnssim").new(thr:pop())
+	output = require("shotgun.output.dnssim").new(thr:pop())
 	local log = output:log(thr:pop())
 
 	output:target(thr:pop(), thr:pop())
