@@ -1,5 +1,5 @@
 AC_PREREQ(2.61)
-AC_INIT([shotgun-output-dnssim], [20210129],,)
+AC_INIT([shotgun-output-dnssim], [20210714],,)
 AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 AC_CONFIG_HEADER([src/config.h])
 

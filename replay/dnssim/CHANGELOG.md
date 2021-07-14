@@ -1,3 +1,8 @@
+dnssim v20210714
+================
+- dnssim was moved from dnsjit to shotgun, this implies new
+  lua name: "shotgun.output.dnssim"
+
 dnssim v20210129
 ================
 

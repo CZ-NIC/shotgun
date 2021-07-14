@@ -4,7 +4,7 @@ local object = require("dnsjit.core.objects")
 local log = require("dnsjit.core.log")
 local dnssim = require("shotgun.output.dnssim")
 
-local DNSSIM_REQ_VERSION = 20210129
+local DNSSIM_REQ_VERSION = 20210714
 local has_check_version, version = pcall(dnssim.check_version, DNSSIM_REQ_VERSION)
 if not has_check_version or version == nil then
 	log.fatal(string.format(
