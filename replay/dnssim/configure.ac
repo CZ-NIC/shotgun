@@ -21,6 +21,9 @@ PKG_CHECK_MODULES([libuv], [libuv])
 PKG_CHECK_MODULES([libnghttp2], [libnghttp2])
 AC_CHECK_LIB([gnutls], [gnutls_init],, [AC_MSG_ERROR([libgnutls not found])])
 
+# Checks for support.
+AC_CHECK_FUNCS([clock_nanosleep])
+
 # Output Makefiles
 AC_CONFIG_FILES([
   Makefile
