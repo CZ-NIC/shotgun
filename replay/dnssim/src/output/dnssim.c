@@ -10,6 +10,8 @@
 #include <dnsjit/core/object/ip.h>
 #include <dnsjit/core/object/ip6.h>
 
+#include <time.h>
+#include <sys/time.h>
 #include <gnutls/gnutls.h>
 #include <string.h>
 
