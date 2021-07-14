@@ -1,0 +1,66 @@
+DNS Shotgun v20210714
+=====================
+
+Incompatible changes
+--------------------
+- dnsjit 1.2.0+ is now required
+- dnssim component was moved from dnsjit to this repository and has to be
+  compiled separately (!52)
+
+Improvements
+------------
+- replay: new option `stop_after_s` added to input (!40)
+- tools/plot-packat-rate: new tool to plot packet rate in PCAPs (!46)
+- replay/shotgun: support reading PCAP from stdin (!36)
+- pcap/merge-chunks: utility to merge chunks on-the-fly (!37)
+- tools/plot-response-rate: add `--rcodes-above-pct` option (!43)
+- tools/plot-response-rate: add `--skip-total` option (!47)
+- tools/plot-response-rate: add `--sum-rcodes` option (!47)
+- tools/plot-latency: add `--group` option to plot aggregate data (!53)
+- pcap/cut-pcap: new script to effetively trim a sorted PCAP (!50)
+- configs: plot response rate chart with non-zero rcodes by default (!44)
+- pcap/extract-clients: add --seed option for deterministic splitting (!34)
+- pcap/filter-dnsq: improved malformed packet handling (!31)
+- pcap/extract-clients: detect non-monotonic timestamps (!31)
+- replay/shotgun: use faster mmpcap (!36)
+- tools/plot-response-rate: add markers for plotting rcodes (!41)
+- tools/plot-response-rate: improve color selection (!41, !42)
+
+Bugfixes
+--------
+- pcap/extract-clients: fix imprecise timestamps and off-by-one error (!32)
+- tools/plot-client-distribution: fix handling of empty query count intervals (!38)
+- replay: add workaround to support /32 and /128 addresses (!39)
+
+
+DNS Shotgun v20210203
+=====================
+
+- new user interface
+  - replay.py is now the main tool instead of shotgun.lua
+  - new configuration format to support complex scenarios
+  - mixed-protocol traffic replay is supported
+  - some scripts in `tools/` were renamed
+- fast scripts for processing PCAP data
+  - can be found in `pcap/`
+  - these replaced the now removed pellet.py and scale.py
+- added IPv4 support
+- DoH is now fully supported
+- comprehensive usage documentation is available at https://dns-shotgun.readthedocs.io
+- minimum required dnsjit version is 1.1.0
+
+
+DNS Shotgun v20200914
+=====================
+
+- fully supported UDP, TCP and DNS-over-TLS with
+  [dnsjit](https://github.com/DNS-OARC/dnsjit) 1.0.0
+- fully supported DNS-over-HTTPS with development version of dnsjit
+- traffic can be replayed only over IPv6
+- user interface
+  - may be unstable
+  - only very basic UI available
+  - more complex scenarios are no supported yet
+    (e.g. simultaneously using multiple protocols)
+- pellet.py is functional, but it is very slow and requires python-dpkt from
+  master

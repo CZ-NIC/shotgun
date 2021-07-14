@@ -1,5 +1,5 @@
 AC_PREREQ(2.61)
-AC_INIT([shotgun-output-dnssim], [20210129],,)
+AC_INIT([shotgun-output-dnssim], [20210714],,)
 AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 AC_CONFIG_HEADER([src/config.h])
 
@@ -20,6 +20,10 @@ AC_CHECK_HEADER([dnsjit/version.h],, [AC_MSG_ERROR([dnsjit development headers n
 PKG_CHECK_MODULES([libuv], [libuv])
 PKG_CHECK_MODULES([libnghttp2], [libnghttp2])
 AC_CHECK_LIB([gnutls], [gnutls_init],, [AC_MSG_ERROR([libgnutls not found])])
+
+# Checks for support.
+AC_SEARCH_LIBS([clock_gettime])
+AC_CHECK_FUNCS([clock_nanosleep])
 
 # Output Makefiles
 AC_CONFIG_FILES([

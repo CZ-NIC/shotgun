@@ -4,7 +4,7 @@ local object = require("dnsjit.core.objects")
 local log = require("dnsjit.core.log")
 local dnssim = require("shotgun.output.dnssim")
 
-local DNSSIM_REQ_VERSION = 20210129
+local DNSSIM_REQ_VERSION = 20210714
 local has_check_version, version = pcall(dnssim.check_version, DNSSIM_REQ_VERSION)
 if not has_check_version or version == nil then
 	log.fatal(string.format(
@@ -45,7 +45,7 @@ local function send_thread_main(thr)
 
 	-- output must be global (per thread) to be accesible in loadstring()
 	-- luacheck: globals output, ignore log
-	output = require("dnsjit.output.dnssim").new(thr:pop())
+	output = require("shotgun.output.dnssim").new(thr:pop())
 	local log = output:log(thr:pop())
 
 	output:target(thr:pop(), thr:pop())
@@ -65,9 +65,6 @@ local function send_thread_main(thr)
 	elseif protocol_func == "tls" then
 		cmd = cmd .. "('" .. gnutls_priority .. "')"
 	elseif protocol_func == "https2" then
-		if type(output.https2) ~= "function" then
-			log:fatal("https2 isn't supported with this version of dnsjit")
-		end
 		cmd = cmd .. "({ method = '" .. http_method .. "' }, '" .. gnutls_priority .. "')"
 	else
 		log:fatal("unknown protocol_func: " .. protocol_func)

@@ -2,6 +2,8 @@
  *  SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+#include "config.h"
+
 #include "output/dnssim.h"
 #include "output/dnssim/internal.h"
 #include "output/dnssim/ll.h"
@@ -28,8 +30,7 @@ static uint64_t _now_ms()
     now_ms += ts.tv_nsec / 1000000;
     return now_ms;
 #else
-    mlfatal("clock_gettime() not available");
-    return 0;
+#error "clock_gettime() is not available"
 #endif
 }
 
