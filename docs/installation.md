@@ -10,7 +10,7 @@ Pre-built image can be obtained from [CZ.NIC DNS Shotgun
 Registry](https://gitlab.nic.cz/knot/shotgun/container_registry/65).
 
 ```
-$ docker pull registry.nic.cz/knot/shotgun:v20210203
+$ docker pull registry.nic.cz/knot/shotgun:v20210714
 ```
 
 Alternately, you can build the image yourself from Dockerfile in the repository.
@@ -25,7 +25,7 @@ Alternately, you can build the image yourself from Dockerfile in the repository.
 $ docker run \
     --network host \
     -v "$PWD:/mnt" \
-    registry.nic.cz/knot/shotgun:v20210203 \
+    registry.nic.cz/knot/shotgun:v20210714 \
     $COMMAND
 ```
 
@@ -38,7 +38,7 @@ development happens in master branch.
 
 ```
 $ git clone https://gitlab.nic.cz/knot/shotgun.git
-$ git checkout v20210203
+$ git checkout v20210714
 $ cd shotgun/replay/dnssim
 $ ./autogen.sh
 $ ./configure
