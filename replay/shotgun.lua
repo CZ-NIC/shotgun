@@ -65,9 +65,6 @@ local function send_thread_main(thr)
 	elseif protocol_func == "tls" then
 		cmd = cmd .. "('" .. gnutls_priority .. "')"
 	elseif protocol_func == "https2" then
-		if type(output.https2) ~= "function" then
-			log:fatal("https2 isn't supported with this version of dnsjit")
-		end
 		cmd = cmd .. "({ method = '" .. http_method .. "' }, '" .. gnutls_priority .. "')"
 	else
 		log:fatal("unknown protocol_func: " .. protocol_func)
