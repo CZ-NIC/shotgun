@@ -206,6 +206,7 @@ def main():
     ax = init_plot(args.title)
 
     colors = list(mcolors.TABLEAU_COLORS.keys()) + list(mcolors.BASE_COLORS.keys())
+    colors.remove('w')  # avoid white line on white background
     for json_path, color in itertools.zip_longest(args.json_file, colors[:len(args.json_file)]):
         try:
             process_file(json_path, color, args, ax)
