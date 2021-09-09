@@ -223,8 +223,8 @@ while true do
 		obj_pcap_out.caplen = obj_pcap_out.len
 
 		put_uint16_be(bytes, 4, obj_udp.ulen)  -- IPv6 payload length
-		put_uint16_be(bytes, 40, obj_udp.sport)
-		put_uint16_be(bytes, 42, obj_udp.dport)
+		put_uint16_be(bytes, 40, 0x0035)  -- normalized src port 53
+		put_uint16_be(bytes, 42, 0x0035)  -- normalized dst port 53
 		put_uint16_be(bytes, 44, obj_udp.ulen)
 		put_uint16_be(bytes, 46, obj_udp.sum)
 		ffi.copy(bytes + HEADERSLEN, obj_pl.payload, obj_pl.len)
