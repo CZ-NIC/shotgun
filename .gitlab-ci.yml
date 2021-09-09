@@ -6,7 +6,7 @@ stages:
   - deploy
 
 .debian: &debian
-  image: $CI_REGISTRY/knot/knot-resolver/ci/debian-buster:knot-3.0
+  image: $CI_REGISTRY/knot/knot-resolver/ci/debian-11:knot-3.0
   tags:
     - docker
     - linux
