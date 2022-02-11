@@ -22,6 +22,7 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ "p", "port", 53, "destination port to check for UDP DNS queries", "?" },
 	{ "m", "malformed", false, "include malformed queries", "?" },
 	{ "M", "only-malformed", false, "include only malformed queries", "?" },
+	{ "s", "special", false, "include 'special' queries for *.dotnxdomain.net", "?" },
 	{ "a", "address", "", "destination address (can be specified multiple times)", "?*" },
 })
 
@@ -45,9 +46,10 @@ args.read = getopt:val("r")
 args.interface = getopt:val("i")
 args.write = getopt:val("w")
 args.port = getopt:val("p")
-args.malformed = getopt:val("m")
 args.only_malformed = getopt:val("M")
+args.malformed = getopt:val("m") or args.only_malformed
 args.csv = getopt:val("csv")
+args.special = getopt:val("s")
 args.address = getopt:val("a")
 
 -- Display help
@@ -117,7 +119,54 @@ local function matches_addresses(ip, len)
 	return false
 end
 
+local function is_special_qname(payload, qlabels, max_labels)
+	local found_labels = 0
+	-- iterate over label lengths to the or label array end
+	for n = 1, max_labels do
+		local qlabel = qlabels[n - 1]
+		if qlabel.have_offset == 1 then
+			return nil -- malformed, qname should not be compressed
+		elseif qlabel.have_dn == 0 then
+			break  -- end of label array
+		end
+		-- have_dn == 1, continue to see if there are further labels
+		found_labels = n
+	end
+	-- check if qname can have form *.dotnxdomain.net.
+	if found_labels < 4 then
+		return false
+	end
+	-- malformed, qname must be terminated with root label
+	if qlabels[found_labels].length ~= 0 then
+		return nil
+	end
+
+	-- is it in net.?
+	local tld = qlabels[found_labels - 1]
+	if tld.length ~= 3 then
+		return false
+	end
+	local tlddata = ffi.cast('char *', payload + tld.offset + 1)
+	if ffi.string(tlddata, tld.length):lower() ~= 'net' then
+		return false
+	end
+
+	-- is it in dotnxdomain.net.?
+	local sld = qlabels[found_labels - 2]
+	if sld.length ~= 11 then
+		return false
+	end
+	local slddata = ffi.cast('char *', payload + sld.offset + 1)
+	if ffi.string(slddata, sld.length):lower() ~= 'dotnxdomain' then
+		return false
+	end
+
+	return true
+end
+
+
 local nmalformed = 0
+local nspecial = 0
 -- Filtering function that picks only DNS queries
 local function is_dnsq(obj)
 	local payload = obj:cast_to(object.PAYLOAD)
@@ -137,14 +186,20 @@ local function is_dnsq(obj)
 	dns.obj_prev = obj
 	dns:parse_header()
 	if dns.qr == 1 then return false end  -- ignore DNS responses
-	if args.malformed then return true end
 
 	-- check that query isn't malformed
 	if dns.qdcount > 0 then  -- parse all questions
 		for _ = 1, dns.qdcount do
 			if dns:parse_q(dns_q, labels, 127) ~= 0 then
 				nmalformed = nmalformed + 1
-				return args.only_malformed
+				return args.malformed
+			end
+			local is_special = is_special_qname(dns.payload, labels, 127)
+			if is_special == nil then
+				return args.malformed
+			elseif is_special and not args.special then
+				nspecial = nspecial + 1
+				return false
 			end
 		end
 	end
@@ -153,7 +208,7 @@ local function is_dnsq(obj)
 		for _ = 1, rrcount do
 			if dns:parse_rr(dns_rr, labels, 127) ~= 0 then
 				nmalformed = nmalformed + 1
-				return args.only_malformed
+				return args.malformed
 			end
 		end
 	end
@@ -182,13 +237,27 @@ if npackets_out == 0 then
 else
 	log:notice("%0.f out of %0.f packets matched filter (%f %%)",
 		npackets_out, npackets_in, npackets_out / npackets_in * 100)
-	if not args.malformed and not args.only_malformed then
-		if nmalformed > 0 then
-			log:notice("%0.f malformed DNS packets detected and omitted "
-					.. "(%f %% of matching packets)",
-				nmalformed, nmalformed / (nmalformed + npackets_out) * 100)
+	if nmalformed > 0 then
+		local total
+		if args.only_malformed then
+			total = npackets_out
 		else
-			log:info("0 malformed DNS packets detected")
+			total = npackets_out + nmalformed
 		end
+		local malformed_desc
+		if args.malformed then
+			malformed_desc = "and written to output"
+		else
+			malformed_desc = "and omitted from output"
+		end
+		log:notice("%0.f malformed DNS packets detected "
+				.. "(%f %% of matching packets) %s",
+			nmalformed, nmalformed / total * 100, malformed_desc)
+	else
+		log:info("0 malformed DNS packets detected")
+	end
+	if nspecial > 0 then
+		log:notice("%0.f special queries for *.dotnxdomain.net were "
+			   .. "omitted from output", nspecial)
 	end
 end
