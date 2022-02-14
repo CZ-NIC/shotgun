@@ -108,6 +108,9 @@ def main():
     lines = []
     labels = []
 
+    if len(COLORS) < len(args.csv):
+        logging.critical('more than %d input files at once is not supported', len(COLORS))
+        sys.exit(3)
     for color, csv_inf in zip(COLORS, args.csv):
         label = os.path.basename(csv_inf)
         logging.info('Processing: %s', label)
