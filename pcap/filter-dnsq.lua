@@ -18,7 +18,7 @@ local log = require("dnsjit.core.log").new("filter-dnsq.lua")
 local getopt = require("dnsjit.lib.getopt").new({
 	{ "r", "read", "", "input file to read", "?" },
 	{ "i", "interface", "", "capture interface", "?" },
-	{ "w", "write", "", "output file to write", "?" },
+	{ "w", "write", "", "output file to write (or /dev/null)", "?" },
 	{ "p", "port", 53, "destination port to check for UDP DNS queries", "?" },
 	{ "m", "malformed", false, "include malformed queries", "?" },
 	{ "M", "only-malformed", false, "include only malformed queries", "?" },
@@ -99,8 +99,7 @@ local produce, pctx = layer:produce()
 
 -- Set up output
 if args.write == "" then
-	log:notice("no output specified, only counting packets")
-	output = require("dnsjit.output.null").new()
+	log:fatal("output must be specified, use -w; use /dev/null if you want just counters")
 elseif output:open(args.write, input:linktype(), input:snaplen()) ~= 0 then
 	log:fatal("failed to open output PCAP "..args.write)
 else
@@ -173,9 +172,7 @@ while true do
 	end
 end
 
-if args.write ~= "" then
-	output:close()
-end
+output:close()
 
 if npackets_out == 0 then
 	log:fatal("no packets were matched by filter!")
