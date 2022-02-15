@@ -31,6 +31,14 @@ if ffi.os == "OSX" then
     AF_INET6 = 30
 end
 
+local args
+
+local function check_output()
+	if output:have_errors() then
+		log:fatal("error writting to file %s", args.write)
+	end
+end
+
 ffi.cdef[[
     int inet_pton(int af, const char* src, void* dst);
     int memcmp(const void *s1, const void *s2, size_t n);
@@ -39,7 +47,7 @@ ffi.cdef[[
 log:enable("all")
 
 -- Parse arguments
-local args = {}
+args = {}
 getopt:parse()
 args.read = getopt:val("r")
 args.interface = getopt:val("i")
@@ -169,9 +177,13 @@ while true do
 	if is_dnsq(obj) then
 		write(writectx, obj)
 		npackets_out = npackets_out + 1
+		if npackets_out % 10000 == 0 then
+			check_output()
+		end
 	end
 end
 
+check_output()
 output:close()
 
 if npackets_out == 0 then
