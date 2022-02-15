@@ -141,6 +141,12 @@ local i_client = 0
 local ct_4b = ffi.typeof("uint8_t[4]")
 local now_ms, diff_ms, chunk_since_ms, chunk_until_ms
 
+local function check_output()
+	if output:have_errors() then
+		log:fatal("error writting to file %s", outfilename)
+	end
+end
+
 local function chunk_init()
 	local opened
 	repeat
@@ -162,6 +168,7 @@ local function chunk_init()
 end
 
 local function chunk_finalize()
+	check_output()
 	output:close()
 	local duration_s = (chunk_until_ms - chunk_since_ms) / 1e3
 	log:info(string.format("    duration_s: %.3f", duration_s))
@@ -173,6 +180,7 @@ local function chunk_finalize()
 end
 
 local obj, obj_pcap_in, obj_ip, obj_udp, obj_pl, client, src_ip, ip_len, prev_ms
+local npacketsout = 0
 while true do
 	obj = produce(pctx)
 	if obj == nil then break end
@@ -229,7 +237,12 @@ while true do
 		put_uint16_be(bytes, 46, obj_udp.sum)
 		ffi.copy(bytes + HEADERSLEN, obj_pl.payload, obj_pl.len)
 
+		-- check output state only every 10 000 packets - optimization
+		if npacketsout % 10000 == 0 then
+			check_output()
+		end
 		write(writectx, obj_pcap_out:uncast())
+		npacketsout = npacketsout + 1
 	end
 end
 
