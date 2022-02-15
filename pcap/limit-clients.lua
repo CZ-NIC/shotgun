@@ -14,7 +14,7 @@ local input = require("dnsjit.input.pcap").new()
 local output = require("dnsjit.output.pcap").new()
 local layer = require("dnsjit.filter.layer").new()
 local object = require("dnsjit.core.objects")
-local log = require("dnsjit.core.log").new("extract-clients.lua")
+local log = require("dnsjit.core.log").new("limit-clients.lua")
 local getopt = require("dnsjit.lib.getopt").new({
 	{ "r", "read", "", "input file to read", "?" },
 	{ "w", "write", "", "output file to write", "?" },
