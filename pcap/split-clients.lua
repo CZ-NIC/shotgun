@@ -6,18 +6,6 @@
 -- Every unique IP (client) will be assigned to a one output file.
 -- All of client's packets remain intact and go into a single file.
 
---- Check if a file or directory exists in this path
-local function exists(file)
-   local ok, err, code = os.rename(file, file)
-   if not ok then
-      if code == 13 then
-         -- Permission denied, but it exists
-         return true
-      end
-   end
-   return ok, err
-end
-
 local ffi = require("ffi")
 local input = require("dnsjit.input.pcap").new()
 local layer = require("dnsjit.filter.layer").new()
@@ -34,6 +22,25 @@ local SNAPLEN = 66000
 local LINKTYPE = 12  -- DLT_RAW in Linux, see https://github.com/the-tcpdump-group/libpcap/blob/master/pcap/dlt.h
 
 log:enable("all")
+
+--- Check if a file or directory exists in this path
+local function exists(file)
+   local ok, err, code = os.rename(file, file)
+   if not ok then
+      if code == 13 then
+         -- Permission denied, but it exists
+         return true
+      end
+   end
+   return ok, err
+end
+
+-- Error out if write failed
+local function check_output(output, filename)
+	if output:have_errors() then
+		log:fatal("error writting to file %s", filename)
+	end
+end
 
 -- Parse arguments
 local args = {}
@@ -96,7 +103,7 @@ local client2output = {}
 
 local npackets = 0
 local ip_len = 16
-local obj, obj_ip, output_id, src_ip, write, writectx
+local obj, obj_ip, output_id, src_ip
 while true do
 	obj = produce(pctx)
 	if obj == nil then break end
@@ -114,10 +121,12 @@ while true do
 		outputs[output_id]['nclients'] = outputs[output_id]['nclients'] + 1
 		nclients = nclients + 1
 	end
-
-	write, writectx = outputs[output_id]['write'], outputs[output_id]['writectx']
-	outputs[output_id]['npackets'] = outputs[output_id]['npackets'] + 1
-	write(writectx, obj)
+	local output_tab = outputs[output_id]
+	output_tab.write(output_tab.writectx, obj)
+	output_tab.npackets = output_tab.npackets + 1
+	if output_tab.npackets % 10000 == 0 then
+		check_output(output_tab.output, output_tab.fn)
+	end
 end
 
 if npackets == 0 then
@@ -126,6 +135,7 @@ else
 	log:info("processed %0.f input packets", npackets)
 end
 for _, output in pairs(outputs) do
+	check_output(output['output'], output['fn'])
 	log:info("%s: clients: %0.f packets: %0.f", output['fn'], output['nclients'], output['npackets'])
 end
 
