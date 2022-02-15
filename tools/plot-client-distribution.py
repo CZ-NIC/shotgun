@@ -11,6 +11,7 @@ import traceback
 from typing import Dict, List, Union
 
 # Force matplotlib to use a different backend to handle machines without a display
+from cycler import cycler
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.colors  # noqa
@@ -19,10 +20,6 @@ import matplotlib.pyplot as plt  # noqa
 
 
 SCALE_MAGIC = 10000
-
-
-COLORS = [matplotlib.colors.to_rgba(c)
-          for c in plt.rcParams['axes.prop_cycle'].by_key()['color']]
 
 
 def init_plot(title):
@@ -39,7 +36,14 @@ def init_plot(title):
     ax.set_ylabel('Percentage of clients')
     ax.set_title(title)
 
-    return ax
+    colors = [matplotlib.colors.to_rgba(c)
+              for c in plt.rcParams['axes.prop_cycle'].by_key()['color']]
+    default_cycler = (
+        cycler(hatch=[None, '++', 'xx', 'oo']) *
+        cycler(facecolor=colors)
+    )
+
+    return ax, default_cycler
 
 
 def count_client_queries(
@@ -50,7 +54,7 @@ def count_client_queries(
         return {row['ip']: int(row['packets']) for row in reader}
 
 
-def plot_client_query_scatter(ax, clients: Dict[str, int], color):
+def plot_client_query_scatter(ax, clients: Dict[str, int], plot_props):
     data = clients.values()
 
     x = []
@@ -85,8 +89,8 @@ def plot_client_query_scatter(ax, clients: Dict[str, int], color):
     s_tot = sum(s)
     s = [size * (SCALE_MAGIC / s_tot) for size in s]
 
-    ax.scatter(x, y, s, color=color, alpha=0.5)
-    ax.scatter(x, y, linewidth=1, color=color, marker='x', alpha=0.5)
+    ax.scatter(x, y, s, alpha=0.5, **plot_props)
+    ax.scatter(x, y, linewidth=1, marker='x', alpha=0.5, **plot_props)
 
 
 def main():
@@ -103,12 +107,16 @@ def main():
                         help='output filename (default: clients.svg)')
     args = parser.parse_args()
 
-    ax = init_plot("Query distribution among clients")
+    ax, plot_cycler = init_plot("Query distribution among clients")
     handles = []
     lines = []
     labels = []
 
-    for color, csv_inf in zip(COLORS, args.csv):
+    if len(plot_cycler) < len(args.csv):
+        logging.critical('more than %d input files at once is not supported, got %d',
+                         len(plot_cycler), len(args.csv))
+        sys.exit(3)
+    for plot_props, csv_inf in zip(plot_cycler, args.csv):
         label = os.path.basename(csv_inf)
         logging.info('Processing: %s', label)
         try:
@@ -122,8 +130,8 @@ def main():
             sys.exit(1)
         else:
             labels.append(label)
-            lines.append(Line2D([0], [0], color=color, lw=4))
-            handles.append(plot_client_query_scatter(ax, clients_qps, color))
+            lines.append(matplotlib.patches.Patch(**plot_props))
+            handles.append(plot_client_query_scatter(ax, clients_qps, plot_props))
 
     ax.legend(lines, labels, loc="lower left")
     plt.savefig(args.output)
