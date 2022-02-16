@@ -42,6 +42,7 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ "d", "duration", 0, "duration of each chunk (in seconds, 0 means entire file)", "?" },
 	{ "k", "keep", false, "keep last chunk even if it's incomplete", "?" },
 	{ nil, "seed", seed_def, "seed for RNG", "?" },
+	{ nil, "stdout", false, "output to stdout as a single file, no splits", "?" },
 })
 
 local SNAPLEN = 66000
@@ -58,6 +59,7 @@ args.duration = getopt:val("d")
 args.keep = getopt:val("k")
 args.outdir = getopt:val("O")
 args.seed = getopt:val("seed")
+args.stdout = getopt:val("stdout")
 math.randomseed(args.seed)
 
 -- Display help
@@ -67,6 +69,11 @@ if getopt:val("help") then
 end
 
 -- Check arguments
+if args.stdout then
+	if args.duration ~= 0 or args.outdir ~= "" then
+		log.fatal("--stdout is mutualy exclusive with -d and -O, use -O ''")
+	end
+end
 if args.duration < 0 then
 	log:fatal("duration can't be negative")
 elseif args.duration == 0 then
@@ -75,7 +82,7 @@ elseif args.duration == 0 then
 else
 	log:notice("file will be split every " .. args.duration .. " seconds")
 end
-if args.outdir == "" or not exists(args.outdir .. "/") then
+if not args.stdout and (args.outdir == "" or not exists(args.outdir .. "/")) then
 	log.fatal("output directory \"" .. args.outdir .. "\" doesn't exist")
 end
 
@@ -98,10 +105,14 @@ local chunk_id
 local write, writectx
 local outfilename
 local function open_pcap()
-	outfilename = args.outdir .. "/" .. chunk_id .. ".pcap"
-	if exists(outfilename) then
-		log:warning("chunk_id collision detected! skipping: " .. outfilename)
-		return false
+	if args.stdout then
+		outfilename = "-"
+	else
+		outfilename = args.outdir .. "/" .. chunk_id .. ".pcap"
+		if exists(outfilename) then
+			log:warning("chunk_id collision detected! skipping: " .. outfilename)
+			return false
+		end
 	end
 	if output:open(outfilename, LINKTYPE, SNAPLEN) ~= 0 then
 		log:fatal("failed to open chunk file " .. outfilename)
