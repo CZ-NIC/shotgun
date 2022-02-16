@@ -46,6 +46,13 @@ local function get_next_pkt(producer, pctx)
 	end
 end
 
+local out_filename
+local function check_output()
+       if output:have_errors() then
+               log.fatal("error writting to file %s", out_filename)
+       end
+end
+
 log.enable("all")
 if #arg ~= 4 or not tonumber(arg[4]) then
 	print("usage: "..arg[1].." <pcap file in | -> <pcap file out | -> <unix timestamp to cut at>")
@@ -54,8 +61,9 @@ if #arg ~= 4 or not tonumber(arg[4]) then
 end
 
 local in_filename = arg[2]
-local out_filename = arg[3]
+out_filename = arg[3]
 local until_s = tonumber(arg[4])
+
 if until_s ~= math.floor(until_s) or until_s <= 0 then
 	log.fatal('unsupported stop timestamp: use an integer > 0')
 end
@@ -79,10 +87,16 @@ while cur_pkt do
 		break
 	end
 	receiver(rctx, cur_obj)
+	--
+	-- check output state only every 10 000 packets - optimization
+	if npackets % 10000 == 0 then
+	        check_output()
+	end
 	npackets = npackets + 1
 	cur_obj, cur_pkt = get_next_pkt(producer, pctx)
 end
 
+check_output()
 log.info('output %.f packets', npackets)
 log.debug('closing output file %s', out_filename)
 output:close()

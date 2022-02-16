@@ -18,7 +18,7 @@ local log = require("dnsjit.core.log").new("filter-dnsq.lua")
 local getopt = require("dnsjit.lib.getopt").new({
 	{ "r", "read", "", "input file to read", "?" },
 	{ "i", "interface", "", "capture interface", "?" },
-	{ "w", "write", "", "output file to write", "?" },
+	{ "w", "write", "", "output file to write (or /dev/null)", "?" },
 	{ "p", "port", 53, "destination port to check for UDP DNS queries", "?" },
 	{ "m", "malformed", false, "include malformed queries", "?" },
 	{ "M", "only-malformed", false, "include only malformed queries", "?" },
@@ -31,6 +31,14 @@ if ffi.os == "OSX" then
     AF_INET6 = 30
 end
 
+local args
+
+local function check_output()
+	if output:have_errors() then
+		log:fatal("error writting to file %s", args.write)
+	end
+end
+
 ffi.cdef[[
     int inet_pton(int af, const char* src, void* dst);
     int memcmp(const void *s1, const void *s2, size_t n);
@@ -39,7 +47,7 @@ ffi.cdef[[
 log:enable("all")
 
 -- Parse arguments
-local args = {}
+args = {}
 getopt:parse()
 args.read = getopt:val("r")
 args.interface = getopt:val("i")
@@ -99,8 +107,7 @@ local produce, pctx = layer:produce()
 
 -- Set up output
 if args.write == "" then
-	log:notice("no output specified, only counting packets")
-	output = require("dnsjit.output.null").new()
+	log:fatal("output must be specified, use -w; use /dev/null if you want just counters")
 elseif output:open(args.write, input:linktype(), input:snaplen()) ~= 0 then
 	log:fatal("failed to open output PCAP "..args.write)
 else
@@ -170,12 +177,14 @@ while true do
 	if is_dnsq(obj) then
 		write(writectx, obj)
 		npackets_out = npackets_out + 1
+		if npackets_out % 10000 == 0 then
+			check_output()
+		end
 	end
 end
 
-if args.write ~= "" then
-	output:close()
-end
+check_output()
+output:close()
 
 if npackets_out == 0 then
 	log:fatal("no packets were matched by filter!")

@@ -14,7 +14,7 @@ local input = require("dnsjit.input.pcap").new()
 local output = require("dnsjit.output.pcap").new()
 local layer = require("dnsjit.filter.layer").new()
 local object = require("dnsjit.core.objects")
-local log = require("dnsjit.core.log").new("extract-clients.lua")
+local log = require("dnsjit.core.log").new("limit-clients.lua")
 local getopt = require("dnsjit.lib.getopt").new({
 	{ "r", "read", "", "input file to read", "?" },
 	{ "w", "write", "", "output file to write", "?" },
@@ -25,10 +25,18 @@ local getopt = require("dnsjit.lib.getopt").new({
 local SNAPLEN = 66000
 local LINKTYPE = 12  -- DLT_RAW in Linux, see https://github.com/the-tcpdump-group/libpcap/blob/master/pcap/dlt.h
 
+local args
+
+local function check_output()
+	if output:have_errors() then
+		log:fatal("error writting to file %s", args.write)
+	end
+end
+
 log:enable("all")
 
 -- Parse arguments
-local args = {}
+args = {}
 getopt:parse()
 args.read = getopt:val("r")
 args.write = getopt:val("w")
@@ -77,7 +85,7 @@ local write, writectx = output:receive()
 
 local clients = {}
 local n_present = 0
-
+local n_packets = 0
 
 local obj, obj_pcap_in, obj_ip, obj_pl, src_ip, ip_len, present
 while true do
@@ -106,8 +114,13 @@ while true do
 
 		if present then
 			write(writectx, obj)
+			n_packets = n_packets + 1
+			if n_packets % 10000 == 0 then
+				check_output()
+			end
 		end
 	end
 end
 
+check_output()
 log:info(string.format("    number of clients: %d", n_present))
