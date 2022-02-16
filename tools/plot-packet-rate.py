@@ -136,6 +136,10 @@ def main():
     # initialize graph
     ax, plot_props = init_plot(args.title)
 
+    if len(plot_props) < len(args.csv_file):
+        logging.critical('more than %d input files at once is not supported, got %d',
+                         len(plot_props), len(args.csv_file))
+        sys.exit(3)
     for csv_path, line_props in zip(args.csv_file, plot_props):
         try:
             with open(csv_path) as f:
