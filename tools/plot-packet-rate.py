@@ -10,7 +10,9 @@ import sys
 from typing import Dict, Tuple
 
 # pylint: disable=wrong-import-order,wrong-import-position
+from cycler import cycler
 import matplotlib
+import matplotlib.colors
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt  # noqa
 
@@ -28,17 +30,22 @@ def init_plot(title):
     ax.grid(True, axis='y', which='both', linestyle='dotted')
     plt.minorticks_on()
 
-    return ax
+    default_cycler = (
+        cycler(marker=['x', 'o', 'v', 's']) *
+        cycler(color=list(matplotlib.colors.TABLEAU_COLORS.keys()))
+    )
+
+    return ax, default_cycler
 
 
-def plot(ax, data, label, since, until):
+def plot(ax, data, label, since, until, line_props):
     xvalues = []
     yvalues = []
     for time_s, rate in data.items():
         xvalues.append(time_s)
         yvalues.append(rate)
 
-    ax.plot(xvalues, yvalues, label=label, marker='x', linestyle='')
+    ax.plot(xvalues, yvalues, label=label, linestyle='', **line_props)
     ax.set_xlim(xmin=since)
     if math.isfinite(until):
         ax.set_xlim(xmax=until)
@@ -127,9 +134,13 @@ def main():
     args = parser.parse_args()
 
     # initialize graph
-    ax = init_plot(args.title)
+    ax, plot_props = init_plot(args.title)
 
-    for csv_path in args.csv_file:
+    if len(plot_props) < len(args.csv_file):
+        logging.critical('more than %d input files at once is not supported, got %d',
+                         len(plot_props), len(args.csv_file))
+        sys.exit(3)
+    for csv_path, line_props in zip(args.csv_file, plot_props):
         try:
             with open(csv_path) as f:
                 period, xyrate = parse_csv(f, args.since, args.until)
@@ -157,7 +168,7 @@ def main():
             period_str = f'avg {n_samples} samples with period {round(period, 4)} s ' \
                          f'= new period {round(n_samples * period, 4)} s'
             xyrate = xyrate_average(xyrate, period, n_samples)
-        plot(ax, xyrate, f'{name} ({period_str})', args.since, args.until)
+        plot(ax, xyrate, f'{name} ({period_str})', args.since, args.until, line_props)
 
     plt.legend()
     plt.savefig(args.output)
