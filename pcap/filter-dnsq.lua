@@ -22,6 +22,8 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ "p", "port", 53, "destination port to check for UDP DNS queries", "?" },
 	{ "m", "malformed", false, "include malformed queries", "?" },
 	{ "M", "only-malformed", false, "include only malformed queries", "?" },
+	{ "s", "skipped", false, "include queries for *.dotnxdomain.net, "
+				 .. "which would otherwise be skipped", "?" },
 	{ "a", "address", "", "destination address (can be specified multiple times)", "?*" },
 })
 
@@ -56,6 +58,7 @@ args.port = getopt:val("p")
 args.only_malformed = getopt:val("M")
 args.malformed = getopt:val("m") or args.only_malformed
 args.csv = getopt:val("csv")
+args.skipped = getopt:val("s")
 args.address = getopt:val("a")
 
 -- Display help
@@ -124,7 +127,54 @@ local function matches_addresses(ip, len)
 	return false
 end
 
+local function is_skipped_qname(payload, qlabels, max_labels)
+	local found_labels = 0
+	-- iterate over label lengths to the or label array end
+	for n = 1, max_labels do
+		local qlabel = qlabels[n - 1]
+		if qlabel.have_offset == 1 then
+			return nil -- malformed, qname should not be compressed
+		elseif qlabel.have_dn == 0 then
+			break  -- end of label array
+		end
+		-- have_dn == 1, continue to see if there are further labels
+		found_labels = n
+	end
+	-- check if qname can have form *.dotnxdomain.net.
+	if found_labels < 3 then
+		return false
+	end
+	-- malformed, qname must be terminated with root label
+	if qlabels[found_labels].length ~= 0 then
+		return nil
+	end
+
+	-- is it in net.?
+	local tld = qlabels[found_labels - 1]
+	if tld.length ~= 3 then
+		return false
+	end
+	local tlddata = ffi.cast('char *', payload + tld.offset + 1)
+	if ffi.string(tlddata, tld.length):lower() ~= 'net' then
+		return false
+	end
+
+	-- is it in dotnxdomain.net.?
+	local sld = qlabels[found_labels - 2]
+	if sld.length ~= 11 then
+		return false
+	end
+	local slddata = ffi.cast('char *', payload + sld.offset + 1)
+	if ffi.string(slddata, sld.length):lower() ~= 'dotnxdomain' then
+		return false
+	end
+
+	return true
+end
+
+
 local nmalformed = 0
+local nskipped = 0
 -- Filtering function that picks only DNS queries
 local function is_dnsq(obj)
 	local payload = obj:cast_to(object.PAYLOAD)
@@ -151,6 +201,14 @@ local function is_dnsq(obj)
 			if dns:parse_q(dns_q, labels, 127) ~= 0 then
 				nmalformed = nmalformed + 1
 				return args.malformed
+			end
+			local is_skipped = is_skipped_qname(dns.payload, labels, 127)
+			if is_skipped == nil then
+				nmalformed = nmalformed + 1
+				return args.malformed
+			elseif is_skipped and not args.skipped then
+				nskipped = nskipped + 1
+				return false
 			end
 		end
 	end
@@ -208,5 +266,9 @@ else
 			nmalformed, nmalformed / total * 100, malformed_desc)
 	else
 		log:info("0 malformed DNS packets detected")
+	end
+	if nskipped > 0 then
+		log:notice("%0.f skipped queries for *.dotnxdomain.net were "
+			   .. "omitted from output", nskipped)
 	end
 end
