@@ -53,8 +53,8 @@ args.read = getopt:val("r")
 args.interface = getopt:val("i")
 args.write = getopt:val("w")
 args.port = getopt:val("p")
-args.malformed = getopt:val("m")
 args.only_malformed = getopt:val("M")
+args.malformed = getopt:val("m") or args.only_malformed
 args.csv = getopt:val("csv")
 args.address = getopt:val("a")
 
@@ -144,14 +144,13 @@ local function is_dnsq(obj)
 	dns.obj_prev = obj
 	dns:parse_header()
 	if dns.qr == 1 then return false end  -- ignore DNS responses
-	if args.malformed then return true end
 
 	-- check that query isn't malformed
 	if dns.qdcount > 0 then  -- parse all questions
 		for _ = 1, dns.qdcount do
 			if dns:parse_q(dns_q, labels, 127) ~= 0 then
 				nmalformed = nmalformed + 1
-				return args.only_malformed
+				return args.malformed
 			end
 		end
 	end
@@ -160,7 +159,7 @@ local function is_dnsq(obj)
 		for _ = 1, rrcount do
 			if dns:parse_rr(dns_rr, labels, 127) ~= 0 then
 				nmalformed = nmalformed + 1
-				return args.only_malformed
+				return args.malformed
 			end
 		end
 	end
@@ -191,13 +190,23 @@ if npackets_out == 0 then
 else
 	log:notice("%0.f out of %0.f packets matched filter (%f %%)",
 		npackets_out, npackets_in, npackets_out / npackets_in * 100)
-	if not args.malformed and not args.only_malformed then
-		if nmalformed > 0 then
-			log:notice("%0.f malformed DNS packets detected and omitted "
-					.. "(%f %% of matching packets)",
-				nmalformed, nmalformed / (nmalformed + npackets_out) * 100)
+	if nmalformed > 0 then
+		local total
+		if args.only_malformed then
+			total = npackets_out
 		else
-			log:info("0 malformed DNS packets detected")
+			total = npackets_out + nmalformed
 		end
+		local malformed_desc
+		if args.malformed then
+			malformed_desc = "and written to output"
+		else
+			malformed_desc = "and omitted from output"
+		end
+		log:notice("%0.f malformed DNS packets detected "
+				.. "(%f %% of matching packets) %s",
+			nmalformed, nmalformed / total * 100, malformed_desc)
+	else
+		log:info("0 malformed DNS packets detected")
 	end
 end
