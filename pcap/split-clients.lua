@@ -34,6 +34,13 @@ local function exists(file)
    return ok, err
 end
 
+-- Error out if write failed
+local function check_output(output, filename)
+	if output:have_errors() then
+		log:fatal("error writting to file %s", filename)
+	end
+end
+
 -- Parse arguments
 local args = {}
 getopt:parse()
@@ -116,6 +123,9 @@ while true do
 	local output_tab = outputs[output_id]
 	output_tab.write(output_tab.writectx, obj)
 	output_tab.npackets = output_tab.npackets + 1
+	if output_tab.npackets % 10000 == 0 then
+		check_output(output_tab.output, output_tab.fn)
+	end
 end
 
 if npackets == 0 then
@@ -124,6 +134,7 @@ else
 	log:info("processed %0.f input packets", npackets)
 end
 for _, output in pairs(outputs) do
+	check_output(output['output'], output['fn'])
 	log:info("%s: clients: %0.f packets: %0.f", output['fn'], output['nclients'], output['npackets'])
 end
 
