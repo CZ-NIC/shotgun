@@ -84,9 +84,11 @@ layer:producer(input)
 local produce, pctx = layer:produce()
 
 local outputs = {}
+local fname_padding = tostring(math.ceil(math.log(args.noutputs, 10)))
 for n = 1, args.noutputs do
 	local output = require("dnsjit.output.pcap").new()
-	local out_fname = string.format("%s/%d.pcap", args.outdir, n)
+	local out_fname = string.format("%s/%0" .. fname_padding
+					.. "d.pcap", args.outdir, n)
 	if output:open(out_fname, LINKTYPE, SNAPLEN) ~= 0 then
 		log:fatal("failed to open chunk file " .. out_fname)
 	else
