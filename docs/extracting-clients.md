@@ -64,3 +64,14 @@ want to scale-down the number of clients in the pellets file to 30 %.
 ```
 $ pcap/limit-clients.lua -r pellets.pcap -w limited.pcap -l 0.3
 ```
+
+An alternative approach is to split an original large pellet to multiple small
+pellets using `split-clients.lua` script. To split one big pellet into 10
+smaller ones use:
+
+```
+$ pcap/split-clients.lua -r pellets.pcap -O output_directory -n 10
+```
+
+Every client will be assigned to a one output file. All of client's packets
+remain intact and go into a single file.
