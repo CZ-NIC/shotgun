@@ -40,7 +40,7 @@ def siname(n):
 
 
 def init_plot(title):
-    _, ax = plt.subplots(figsize=(8, 6))
+    _, ax = plt.subplots(figsize=(16, 9))
 
     ax.set_xlabel("Time [s]")
     ax.set_ylabel("Number of connections")
@@ -48,7 +48,7 @@ def init_plot(title):
 
     ax.grid(True, axis="x", which="major")
     ax.grid(True, axis="y", which="major")
-    ax.grid(True, axis="y", which="minor", linestyle="--", color="#DDDDDD")
+    ax.grid(True, axis="y", which="minor", linestyle="dotted", color="#DDDDDD")
 
     return ax
 
@@ -69,7 +69,7 @@ def plot(ax, data, label, eval_func, min_timespan=0, color=None):
         xvalues.append(time)
         yvalues.append(eval_func(stats))
 
-    ax.plot(xvalues, yvalues, label=label, marker="o", linestyle="--", color=color)
+    ax.plot(xvalues, yvalues, label=label, marker="x", linestyle="dotted", color=color)
 
 
 def main():

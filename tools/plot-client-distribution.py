@@ -24,7 +24,7 @@ SCALE_MAGIC = 10000
 
 
 def init_plot(title):
-    _, ax = plt.subplots(figsize=(9, 9))
+    _, ax = plt.subplots(figsize=(16, 9))
 
     ax.set_xscale("log")
     ax.set_yscale("log")
