@@ -20,7 +20,7 @@ sinames = ['', ' k', ' M', ' G', ' T']
 
 
 def init_plot(title):
-    _, ax = plt.subplots(figsize=(8, 6))
+    _, ax = plt.subplots(figsize=(16, 9))
 
     ax.set_xlabel('Time [s]')
     ax.set_ylabel('Packets per sampling period')
@@ -45,7 +45,7 @@ def plot(ax, data, label, since, until, line_props):
         xvalues.append(time_s)
         yvalues.append(rate)
 
-    ax.plot(xvalues, yvalues, label=label, linestyle='', **line_props)
+    ax.plot(xvalues, yvalues, label=label, linestyle='dotted', **line_props)
     ax.set_xlim(xmin=since)
     if math.isfinite(until):
         ax.set_xlim(xmax=until)

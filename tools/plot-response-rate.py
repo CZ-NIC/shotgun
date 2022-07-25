@@ -118,7 +118,7 @@ response_rate = stat_field_rate('answers')
 
 
 def init_plot(title):
-    _, ax = plt.subplots(figsize=(8, 6))
+    _, ax = plt.subplots(figsize=(16, 9))
 
     ax.set_xlabel('Time [s]')
     ax.set_ylabel('Response Rate [%]')
@@ -130,7 +130,7 @@ def init_plot(title):
     ax.grid(True, axis='y', which='major')
 
     ax.yaxis.set_minor_locator(MultipleLocator(2))
-    ax.grid(True, axis='y', which='minor', linestyle='dashed', color='#DDDDDD')
+    ax.grid(True, axis='y', which='minor', linestyle='dotted', color='#DDDDDD')
 
     return ax
 
@@ -146,7 +146,7 @@ def set_axes_limits(ax):
 
 def plot_response_rate(
         ax, data, label,
-        eval_func=None, min_timespan=0, marker='o', linestyle='--', color=None):
+        eval_func=None, min_timespan=0, marker='x', linestyle='dotted', color=None):
     stats_periodic = data['stats_periodic']
     time_offset = stats_periodic[0]['since_ms']
 
