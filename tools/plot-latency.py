@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from IPython.core.debugger import set_trace
 
 # NOTE: Due to a weird bug, numpy is detected as a 3rd party module, while lmdb
 #       is not and pylint complains about wrong-import-order.
@@ -39,7 +38,7 @@ def siname(n):
     siidx = max(
         0,
         min(len(sinames) - 1, int(math.floor(0 if n == 0 else math.log10(abs(n)) / 3))),
-    )
+                )
     return "{:.0f}{}".format(n / 10 ** (3 * siidx), sinames[siidx])
 
 
@@ -61,6 +60,31 @@ def init_plot(title):
     ax.set_xlabel("Slowest percentile")
     ax.set_ylabel("Response time [us]")
     ax.set_title(title)
+
+    if True:
+        ax.annotate('smaller latency', xy=(0.10, 0.10), xytext=(0.15, 0.2), xycoords='data',
+                arrowprops=dict(color='gray', lw=1, fc='w', shrink=0.1),
+                )
+
+        ax.annotate('higher latency', xy=(100, 2000), xytext=(25, 1010), xycoords='data',
+                arrowprops=dict(color='gray', lw=1, fc='w', shrink=0.05),
+                )
+
+        ax.annotate('client timeout', xy=(0.1, 2000), xytext=(0.15, 1010), xycoords='data',
+                arrowprops=dict(color='gray', lw=1, fc='w', shrink=0.1),
+                )
+
+       # ax.annotate('cache hits', xy=(20, 1), xytext=(30, 2), xycoords='data',
+       #         arrowprops=dict(color='gray', lw=1, fc='w', shrink=0.1),
+       #         )
+
+        #ax.annotate('over 90 % queries\nlatency <= 1 ms', xy=(10, 1), xytext=(6, 0.4), xycoords='data', horizontalalignment='right',
+        #        arrowprops=dict(color='gray', lw=1, fc='w', shrink=0.1),
+        #        )
+
+        #ax.annotate('latency instability', xy=(2, 30), xytext=(4, 40), xycoords='data',
+        #        arrowprops=dict(color='gray', lw=1, fc='w', shrink=0.1))
+
 
     return ax
 
@@ -274,7 +298,7 @@ def main():
             group_yavg = group_ysum
         ax.plot(group_x, group_yavg, lw=1, marker='', label=label)
 
-    plt.legend()
+    plt.legend(loc='center right')
     plt.tight_layout()
     plt.savefig(args.output)
 
