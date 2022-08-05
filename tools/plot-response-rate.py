@@ -111,7 +111,7 @@ response_rate = stat_field_rate("answers")
 
 
 def init_plot(title):
-    _, ax = plt.subplots(figsize=(8, 6))
+    _, ax = plt.subplots()
 
     ax.set_xlabel("Time [s]")
     ax.set_ylabel("Response Rate [%]")

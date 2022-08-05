@@ -46,8 +46,7 @@ def siname(n):
 
 
 def init_plot(title):
-    # plt.rcParams["font.family"] = "monospace"
-    _, ax = plt.subplots(figsize=(9, 9))
+    _, ax = plt.subplots()
 
     ax.set_xscale("log")
     ax.xaxis.set_major_formatter(mtick.FormatStrFormatter("%s"))

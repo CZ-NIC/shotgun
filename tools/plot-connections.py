@@ -40,7 +40,7 @@ def siname(n):
 
 
 def init_plot(title):
-    _, ax = plt.subplots(figsize=(8, 6))
+    _, ax = plt.subplots()
 
     ax.set_xlabel("Time [s]")
     ax.set_ylabel("Number of connections")

@@ -21,7 +21,7 @@ sinames = ["", " k", " M", " G", " T"]
 
 
 def init_plot(title):
-    _, ax = plt.subplots(figsize=(8, 6))
+    _, ax = plt.subplots()
 
     ax.set_xlabel("Time [s]")
     ax.set_ylabel("Packets per sampling period")
