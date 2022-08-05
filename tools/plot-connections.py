@@ -48,7 +48,7 @@ def init_plot(title):
 
     ax.grid(True, axis="x", which="major")
     ax.grid(True, axis="y", which="major")
-    ax.grid(True, axis="y", which="minor", linestyle="--", color="#DDDDDD")
+    ax.grid(True, axis="y", which="minor")
 
     return ax
 

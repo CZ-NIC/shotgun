@@ -54,7 +54,7 @@ def init_plot(title):
     ax.yaxis.set_major_formatter(mtick.FormatStrFormatter("%s"))
 
     ax.grid(True, which="major")
-    ax.grid(True, which="minor", linestyle="dotted", color="#DDDDDD")
+    ax.grid(True, which="minor")
 
     ax.set_xlabel("Slowest percentile")
     ax.set_ylabel("Response time [ms]")

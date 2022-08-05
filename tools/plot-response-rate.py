@@ -123,7 +123,7 @@ def init_plot(title):
     ax.grid(True, axis="y", which="major")
 
     ax.yaxis.set_minor_locator(MultipleLocator(2))
-    ax.grid(True, axis="y", which="minor", linestyle="dashed", color="#DDDDDD")
+    ax.grid(True, axis="y", which="minor")
 
     return ax
 

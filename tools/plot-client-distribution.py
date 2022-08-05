@@ -30,7 +30,7 @@ def init_plot(title):
     ax.set_yscale("log")
 
     ax.grid(True, which="major")
-    ax.grid(True, which="minor", linestyle="dotted", color="#DDDDDD")
+    ax.grid(True, which="minor")
     ax.set_ylim(0.00009, 110)
 
     ax.set_xlabel("Number of queries per client")

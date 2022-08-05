@@ -27,8 +27,8 @@ def init_plot(title):
     ax.set_ylabel("Packets per sampling period")
     ax.set_title(title)
 
-    ax.grid(True, axis="x", which="both", linestyle="dotted")
-    ax.grid(True, axis="y", which="both", linestyle="dotted")
+    ax.grid(True, axis="x", which="both")
+    ax.grid(True, axis="y", which="both")
     plt.minorticks_on()
 
     default_cycler = cycler(marker=["x", "o", "v", "s"]) * cycler(
