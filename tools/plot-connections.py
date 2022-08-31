@@ -66,8 +66,6 @@ def plot(ax, data, label, eval_func, min_timespan=0, color=None):
         yvalues.append(eval_func(stats))
 
     ax.plot(xvalues, yvalues, label=label, marker='o', linestyle='--', color=color)
-    ax.set_xlim(xmin=0)
-    ax.set_ylim(ymin=0)
 
 
 def main():
@@ -126,6 +124,10 @@ def main():
         if 'failed_hs' in args.kind:
             plot(ax, data, label=f'Failed Handshakes ({name})', color=next(COLOR_FAILED_HS),
                  eval_func=lambda stats: stats['conn_handshakes_failed'])
+
+    # set axis boundaries
+    ax.set_xlim(xmin=0)
+    ax.set_ylim(ymin=0)
 
     plt.legend()
     plt.savefig(args.output)
