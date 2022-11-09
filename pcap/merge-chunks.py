@@ -29,7 +29,7 @@ def main():
     parser.add_argument('source_dirs', nargs='+', type=readable_directory,
                         help='Paths to directories with PCAP chunks')
     parser.add_argument('--seed', default=0, type=int,
-                        help='Randomization seed (default: 0)')
+                        help='Randomization seed (default: 0); use negative value to turn off randomization')
     args = parser.parse_args()
 
     # reproducible pseudorandomness
@@ -45,7 +45,8 @@ def main():
         sys.exit(f'{args.nchunks} chunks requested but only {len(pcaps)} available')
 
     pcaps.sort()
-    random.shuffle(pcaps)
+    if args.seed >= 0:
+        random.shuffle(pcaps)
     mergecap_args = ['mergecap', '-F', 'pcap', '-w', '-']
     mergecap_args.extend(pcaps[:args.nchunks])
 
