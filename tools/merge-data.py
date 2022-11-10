@@ -9,14 +9,15 @@ import traceback
 
 
 JSON_VERSION = 20200527
-DEFAULT_FILENAME = 'shotgun-all.json'
+DEFAULT_FILENAME = "shotgun-all.json"
 
 
 class VersionError(RuntimeError):
     def __init__(self):
         super().__init__(
             "Older formats of JSON data aren't supported. "
-            "Use older tooling or re-run the tests with newer shotgun.")
+            "Use older tooling or re-run the tests with newer shotgun."
+        )
 
 
 class MismatchData(RuntimeError):
@@ -26,13 +27,13 @@ class MismatchData(RuntimeError):
 class MissingData(RuntimeError):
     def __init__(self, field):
         super().__init__(
-            'Field "{field}" is missing in one or more files.'.format(field=field))
+            'Field "{field}" is missing in one or more files.'.format(field=field)
+        )
 
 
 class MergeFailed(RuntimeError):
     def __init__(self, field):
-        super().__init__(
-            'Failed to merge field "{field}".'.format(field=field))
+        super().__init__('Failed to merge field "{field}".'.format(field=field))
 
 
 def first(iterable):
@@ -59,36 +60,36 @@ def merge_latency(iterable):
 
 
 DATA_STRUCTURE_STATS = {
-    'since_ms': min,
-    'until_ms': max,
-    'requests': sum,
-    'ongoing': sum,
-    'answers': sum,
-    'conn_active': sum,
-    'conn_resumed': sum,
-    'conn_handshakes': sum,
-    'conn_handshakes_failed': sum,
-    'rcode_noerror': sum,
-    'rcode_formerr': sum,
-    'rcode_servfail': sum,
-    'rcode_nxdomain': sum,
-    'rcode_notimp': sum,
-    'rcode_refused': sum,
-    'rcode_yxdomain': sum,
-    'rcode_yxrrset': sum,
-    'rcode_nxrrset': sum,
-    'rcode_notauth': sum,
-    'rcode_notzone': sum,
-    'rcode_badvers': sum,
-    'rcode_badkey': sum,
-    'rcode_badtime': sum,
-    'rcode_badmode': sum,
-    'rcode_badname': sum,
-    'rcode_badalg': sum,
-    'rcode_badtrunc': sum,
-    'rcode_badcookie': sum,
-    'rcode_other': sum,
-    'latency': merge_latency,
+    "since_ms": min,
+    "until_ms": max,
+    "requests": sum,
+    "ongoing": sum,
+    "answers": sum,
+    "conn_active": sum,
+    "conn_resumed": sum,
+    "conn_handshakes": sum,
+    "conn_handshakes_failed": sum,
+    "rcode_noerror": sum,
+    "rcode_formerr": sum,
+    "rcode_servfail": sum,
+    "rcode_nxdomain": sum,
+    "rcode_notimp": sum,
+    "rcode_refused": sum,
+    "rcode_yxdomain": sum,
+    "rcode_yxrrset": sum,
+    "rcode_nxrrset": sum,
+    "rcode_notauth": sum,
+    "rcode_notzone": sum,
+    "rcode_badvers": sum,
+    "rcode_badkey": sum,
+    "rcode_badtime": sum,
+    "rcode_badmode": sum,
+    "rcode_badname": sum,
+    "rcode_badalg": sum,
+    "rcode_badtrunc": sum,
+    "rcode_badcookie": sum,
+    "rcode_other": sum,
+    "latency": merge_latency,
 }
 
 
@@ -114,13 +115,13 @@ def merge_periodic_stats(iterable):
 
 
 DATA_STRUCTURE_ROOT = {
-    'version': same,
-    'merged': lambda x: True,
-    'stats_interval_ms': same,
-    'timeout_ms': same,
-    'discarded': sum,
-    'stats_sum': merge_stats,
-    'stats_periodic': merge_periodic_stats,
+    "version": same,
+    "merged": lambda x: True,
+    "stats_interval_ms": same,
+    "timeout_ms": same,
+    "discarded": sum,
+    "stats_sum": merge_stats,
+    "stats_periodic": merge_periodic_stats,
 }
 
 
@@ -141,7 +142,7 @@ def merge_fields(fields, thread_data):
 def merge_data(thread_data):
     assert len(thread_data) >= 1
     try:
-        if thread_data[0]['version'] != JSON_VERSION:
+        if thread_data[0]["version"] != JSON_VERSION:
             raise VersionError
     except KeyError as exc:
         raise VersionError from exc
@@ -149,15 +150,16 @@ def merge_data(thread_data):
 
 
 def main():
-    logging.basicConfig(format='%(asctime)s %(levelname)8s  %(message)s', level=logging.DEBUG)
+    logging.basicConfig(
+        format="%(asctime)s %(levelname)8s  %(message)s", level=logging.DEBUG
+    )
 
-    parser = argparse.ArgumentParser(
-        description="Merge JSON shotgun results")
+    parser = argparse.ArgumentParser(description="Merge JSON shotgun results")
 
-    parser.add_argument('json_file', nargs='+',
-                        help='Paths to per-thread JSON results')
-    parser.add_argument('-o', '--output', default=DEFAULT_FILENAME,
-                        help='Output JSON file')
+    parser.add_argument("json_file", nargs="+", help="Paths to per-thread JSON results")
+    parser.add_argument(
+        "-o", "--output", default=DEFAULT_FILENAME, help="Output JSON file"
+    )
     args = parser.parse_args()
 
     outpath = args.output
@@ -172,21 +174,21 @@ def main():
 
         merged = merge_data(thread_data)
 
-        with open(outpath, 'w') as f:
+        with open(outpath, "w") as f:
             json.dump(merged, f)
-        logging.info('DONE: merged shotgun results saved as %s', outpath)
+        logging.info("DONE: merged shotgun results saved as %s", outpath)
     except (FileNotFoundError, VersionError) as exc:
-        logging.critical('%s', exc)
+        logging.critical("%s", exc)
         sys.exit(1)
     except (MergeFailed, MissingData) as exc:
         logging.debug(traceback.format_exc())
-        logging.critical('%s', exc)
+        logging.critical("%s", exc)
         sys.exit(1)
     except Exception as exc:
-        logging.critical('uncaught exception: %s', exc)
+        logging.critical("uncaught exception: %s", exc)
         logging.debug(traceback.format_exc())
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
