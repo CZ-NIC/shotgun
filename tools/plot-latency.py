@@ -169,14 +169,7 @@ def read_json(file_obj):
     return data
 
 
-def main():
-    logging.basicConfig(
-        format="%(asctime)s %(levelname)8s  %(message)s", level=logging.DEBUG
-    )
-    logger = logging.getLogger("matplotlib")
-    # set WARNING for Matplotlib
-    logger.setLevel(logging.WARNING)
-
+def parse_args():
     parser = argparse.ArgumentParser(
         description="Plot query response time histogram from shotgun results"
     )
@@ -236,6 +229,18 @@ def main():
         parser.error(
             "at least one input JSON file required (individually or in a group)"
         )
+    return args
+
+
+def main():
+    logging.basicConfig(
+        format="%(asctime)s %(levelname)8s  %(message)s", level=logging.DEBUG
+    )
+    logger = logging.getLogger("matplotlib")
+    # set WARNING for Matplotlib
+    logger.setLevel(logging.WARNING)
+
+    args = parse_args()
 
     groups = collections.defaultdict(list)
     ax = init_plot(args.title)
