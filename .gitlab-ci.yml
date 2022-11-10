@@ -12,23 +12,27 @@ stages:
     - linux
     - amd64
 
-test:mypy:
+black:
+  image: docker.io/pyfound/black:latest
+  tags:
+    - docker
+    - linux
+    - amd64
+  script:
+    - black --check .
+
+mypy:
   <<: *debian
   script:
     - ./ci/mypy-run.sh
 
-test:flake8:
-  <<: *debian
-  script:
-    - python3 -m flake8 --max-line-length=100 . && echo "OK, no flake8 errors detected"
-
-test:pylint:
+pylint:
   <<: *debian
   script:
     - pip3 install -r requirements.txt
     - ./ci/pylint-run.sh
 
-test:luacheck:
+luacheck:
   <<: *debian
   script:
     - ./ci/luacheck-run.sh
