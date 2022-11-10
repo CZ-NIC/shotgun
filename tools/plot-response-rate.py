@@ -15,7 +15,7 @@ import matplotlib.colors as mcolors
 from matplotlib.ticker import MultipleLocator
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa
+import matplotlib.pyplot as plt
 
 
 JSON_VERSION = 20200527

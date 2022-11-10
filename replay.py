@@ -247,7 +247,7 @@ def make_outdir(outdir: Optional[str], force: bool) -> str:
             else:
                 raise RuntimeError(
                     "File exists at the specified output directory path, use -f/--force if you wish to remove it"
-                )  # noqa
+                )
         if os.path.isdir(outdir) and len(os.listdir(outdir)) != 0:
             if force:
                 logging.info('Removing existing directory "%s"', outdir)
@@ -353,7 +353,7 @@ def main():
         type=str,
         required=True,
         help="traffic configuration TOML (file path or one of defaults: udp, tcp, dot, doh, mixed)",
-    )  # noqa
+    )
     parser.add_argument("-r", "--read", help="PCAP with clients")
     parser.add_argument("-s", "--server", help="target server IP")
     parser.add_argument("-O", "--outdir", help="output directory", type=str)

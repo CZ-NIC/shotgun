@@ -15,7 +15,7 @@ import matplotlib
 import matplotlib.colors
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa
+import matplotlib.pyplot as plt
 
 sinames = ["", " k", " M", " G", " T"]
 

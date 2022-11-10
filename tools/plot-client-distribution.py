@@ -15,9 +15,9 @@ from cycler import cycler
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.colors  # noqa
-from matplotlib.lines import Line2D  # noqa
-import matplotlib.pyplot as plt  # noqa
+import matplotlib.colors
+from matplotlib.lines import Line2D
+import matplotlib.pyplot as plt
 
 
 SCALE_MAGIC = 10000
