@@ -25,6 +25,14 @@ local function write_uint32_be(output, src)
 		bit.band(src, 0xff)))
 end
 
+local function write_uint16_be(output, src)
+	output:write(string.char(
+		bit.rshift(bit.band(src, 0xff00), 8)))
+	output:write(string.char(
+		bit.band(src, 0xff)))
+end
+
+
 -- https://wiki.wireshark.org/Development/LibpcapFileFormat
 local function write_pcap_header(output)
 	output:write("\xD4\xC3\xB2\xA1")  -- PCAP magic
@@ -47,29 +55,31 @@ local frame_start =
 	"\x00" ..  -- hop limit
 	"\xfd\x00\x00\x00\x00\x00\x00\x00\x02\x11\x66\x8e" -- source address WITHOUT last 4 octets
 
-local frame_end =
+local header_end =
 	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01" .. -- full dest address
 	-- UDP
 	"\x00\x35" ..  -- source port
 	"\x00\x35" ..  -- dest port
 	"\x00\x19" ..  -- UDP length incl. UDP header (= payload + 8 bytes)
-	"\x00\x00" ..  -- checksum (disabled/ignored)
-	-- DNS payload, query . NS +RD
-	"\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01"
+	"\x00\x00"     -- checksum (disabled/ignored)
+
+-- DNS payload WITHOUT message ID, query . NS +RD
+local dns_payload = "\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01"
 
 local function write_frame(output, source_id)
 	output:write(frame_start)
 	write_uint32_be(output, source_id)
-	output:write(frame_end)
+	output:write(header_end)
+	write_uint16_be(output, math.random(0, 65535))
+	output:write(dns_payload)
 end
 
--- cache is a trick to ease pressure on LuaJIT GC by reusing strings
 local cache_sec
 local cache_sec_bytes
 local function write_timestamps(output, now_sec)
 	local sec_int = math.floor(now_sec)
 	local usec_int = math.floor((now_sec - sec_int) * 1e6)
-	-- unix timestamp in seconds, cached to avoid GC state explosion
+	-- unix timestamp in seconds
 	if cache_sec == sec_int then
 		output:write(cache_sec_bytes)
 	else
