@@ -14,8 +14,6 @@ import math
 import os
 import sys
 
-import numpy as np
-
 # Force matplotlib to use a different backend to handle machines without a display
 import matplotlib
 import matplotlib.ticker as mtick
@@ -46,39 +44,36 @@ def siname(n):
 
 def init_plot(title):
     # plt.rcParams["font.family"] = "monospace"
-    _, ax = plt.subplots(figsize=(9, 9))
+    _, ax = plt.subplots(figsize=(16*1.5, 9*1.5))
 
     ax.set_xscale("log")
     ax.xaxis.set_major_formatter(mtick.FormatStrFormatter("%s"))
     ax.set_yscale("log")
+    #ax.set_ylim(ymin=1)
+    #ax.set_ylim(ymax=100)
     ax.yaxis.set_major_formatter(mtick.FormatStrFormatter("%s"))
 
     ax.grid(True, which="major")
     ax.grid(True, which="minor", linestyle="dotted", color="#DDDDDD")
 
     ax.set_xlabel("Slowest percentile")
-    ax.set_ylabel("Response time [ms]")
+    ax.set_ylabel("Response time [us]")
     ax.set_title(title)
 
     return ax
 
 
-def get_percentile_latency(latency_data, percentile):
-    total = sum(latency_data)
-    ipercentile = math.ceil((100 - percentile) / 100 * total - 1)
-    assert ipercentile <= total
-    i = 0
-    for latency, n in enumerate(latency_data):
-        i += n
-        if ipercentile <= i:
-            return latency
-    raise RuntimeError("percentile not found")
-
-
 def get_xy_from_histogram(latency_histogram):
-    percentiles = np.logspace(MIN_X_EXP, MAX_X_EXP, num=200)
-    y = [get_percentile_latency(latency_histogram, pctl) for pctl in percentiles]
-    return percentiles, y
+    ys = []
+    percentiles = []
+    total = latency_histogram.total()
+    accumulator = 0
+    for lat, count in sorted(latency_histogram.items(), reverse=True):
+        ys.append(lat)
+        accumulator += count
+        percentiles.append((accumulator / total) * 100)
+
+    return percentiles, ys
 
 
 def merge_latency(data, since=0, until=float("+inf")):
@@ -87,7 +82,8 @@ def merge_latency(data, since=0, until=float("+inf")):
     since_ms = data["stats_sum"]["since_ms"] + since * 1000 - 100
     until_ms = data["stats_sum"]["since_ms"] + until * 1000 + 100
 
-    latency = []
+    import collections
+    latency = collections.Counter()
     requests = 0
     start = None
     end = None
@@ -99,12 +95,11 @@ def merge_latency(data, since=0, until=float("+inf")):
         requests += stats["requests"]
         end = stats["until_ms"]
         if not latency:
-            latency = list(stats["latency"])
             start = stats["since_ms"]
-        else:
-            assert len(stats["latency"]) == len(latency)
-            for i, _ in enumerate(stats["latency"]):
-                latency[i] += stats["latency"][i]
+        # TODO check bucketization?
+        for low, high, count in stats['answer_latency']['buckets']:
+            avg = (low + high) // 2
+            latency[avg] += count
 
     if not latency:
         raise RuntimeError("no samples matching this interval")
@@ -210,7 +205,8 @@ def main():
     for json_file in args.json_file:
         logging.info("processing %s", json_file.name)
         data = read_json(json_file)
-        name = os.path.splitext(os.path.basename(os.path.normpath(json_file.name)))[0]
+        #name = os.path.splitext(os.path.basename(os.path.normpath(json_file.name)))[0]
+        name = json_file.name
         groups[name].append(data)
 
     for name, group_files in args.group.items():
@@ -222,7 +218,7 @@ def main():
     for name, group_data in groups.items():
         pos_inf = float("inf")
         neg_inf = float("-inf")
-        group_x = []  # we use the same X coordinates for all runs
+        group_x = []  # we must merge X coordinates for all runs
         group_ymin = []
         group_ymax = []
         group_ysum = []
@@ -254,9 +250,10 @@ def main():
             ax.fill_between(group_x, group_ymin, group_ymax, alpha=0.2)
         else:
             group_yavg = group_ysum
-        ax.plot(group_x, group_yavg, lw=2, label=label)
+        ax.plot(group_x, group_yavg, lw=1, marker='o', label=label)
 
     plt.legend()
+    plt.tight_layout()
     plt.savefig(args.output)
 
 
