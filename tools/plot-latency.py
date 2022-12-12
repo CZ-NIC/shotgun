@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from IPython.core.debugger import set_trace
 
 # NOTE: Due to a weird bug, numpy is detected as a 3rd party module, while lmdb
 #       is not and pylint complains about wrong-import-order.
@@ -23,7 +24,7 @@ import matplotlib.pyplot as plt
 
 
 JSON_VERSION = 20200527
-MIN_X_EXP = -1
+MIN_X_EXP = -3
 MAX_X_EXP = 2
 
 sinames = ["", " k", " M", " G", " T"]
@@ -62,18 +63,35 @@ def init_plot(title):
 
     return ax
 
+def get_percentile_latency(latency_data, percentile):
+    total = sum(latency_data.values())
+    ipercentile = math.ceil((100 - percentile) / 100 * total - 1)
+    assert ipercentile <= total
+    i = 0
+    for latency, n in sorted(latency_data.items()):
+        i += n
+        if ipercentile <= i:
+            return latency
+    raise RuntimeError("percentile not found")
 
+
+import numpy as np
 def get_xy_from_histogram(latency_histogram):
-    ys = []
-    percentiles = []
-    total = latency_histogram.total()
-    accumulator = 0
-    for lat, count in sorted(latency_histogram.items(), reverse=True):
-        ys.append(lat)
-        accumulator += count
-        percentiles.append((accumulator / total) * 100)
+    percentiles = np.logspace(MIN_X_EXP, MAX_X_EXP, num=200)
+    y = [get_percentile_latency(latency_histogram, pctl) for pctl in percentiles]
+    return percentiles, y
 
-    return percentiles, ys
+#def get_xy_from_histogram(latency_histogram):
+#    ys = []
+#    percentiles = []
+#    total = latency_histogram.total()
+#    accumulator = 0
+#    for lat, count in sorted(latency_histogram.items(), reverse=True):
+#        ys.append(lat)
+#        accumulator += count
+#        percentiles.append((accumulator / total) * 100)
+#
+#    return percentiles, ys
 
 
 def merge_latency(data, since=0, until=float("+inf")):
@@ -87,11 +105,12 @@ def merge_latency(data, since=0, until=float("+inf")):
     requests = 0
     start = None
     end = None
+    #set_trace()
     for stats in data["stats_periodic"]:
-        if stats["since_ms"] < since_ms:
-            continue
-        if stats["until_ms"] >= until_ms:
-            break
+        #if stats["since_ms"] < since_ms:
+        #    continue
+        #if stats["until_ms"] >= until_ms:
+        #    break
         requests += stats["requests"]
         end = stats["until_ms"]
         if not latency:
@@ -250,7 +269,7 @@ def main():
             ax.fill_between(group_x, group_ymin, group_ymax, alpha=0.2)
         else:
             group_yavg = group_ysum
-        ax.plot(group_x, group_yavg, lw=1, marker='o', label=label)
+        ax.plot(group_x, group_yavg, lw=1, marker='', label=label)
 
     plt.legend()
     plt.tight_layout()
