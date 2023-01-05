@@ -12,6 +12,7 @@ import logging
 import json
 import math
 import os
+import re
 import sys
 
 import numpy as np
@@ -131,6 +132,28 @@ class NamedGroupAction(argparse.Action):
         setattr(namespace, self.dest, groups)
 
 
+LINE_STYLES = matplotlib.cbook.ls_mapper.values()
+
+
+class LineStyleAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        try:
+            regex = re.compile(values[0])
+        except re.error as e:
+            raise argparse.ArgumentError(
+                self, f"first linestyle argument is not a regex: {e}"
+            )
+        style = values[1]
+        if style not in LINE_STYLES:
+            raise argparse.ArgumentError(
+                self,
+                f"second linestyle argument must be one of: {', '.join(LINE_STYLES)}",
+            )
+        linestyles = getattr(namespace, self.dest) or {}
+        linestyles[regex] = style
+        setattr(namespace, self.dest, linestyles)
+
+
 def read_json(file_obj):
     data = json.load(file_obj)
 
@@ -146,14 +169,7 @@ def read_json(file_obj):
     return data
 
 
-def main():
-    logging.basicConfig(
-        format="%(asctime)s %(levelname)8s  %(message)s", level=logging.DEBUG
-    )
-    logger = logging.getLogger("matplotlib")
-    # set WARNING for Matplotlib
-    logger.setLevel(logging.WARNING)
-
+def parse_args():
     parser = argparse.ArgumentParser(
         description="Plot query response time histogram from shotgun results"
     )
@@ -176,6 +192,16 @@ def main():
         type=float,
         default=float("+inf"),
         help="Omit data after this time (secs since test start)",
+    )
+    parser.add_argument(
+        "--linestyle",
+        nargs=2,
+        action=LineStyleAction,
+        default={},
+        help=(
+            "change style for series with names matching regex; "
+            "name_regex linestyle_name (can be specified multiple times)"
+        ),
     )
 
     input_args = parser.add_argument_group(
@@ -203,6 +229,18 @@ def main():
         parser.error(
             "at least one input JSON file required (individually or in a group)"
         )
+    return args
+
+
+def main():
+    logging.basicConfig(
+        format="%(asctime)s %(levelname)8s  %(message)s", level=logging.DEBUG
+    )
+    logger = logging.getLogger("matplotlib")
+    # set WARNING for Matplotlib
+    logger.setLevel(logging.WARNING)
+
+    args = parse_args()
 
     groups = collections.defaultdict(list)
     ax = init_plot(args.title)
@@ -254,7 +292,11 @@ def main():
             ax.fill_between(group_x, group_ymin, group_ymax, alpha=0.2)
         else:
             group_yavg = group_ysum
-        ax.plot(group_x, group_yavg, lw=2, label=label)
+        linestyle = "solid"
+        for name_re, style in args.linestyle.items():
+            if name_re.search(name):
+                linestyle = style
+        ax.plot(group_x, group_yavg, lw=2, label=label, linestyle=linestyle)
 
     plt.legend()
     plt.savefig(args.output)
