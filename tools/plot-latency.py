@@ -45,7 +45,8 @@ def siname(n):
 
 def init_plot(title):
     # plt.rcParams["font.family"] = "monospace"
-    _, ax = plt.subplots(figsize=(16*1.5, 9*1.5))
+    scale = 0.5
+    _, ax = plt.subplots(figsize=(33.87 * scale, 19.5 * scale))
 
     ax.set_xscale("log")
     ax.xaxis.set_major_formatter(mtick.FormatStrFormatter("%s"))
@@ -107,18 +108,20 @@ def merge_latency(data, since=0, until=float("+inf")):
     end = None
     #set_trace()
     for stats in data["stats_periodic"]:
-        #if stats["since_ms"] < since_ms:
-        #    continue
-        #if stats["until_ms"] >= until_ms:
-        #    break
+        if stats["since_ms"] < since_ms:
+            continue
+        if stats["until_ms"] >= until_ms:
+            break
         requests += stats["requests"]
         end = stats["until_ms"]
         if not latency:
             start = stats["since_ms"]
         # TODO check bucketization?
-        for low, high, count in stats['answer_latency']['buckets']:
+        for low, high, count in stats['answer_latency'].get('buckets', []):
             avg = (low + high) // 2
             latency[avg] += count
+        if stats["timeouts"]:
+            latency[data["timeout"] + 1] += stats["timeouts"]
 
     if not latency:
         raise RuntimeError("no samples matching this interval")
