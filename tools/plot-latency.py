@@ -43,23 +43,26 @@ def siname(n):
 
 
 def init_plot(title):
-    # plt.rcParams["font.family"] = "monospace"
-    scale = 0.5
-    _, ax = plt.subplots(figsize=(33.87 * scale, 19.5 * scale))
+    plt.rcParams["font.family"] = "sans-serif"
+    plt.rcParams['font.sans-serif'] = ['Mada']
+    plt.rcParams['svg.fonttype'] = 'none'
+
+    scale = 0.3
+    _, ax = plt.subplots(figsize=(33.87 * scale, 15.85 * scale))
 
     ax.set_xscale("log")
-    ax.xaxis.set_major_formatter(mtick.FormatStrFormatter("%s"))
+    ax.xaxis.set_major_formatter(mtick.FormatStrFormatter("%g"))
     ax.set_yscale("log")
     #ax.set_ylim(ymin=1)
     #ax.set_ylim(ymax=100)
-    ax.yaxis.set_major_formatter(mtick.FormatStrFormatter("%s"))
+    ax.yaxis.set_major_formatter(mtick.FormatStrFormatter("%d"))
 
     ax.grid(True, which="major")
     ax.grid(True, which="minor", linestyle="dotted", color="#DDDDDD")
 
     ax.set_xlabel("Slowest percentile")
     ax.set_ylabel("Response time [us]")
-    ax.set_title(title)
+    #ax.set_title(title)
 
     if True:
         ax.annotate('smaller latency', xy=(0.10, 0.10), xytext=(0.15, 0.2), xycoords='data',
@@ -70,7 +73,7 @@ def init_plot(title):
                 arrowprops=dict(color='gray', lw=1, fc='w', shrink=0.05),
                 )
 
-        ax.annotate('client timeout', xy=(0.1, 2000), xytext=(0.15, 1010), xycoords='data',
+        ax.annotate('client timeout', xy=(0.1, 5e6), xytext=(0.15, 4e6), xycoords='data',
                 arrowprops=dict(color='gray', lw=1, fc='w', shrink=0.1),
                 )
 

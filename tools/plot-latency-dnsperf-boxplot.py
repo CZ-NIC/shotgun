@@ -73,12 +73,12 @@ def stat_field_rate(field):
 
 
 def init_plot(title):
-    scale = 0.5
-    _, ax = plt.subplots(figsize=(33.87 * scale, 19.5 * scale))
+    scale = 0.3
+    _, ax = plt.subplots(figsize=(33.87 * scale, 15.85 * scale))
 
     ax.set_xlabel("Time [s]")
     ax.set_ylabel("Latency [us]")
-    ax.set_title(title)
+    #ax.set_title(title)
 
     #ax.grid(True, axis="x", which="major")
 
@@ -201,7 +201,7 @@ def main():
     plt.legend(handles=legend)
 
     ticks = list(sorted(ticks))
-    plt.xticks([len(group) / 2 + n for n in range(0, len(ticks) * len(groups), len(groups))], ticks)
+    plt.xticks([(len(groups) - 1) / 2 + n for n in range(0, len(ticks) * len(groups), len(groups))], ticks, rotation = "vertical")
     plt.xlim(-1, len(ticks)*len(groups) + 1)
     #ax.set_ylim(0)
 
