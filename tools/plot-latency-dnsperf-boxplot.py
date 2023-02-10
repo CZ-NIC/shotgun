@@ -72,11 +72,15 @@ def stat_field_rate(field):
     return inner
 
 
-def init_plot(title):
+def init_plot(title, nvals):
+    plt.rcParams["font.family"] = "sans-serif"
+    plt.rcParams['font.sans-serif'] = ['Mada']
+    plt.rcParams['font.size'] = 14
+
     scale = 0.3
     _, ax = plt.subplots(figsize=(33.87 * scale, 15.85 * scale))
 
-    ax.set_xlabel("Time [s]")
+    ax.set_xlabel("Test time [s]")
     ax.set_ylabel("Latency [us]")
     #ax.set_title(title)
 
@@ -90,9 +94,12 @@ def init_plot(title):
 
     ax.set_yscale("log")
 
-    ax.annotate('timeout', xy=(0, 5000000), xytext=(4, 5000000), xycoords='data',
-        arrowprops=dict(color='gray', lw=1, fc='w', shrink=0.1),
-        )
+    #t = ax.text(
+    #25*nvals, 1e6, "client timeout", horizontalalignment="right", va="center", rotation=0, #size=15,
+    #bbox=dict(boxstyle="rarrow,pad=0.2", fc="white", ec="gray", lw=1))
+
+    ax.annotate('client timeout', xy=(25*nvals + (nvals - 1)/nvals, 1e6), xytext=(15*nvals, 3e5), xycoords='data',
+        arrowprops=dict(color='gray', lw=1, fc='w'), annotation_clip=True)
 
     return ax
 
@@ -181,13 +188,14 @@ def main():
         sys.exit(1)
 
     # initialize graph
-    ax = init_plot(args.title)
+    ax = init_plot(args.title, len(groups))
 
     legend = []
     ticks = None
     if len(groups) > 1:
         colors = list(mcolors.TABLEAU_COLORS.keys()) + list(mcolors.BASE_COLORS.keys())
         colors.remove("w")  # avoid white line on white background
+        colors *= 3
     else:
         colors = ['black']
     for group, color in itertools.zip_longest(
@@ -196,13 +204,14 @@ def main():
         group_idx, group_name = group
         ticks = groups[group_name].keys()
         plot_response_rate(ax, group_name, group_idx, groups, color)
-        legend.append(mpatches.Patch(color=color, label=group_name))
+        legend.append(mpatches.Patch(color=color, label=group_name, linewidth=1))
 
-    plt.legend(handles=legend)
+    if len(legend) > 1:
+        plt.legend(handles=legend, loc='upper right')
 
     ticks = list(sorted(ticks))
     plt.xticks([(len(groups) - 1) / 2 + n for n in range(0, len(ticks) * len(groups), len(groups))], ticks, rotation = "vertical")
-    plt.xlim(-1, len(ticks)*len(groups) + 1)
+    plt.xlim(-1, len(ticks)*len(groups))
     #ax.set_ylim(0)
 
     #plt.legend()

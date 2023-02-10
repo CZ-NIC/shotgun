@@ -45,7 +45,8 @@ def siname(n):
 def init_plot(title):
     plt.rcParams["font.family"] = "sans-serif"
     plt.rcParams['font.sans-serif'] = ['Mada']
-    plt.rcParams['svg.fonttype'] = 'none'
+    plt.rcParams['font.size'] = 14
+    #plt.rcParams['svg.fonttype'] = 'none'
 
     scale = 0.3
     _, ax = plt.subplots(figsize=(33.87 * scale, 15.85 * scale))
@@ -55,7 +56,7 @@ def init_plot(title):
     ax.set_yscale("log")
     #ax.set_ylim(ymin=1)
     #ax.set_ylim(ymax=100)
-    ax.yaxis.set_major_formatter(mtick.FormatStrFormatter("%d"))
+    #ax.yaxis.set_major_formatter(mtick.FormatStrFormatter("%d"))
 
     ax.grid(True, which="major")
     ax.grid(True, which="minor", linestyle="dotted", color="#DDDDDD")
@@ -69,13 +70,17 @@ def init_plot(title):
                 arrowprops=dict(color='gray', lw=1, fc='w', shrink=0.1),
                 )
 
-        ax.annotate('higher latency', xy=(100, 2000), xytext=(25, 1010), xycoords='data',
-                arrowprops=dict(color='gray', lw=1, fc='w', shrink=0.05),
-                )
+#        ax.annotate('higher latency', xy=(100, 2000), xytext=(25, 1010), xycoords='data',
+#                arrowprops=dict(color='gray', lw=1, fc='w', shrink=0.05),
+#                )
 
-        ax.annotate('client timeout', xy=(0.1, 5e6), xytext=(0.15, 4e6), xycoords='data',
+        ax.annotate('client timeout', xy=(0.02, 1e6), xytext=(0.002, 4e5), xycoords='data',
                 arrowprops=dict(color='gray', lw=1, fc='w', shrink=0.1),
                 )
+    #    t = ax.text(
+    #0.005, 1e6, "client timeout", ha="center", va="center", rotation=0, #size=15,
+    #bbox=dict(boxstyle="rarrow,pad=0.2", fc="white", ec="gray", lw=1))
+
 
        # ax.annotate('cache hits', xy=(20, 1), xytext=(30, 2), xycoords='data',
        #         arrowprops=dict(color='gray', lw=1, fc='w', shrink=0.1),
@@ -254,8 +259,9 @@ def main():
     for json_file in args.json_file:
         logging.info("processing %s", json_file.name)
         data = read_json(json_file)
+        name = os.path.splitext(os.path.dirname(os.path.normpath(json_file.name)))[0]
         #name = os.path.splitext(os.path.basename(os.path.normpath(json_file.name)))[0]
-        name = json_file.name
+        #name = json_file.name
         groups[name].append(data)
 
     for name, group_files in args.group.items():
@@ -273,7 +279,8 @@ def main():
         group_ysum = []
         for run_data in group_data:
             latency, qps = merge_latency(run_data, args.since, args.until)
-            label = "{} ({} QPS)".format(name, siname(qps))
+            #label = "{} ({} QPS)".format(name, siname(qps))
+            label = name
             group_x, run_y = get_xy_from_histogram(latency)
             if len(group_data) == 1:  # no reason to compute aggregate values
                 group_ysum = run_y
@@ -301,7 +308,11 @@ def main():
             group_yavg = group_ysum
         ax.plot(group_x, group_yavg, lw=1, marker='', label=label)
 
-    plt.legend(loc='center right')
+    if len(groups) > 1:
+        leg = plt.legend(loc='upper right')
+        for legobj in leg.legendHandles:
+            legobj.set_linewidth(11.0)
+
     plt.tight_layout()
     plt.savefig(args.output)
 
