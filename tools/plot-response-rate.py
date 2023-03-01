@@ -17,6 +17,7 @@ from matplotlib.ticker import MultipleLocator
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import mplhlpr.styles
 
 JSON_VERSION = 20200527
 
@@ -194,6 +195,8 @@ def main():
     logger = logging.getLogger("matplotlib")
     # set WARNING for Matplotlib
     logger.setLevel(logging.WARNING)
+
+    mplhlpr.styles.configure_mpl_styles()
 
     parser = argparse.ArgumentParser(
         description="Plot response rate from shotgun experiment"

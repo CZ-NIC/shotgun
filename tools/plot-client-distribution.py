@@ -19,6 +19,7 @@ import matplotlib.colors
 from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 
+import mplhlpr.styles
 
 SCALE_MAGIC = 10000
 
@@ -103,6 +104,8 @@ def main():
     logger = logging.getLogger("matplotlib")
     # set WARNING for Matplotlib
     logger.setLevel(logging.WARNING)
+
+    mplhlpr.styles.configure_mpl_styles()
 
     parser = argparse.ArgumentParser(
         description="Analyze query distribution among clients in input pcap"

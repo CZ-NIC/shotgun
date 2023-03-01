@@ -24,6 +24,7 @@ import matplotlib.ticker as mtick
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import mplhlpr.styles
 
 JSON_VERSION = 20200527
 MIN_X_EXP = -1
@@ -238,6 +239,8 @@ def main():
     logger = logging.getLogger("matplotlib")
     # set WARNING for Matplotlib
     logger.setLevel(logging.WARNING)
+
+    mplhlpr.styles.configure_mpl_styles()
 
     args = parse_args()
 

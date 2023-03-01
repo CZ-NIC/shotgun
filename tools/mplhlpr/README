@@ -1,0 +1,15 @@
+*.mplstyle files in this directory augment system-wide Matplotlib config
+on your system located in site-packages/matplotlib/mpl-data/matplotlibrc
+(relative to your Python installation location).
+
+Matplotlib styles used by DNS Shotgun plotters are defined as comma delimited
+list of styles in SHOTGUN_MPLSTYLES environment variable. It defaults to
+"shotgun" and thus by default loads file "shotgun.mplstyle" from this directory.
+
+Items listed later in the list can redefine values from preceding files, i.e.
+SHOTGUN_MPLSTYLES="shotgun,presentation,fast,grayscale"
+starts with "shotgun" style as base and the "presentation" style redefines
+individual settings.
+
+Matplotlib provides its own styles, e.g. "fast", "tableau-colorblind10" etc.
+See site-packages/matplotlib/mpl-data/stylelib.

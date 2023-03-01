@@ -17,6 +17,8 @@ import matplotlib.colors
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import mplhlpr.styles
+
 sinames = ["", " k", " M", " G", " T"]
 
 
@@ -133,6 +135,8 @@ def main():
     logger = logging.getLogger("matplotlib")
     # set WARNING for Matplotlib
     logger.setLevel(logging.WARNING)
+
+    mplhlpr.styles.configure_mpl_styles()
 
     parser = argparse.ArgumentParser(description="Plot packet rate")
 
