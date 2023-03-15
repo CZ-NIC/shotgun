@@ -25,7 +25,7 @@ filepath to `-c/--config` option of `replay.py` utility.
     - 10 % well-behaved DNS-over-TLS clients using TLS Session Resumption
     - 5 % well-behaved DNS-over-TLS clients without TLS Session Resumption
     - 10 % well-behaved DNS-over-HTTPS GET clients using TLS Session Resumption
-    - 5 % well-behaved DNS-over-TLS POST clients using TLS Session Resumption
+    - 5 % well-behaved DNS-over-HTTPS POST clients using TLS Session Resumption
 
 !!! note
     You can find configuration files for presets in
