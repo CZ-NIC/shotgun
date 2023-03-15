@@ -78,6 +78,7 @@ Makefile
 config.log
 config.status
 libtool
+.libs
 .deps
 src/config.h
 src/stamp-h1
