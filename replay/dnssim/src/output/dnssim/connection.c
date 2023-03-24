@@ -12,16 +12,28 @@
 
 static core_log_t _log = LOG_T_INIT("output.dnssim");
 
-static bool _conn_is_connecting(_output_dnssim_connection_t* conn)
+static bool _conn_is_connecting(const _output_dnssim_connection_t* conn)
 {
-    return (conn->state >= _OUTPUT_DNSSIM_CONN_TCP_HANDSHAKE && conn->state <= _OUTPUT_DNSSIM_CONN_ACTIVE);
+    return (conn->state >= _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE && conn->state <= _OUTPUT_DNSSIM_CONN_ACTIVE);
+}
+
+static bool _conn_has_transport(const _output_dnssim_connection_t* conn)
+{
+    switch (conn->transport_type) {
+    case _OUTPUT_DNSSIM_CONN_TRANSPORT_TCP:
+        return conn->transport.tcp != NULL;
+    case _OUTPUT_DNSSIM_CONN_TRANSPORT_UDP:
+        return conn->transport.udp != NULL;
+    default:
+        return false;
+    }
 }
 
 void _output_dnssim_conn_maybe_free(_output_dnssim_connection_t* conn)
 {
     mlassert(conn, "conn can't be nil");
     mlassert(conn->client, "conn must belong to a client");
-    if (conn->handle == NULL && conn->handshake_timer == NULL && conn->idle_timer == NULL) {
+    if (!_conn_has_transport(conn) && conn->handshake_timer == NULL && conn->idle_timer == NULL) {
         _ll_try_remove(conn->client->conn, conn);
         if (conn->tls != NULL) {
             free(conn->tls);
@@ -69,7 +81,7 @@ void _output_dnssim_conn_close(_output_dnssim_connection_t* conn)
     case _OUTPUT_DNSSIM_CONN_CLOSING:
     case _OUTPUT_DNSSIM_CONN_CLOSED:
         return;
-    case _OUTPUT_DNSSIM_CONN_TCP_HANDSHAKE:
+    case _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE:
     case _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE:
         conn->stats->conn_handshakes_failed++;
         self->stats_sum->conn_handshakes_failed++;
@@ -119,6 +131,13 @@ void _output_dnssim_conn_close(_output_dnssim_connection_t* conn)
         lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
 #endif
         break;
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+        _output_dnssim_quic_close(conn);
+#else
+        lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
+#endif
+        break;
     default:
         lfatal("unsupported transport");
         break;
@@ -164,6 +183,13 @@ static void _send_pending_queries(_output_dnssim_connection_t* conn)
             case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
                 _output_dnssim_https2_write_query(conn, qry);
+#else
+                mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
+#endif
+                break;
+            case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+                _output_dnssim_quic_write_query(conn, qry);
 #else
                 mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
 #endif
@@ -226,8 +252,22 @@ int _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client)
 #else
             lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
 #endif
+        } else if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_QUIC) {
+#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+            ret = _output_dnssim_quic_init(conn);
+            if (ret < 0) {
+                free(conn);
+                return ret;
+            }
+#else
+            lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
+#endif
         }
-        ret = _output_dnssim_tcp_connect(self, conn);
+
+        if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_QUIC)
+            ret = _output_dnssim_quic_connect(self, conn);
+        else
+            ret = _output_dnssim_tcp_connect(self, conn);
         if (ret < 0)
             return ret;
         _ll_append(client->conn, conn);

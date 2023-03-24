@@ -1,7 +1,7 @@
-AC_PREREQ(2.61)
-AC_INIT([shotgun-output-dnssim], [20210714],,)
+AC_PREREQ([2.71])
+AC_INIT([shotgun-output-dnssim],[20230324],[],[])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
-AC_CONFIG_HEADER([src/config.h])
+AC_CONFIG_HEADERS([src/config.h])
 
 # Checks for programs.
 AC_PROG_CC
@@ -19,6 +19,8 @@ AC_CHECK_HEADER([dnsjit/version.h],, [AC_MSG_ERROR([dnsjit development headers n
 # Check for dependencies
 PKG_CHECK_MODULES([libuv], [libuv])
 PKG_CHECK_MODULES([libnghttp2], [libnghttp2])
+PKG_CHECK_MODULES([libngtcp2], [libngtcp2])
+PKG_CHECK_MODULES([libngtcp2_crypto_gnutls], [libngtcp2_crypto_gnutls])
 AC_CHECK_LIB([gnutls], [gnutls_init],, [AC_MSG_ERROR([libgnutls not found])])
 
 # Checks for support.

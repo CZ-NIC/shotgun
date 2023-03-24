@@ -259,6 +259,13 @@ void output_dnssim_set_transport(output_dnssim_t* self, output_dnssim_transport_
     case OUTPUT_DNSSIM_TRANSPORT_UDP:
         lfatal("UDP transport with TCP fallback is not supported yet.");
         break;
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+        lnotice("transport set to QUIC");
+#else
+        lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
+#endif
+        break;
     default:
         lfatal("unknown or unsupported transport");
         break;

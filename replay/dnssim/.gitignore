@@ -84,5 +84,6 @@ src/config.h
 src/stamp-h1
 build
 .dirstamp
+*~
 
 # Project specific files

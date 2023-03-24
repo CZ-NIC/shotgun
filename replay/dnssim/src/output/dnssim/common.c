@@ -125,6 +125,13 @@ void _output_dnssim_create_request(output_dnssim_t* self, _output_dnssim_client_
         lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
 #endif
         break;
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+        ret = _output_dnssim_create_query_quic(self, req);
+#else
+        lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
+#endif
+        break;
     default:
         lfatal("unsupported dnssim transport");
         break;
@@ -216,6 +223,13 @@ static void _close_query(_output_dnssim_query_t* qry)
     case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
         _output_dnssim_close_query_https2((_output_dnssim_query_tcp_t*)qry);
+#else
+        mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
+#endif
+        break;
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+        _output_dnssim_close_query_quic((_output_dnssim_query_quic_t*)qry);
 #else
         mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
 #endif
@@ -365,3 +379,13 @@ void _output_dnssim_on_uv_alloc(uv_handle_t* handle, size_t suggested_size, uv_b
     mlfatal_oom(buf->base = malloc(suggested_size));
     buf->len = suggested_size;
 }
+
+#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+void _output_dnssim_rand(void *data, size_t len)
+{
+    mlassert(data, "data must not be nil");
+
+    int ret = gnutls_rnd(GNUTLS_RND_RANDOM, data, len);
+    mlassert(!ret, "random number generation failed: %d %s", ret, gnutls_strerror(ret));
+}
+#endif

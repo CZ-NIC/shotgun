@@ -161,6 +161,7 @@ static ssize_t _tls_vec_push(gnutls_transport_ptr_t ptr, const giovec_t* iov, in
 {
     _output_dnssim_connection_t* conn = (_output_dnssim_connection_t*)ptr;
     mlassert(conn != NULL, "conn is null");
+    mlassert(conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_TCP, "conn transport type must be tcp");
     mlassert(conn->tls != NULL, "conn must have tls ctx");
 
     if (iovcnt == 0)
@@ -187,7 +188,7 @@ static ssize_t _tls_vec_push(gnutls_transport_ptr_t ptr, const giovec_t* iov, in
     /* Try to perform the immediate write first to avoid copy */
     int ret = 0;
     if (conn->tls->write_queue_size == 0) {
-        ret = uv_try_write((uv_stream_t*)conn->handle, uv_buf, iovcnt);
+        ret = uv_try_write((uv_stream_t*)conn->transport.tcp, uv_buf, iovcnt);
         /* from libuv documentation -
            uv_try_write will return either:
            > 0: number of bytes written (can be less than the supplied buffer size).
@@ -253,7 +254,7 @@ static ssize_t _tls_vec_push(gnutls_transport_ptr_t ptr, const giovec_t* iov, in
         write_req->data = p;
 
         /* Perform an asynchronous write with a callback */
-        if (uv_write(write_req, (uv_stream_t*)conn->handle, uv_buf, 1, _tls_on_write_complete) == 0) {
+        if (uv_write(write_req, (uv_stream_t*)conn->transport.tcp, uv_buf, 1, _tls_on_write_complete) == 0) {
             ret = total_len;
             conn->tls->write_queue_size += 1;
         } else {
@@ -399,7 +400,8 @@ void _output_dnssim_tls_close(_output_dnssim_connection_t* conn)
     }
 
     gnutls_deinit(conn->tls->session);
-    _output_dnssim_tcp_close(conn);
+    if (conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_TCP)
+        _output_dnssim_tcp_close(conn);
 }
 
 void _output_dnssim_tls_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_tcp_t* qry)
