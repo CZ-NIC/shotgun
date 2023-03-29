@@ -60,6 +60,7 @@ def parse_csv(csv_f, since: float, until: float) -> Tuple[float, Dict[float, flo
     data = {}
     prev_time = None
     period = None
+    prev_period = None
     for row in csv.DictReader(csv_f):
         now = float(row["time_s"])
         if now < since:
@@ -70,13 +71,16 @@ def parse_csv(csv_f, since: float, until: float) -> Tuple[float, Dict[float, flo
         if prev_time is not None:
             if not period:
                 period = now - prev_time
-            elif not math.isnan(period) and abs(period - abs(now - prev_time)) > 0.001:
+            elif math.isnan(period):
+                prev_period = period
+            elif abs(period - abs(now - prev_time)) > 0.001:
                 logging.warning(
                     "file %s: sampling period has changed between samples %f and %f",
                     csv_f.name,
                     prev_time,
                     now,
                 )
+                prev_period = period
                 period = float("nan")  # varies, undefined
 
         prev_time = now
@@ -85,6 +89,10 @@ def parse_csv(csv_f, since: float, until: float) -> Tuple[float, Dict[float, flo
     if not prev_time or not period:
         raise ValueError("at least two data rows are required")
 
+    # ignore period change, but on the last sample only
+    if prev_period and not math.isnan(prev_period):
+        period = prev_period
+        logging.info("period change has happened only on the last sample, ignoring")
     return period, data
 
 
