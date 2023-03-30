@@ -27,7 +27,7 @@ def init_plot(title):
 
     ax.set_xlabel("Time [s]")
     ax.set_ylabel("Packets per sampling period")
-    ax.set_title(title)
+    mplhlpr.styles.ax_set_title(ax, title)
 
     ax.grid(True, axis="x", which="both")
     ax.grid(True, axis="y", which="both")

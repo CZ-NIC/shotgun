@@ -116,7 +116,7 @@ def init_plot(title):
 
     ax.set_xlabel("Time [s]")
     ax.set_ylabel("Response Rate [%]")
-    ax.set_title(title)
+    mplhlpr.styles.ax_set_title(ax, title)
 
     ax.grid(True, axis="x", which="major")
 

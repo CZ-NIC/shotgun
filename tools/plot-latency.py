@@ -59,7 +59,7 @@ def init_plot(title):
 
     ax.set_xlabel("Slowest percentile")
     ax.set_ylabel("Response time [ms]")
-    ax.set_title(title)
+    mplhlpr.styles.ax_set_title(ax, title)
 
     return ax
 

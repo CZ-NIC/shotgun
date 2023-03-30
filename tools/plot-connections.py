@@ -45,7 +45,7 @@ def init_plot(title):
 
     ax.set_xlabel("Time [s]")
     ax.set_ylabel("Number of connections")
-    ax.set_title(title)
+    mplhlpr.styles.ax_set_title(ax, title)
 
     ax.grid(True, axis="x", which="major")
     ax.grid(True, axis="y", which="major")

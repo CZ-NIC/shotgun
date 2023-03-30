@@ -18,6 +18,10 @@ font.size:    14
 
 font.sans-serif: Mada, DejaVu Sans, Bitstream Vera Sans, Computer Modern Sans Serif, Lucida Grande, Verdana, Geneva, Lucid, Arial, Helvetica, Avant Garde, sans-serif
 
+###### AXES
+# hide chart title - slide has it's own
+axes.titlesize: 0
+
 ###### FIGURE
 #figure.labelsize:   large     # size of the figure label (``Figure.sup[x|y]label()``)
 figure.figsize:     10.161, 4.755  # figure size in inches

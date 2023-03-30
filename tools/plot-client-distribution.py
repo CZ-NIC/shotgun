@@ -36,7 +36,7 @@ def init_plot(title):
 
     ax.set_xlabel("Number of queries per client")
     ax.set_ylabel("Percentage of clients")
-    ax.set_title(title)
+    mplhlpr.styles.ax_set_title(ax, title)
 
     colors = [
         matplotlib.colors.to_rgba(c)
