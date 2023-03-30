@@ -143,6 +143,7 @@ def plot_response_rate(
     label,
     eval_func=None,
     min_timespan=0,
+    min_rate=0,
     marker="o",
     linestyle="--",
     color=None,
@@ -163,9 +164,15 @@ def plot_response_rate(
         xvalues.append(time)
         yvalues.append(eval_func(stats))
 
-    ax.plot(
-        xvalues, yvalues, label=label, marker=marker, linestyle=linestyle, color=color
-    )
+    if not min_rate or max(yvalues) >= min_rate:
+        ax.plot(
+            xvalues,
+            yvalues,
+            label=label,
+            marker=marker,
+            linestyle=linestyle,
+            color=color,
+        )
 
 
 def rcode_to_int(rcode: str) -> int:
@@ -217,7 +224,16 @@ def main():
         "-R",
         "--rcodes-above-pct",
         type=float,
-        help="Plot RCODE(s) which represent > specified percentage of all answers",
+        help="Add RCODE(s) representing more than the specified percentage "
+        "of all answers (short spikes might not be shown if the percentage "
+        "is too high)",
+    )
+    parser.add_argument(
+        "-i",
+        "--ignore-rcodes-rate-pct",
+        type=float,
+        help="Remove RCODE(s) whose response rate never exceeds the specified value "
+        "(a single spike will cause the RCODE to show)",
     )
     parser.add_argument(
         "-s", "--sum-rcodes", nargs="*", type=rcode_to_int, help="Plot sum of RCODE(s)"
@@ -316,6 +332,7 @@ def process_file(json_path, json_color, args, ax):
                 rcode_label,
                 eval_func=eval_func,
                 min_timespan=min_timespan,
+                min_rate=args.ignore_rcodes_rate_pct,
                 marker=f"${symbol}$",
                 linestyle="dotted",
                 color=cur_rcode_colors[rcode],
