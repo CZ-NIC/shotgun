@@ -20,6 +20,7 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ "i", "interface", "", "capture interface", "?" },
 	{ "w", "write", "", "output file to write (or /dev/null)", "?" },
 	{ "p", "port", 53, "destination port to check for UDP DNS queries", "?" },
+	{ "l", "log-malformed", false, "log why queries were considered as malformed", "?" },
 	{ "m", "malformed", false, "include malformed queries", "?" },
 	{ "M", "only-malformed", false, "include only malformed queries", "?" },
 	{ "s", "skipped", false, "include queries for *.dotnxdomain.net, "
@@ -57,6 +58,7 @@ args.write = getopt:val("w")
 args.port = getopt:val("p")
 args.only_malformed = getopt:val("M")
 args.malformed = getopt:val("m") or args.only_malformed
+args.log_malformed = getopt:val("l")
 args.csv = getopt:val("csv")
 args.skipped = getopt:val("s")
 args.address = getopt:val("a")
@@ -125,6 +127,24 @@ local function matches_addresses(ip, len)
 		end
 	end
 	return false
+end
+
+local function rr_idx_section_name(rr_idx, ancount, nscount)
+	if rr_idx <= ancount then
+		return string.format('answer RR idx %d', rr_idx)
+	elseif rr_idx <= ancount + nscount then
+		return string.format('authority RR idx %d', rr_idx - ancount)
+	else
+		return string.format('additional RR idx %d', rr_idx - ancount - nscount)
+	end
+end
+
+local function log_packet(obj, reason)
+	if not args.log_malformed then
+		return
+	end
+	local obj_pcap = obj:cast_to(object.PCAP)
+	log:info("timestamp %d.%d: %s", obj_pcap.ts.sec, obj_pcap.ts.nsec, reason)
 end
 
 local function is_skipped_qname(payload, qlabels, max_labels)
@@ -197,13 +217,15 @@ local function is_dnsq(obj)
 
 	-- check that query isn't malformed
 	if dns.qdcount > 0 then  -- parse all questions
-		for _ = 1, dns.qdcount do
+		for idx = 1, dns.qdcount do
 			if dns:parse_q(dns_q, labels, 127) ~= 0 then
+				log_packet(obj, 'cannot parse qname idx %d', idx)
 				nmalformed = nmalformed + 1
 				return args.malformed
 			end
 			local is_skipped = is_skipped_qname(dns.payload, labels, 127)
 			if is_skipped == nil then
+				log_packet(obj, 'too suspicious qname idx %d', idx)
 				nmalformed = nmalformed + 1
 				return args.malformed
 			elseif is_skipped and not args.skipped then
@@ -214,8 +236,9 @@ local function is_dnsq(obj)
 	end
 	local rrcount = dns.ancount + dns.nscount + dns.arcount
 	if rrcount > 0 then  -- parse all other RRs
-		for _ = 1, rrcount do
+		for idx = 1, rrcount do
 			if dns:parse_rr(dns_rr, labels, 127) ~= 0 then
+				log_packet(obj, string.format('malformed RR idx %d (%s)', idx, rr_idx_section_name(idx, dns.ancount, dns.nscount)))
 				nmalformed = nmalformed + 1
 				return args.malformed
 			end
