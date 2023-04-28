@@ -63,7 +63,11 @@ output_dnssim_t* output_dnssim_new(size_t max_clients)
 
     ret = gnutls_certificate_allocate_credentials(&_self->tls_cred);
     if (ret < 0)
-        lfatal("failed to allocated TLS credentials (%s)", gnutls_strerror(ret));
+        lfatal("failed to allocate TLS credentials (%s)", gnutls_strerror(ret));
+
+    ret = gnutls_certificate_set_x509_system_trust(_self->tls_cred);
+    if (ret < 0)
+        lwarning("system trust not set (%s)", gnutls_strerror(ret));
 
     ret = uv_loop_init(&_self->loop);
     if (ret < 0)
