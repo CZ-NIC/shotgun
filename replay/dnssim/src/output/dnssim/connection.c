@@ -282,7 +282,8 @@ void _output_dnssim_conn_activate(_output_dnssim_connection_t* conn)
     mlassert(conn->client, "conn must be associated with a client");
     mlassert(conn->client->dnssim, "client must be associated with dnssim");
 
-    uv_timer_stop(conn->handshake_timer);
+    if (conn->handshake_timer)
+        uv_timer_stop(conn->handshake_timer);
 
     conn->state = _OUTPUT_DNSSIM_CONN_ACTIVE;
     conn->client->dnssim->stats_current->conn_active++;
@@ -491,4 +492,18 @@ void _output_dnssim_read_dnsmsg(_output_dnssim_connection_t* conn, size_t len, c
     conn->dnsbuf_len            = 2;
     conn->dnsbuf_pos            = 0;
     conn->dnsbuf_free_after_use = false;
+}
+
+_output_dnssim_query_tcp_t* _output_dnssim_get_stream_qry(
+        _output_dnssim_connection_t* conn, int64_t stream_id)
+{
+    mlassert(conn, "conn is nil");
+    mlassert(stream_id >= 0, "invalid stream_id");
+
+    _output_dnssim_query_tcp_t* qry = (_output_dnssim_query_tcp_t*)conn->sent;
+    while (qry != NULL && qry->stream_id != stream_id) {
+        qry = (_output_dnssim_query_tcp_t*)qry->qry.next;
+    }
+
+    return qry;
 }

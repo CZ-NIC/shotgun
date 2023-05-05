@@ -83,8 +83,8 @@ struct _output_dnssim_query_tcp {
     /* Send buffers for libuv; 0 is for dnslen, 1 is for dnsmsg. */
     uv_buf_t bufs[2];
 
-    /* HTTP/2 stream id that was used to send this query. */
-    int32_t stream_id;
+    /* HTTP/2 or QUIC stream id that was used to send this query. */
+    int64_t stream_id;
 
     /* HTTP/2 expected content length. */
     int32_t content_len;
@@ -176,10 +176,10 @@ typedef struct _output_dnssim_quic_ctx {
     ngtcp2_conn* qconn;
     ngtcp2_crypto_conn_ref qconn_ref;
     ngtcp2_path path;
+    uv_timer_t nudge_timer;
 
     uint32_t max_concurrent_streams;
     uint32_t open_streams;
-    int64_t stream_id;
 
     uint8_t secret[32];
 } _output_dnssim_quic_ctx_t;
@@ -332,6 +332,7 @@ int  _output_dnssim_answers_request(_output_dnssim_request_t* req, core_object_d
 void _output_dnssim_request_answered(_output_dnssim_request_t* req, core_object_dns_t* msg);
 void _output_dnssim_maybe_free_request(_output_dnssim_request_t* req);
 void _output_dnssim_on_uv_alloc(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
+int  _output_dnssim_append_to_query_buf(_output_dnssim_query_tcp_t* qry, const uint8_t* data, size_t datalen);
 void _output_dnssim_create_request(output_dnssim_t* self, _output_dnssim_client_t* client, core_object_payload_t* payload);
 int  _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client);
 int  _output_dnssim_tcp_connect(output_dnssim_t* self, _output_dnssim_connection_t* conn);
@@ -344,6 +345,7 @@ void _output_dnssim_conn_activate(_output_dnssim_connection_t* conn);
 void _output_dnssim_conn_maybe_free(_output_dnssim_connection_t* conn);
 void _output_dnssim_read_dns_stream(_output_dnssim_connection_t* conn, size_t len, const char* data);
 void _output_dnssim_read_dnsmsg(_output_dnssim_connection_t* conn, size_t len, const char* data);
+_output_dnssim_query_tcp_t* _output_dnssim_get_stream_qry(_output_dnssim_connection_t* conn, int64_t stream_id);
 
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
 void _output_dnssim_rand(void *data, size_t len);

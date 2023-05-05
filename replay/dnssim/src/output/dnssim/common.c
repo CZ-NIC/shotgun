@@ -380,6 +380,22 @@ void _output_dnssim_on_uv_alloc(uv_handle_t* handle, size_t suggested_size, uv_b
     buf->len = suggested_size;
 }
 
+int _output_dnssim_append_to_query_buf(_output_dnssim_query_tcp_t* qry, const uint8_t* data, size_t datalen)
+{
+    mlassert(qry->recv_buf_len || !qry->recv_buf,
+            "recv_buf was assigned while recv_buf_len was zero");
+    size_t total_len = qry->recv_buf_len + datalen;
+    if (total_len > MAX_DNSMSG_SIZE) {
+        mlwarning("response exceeded maximum size of dns message");
+        return -1;
+    }
+    mlfatal_oom(qry->recv_buf = realloc(qry->recv_buf, datalen));
+    memcpy(&qry->recv_buf[qry->recv_buf_len], data, datalen);
+    qry->recv_buf_len = total_len;
+
+    return 0;
+}
+
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
 void _output_dnssim_rand(void *data, size_t len)
 {
