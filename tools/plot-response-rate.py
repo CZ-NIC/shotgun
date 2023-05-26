@@ -17,6 +17,7 @@ from matplotlib.ticker import MultipleLocator
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import mplhlpr.styles
 
 JSON_VERSION = 20200527
 
@@ -111,11 +112,11 @@ response_rate = stat_field_rate("answers")
 
 
 def init_plot(title):
-    _, ax = plt.subplots(figsize=(8, 6))
+    _, ax = plt.subplots()
 
     ax.set_xlabel("Time [s]")
     ax.set_ylabel("Response Rate [%]")
-    ax.set_title(title)
+    mplhlpr.styles.ax_set_title(ax, title)
 
     ax.grid(True, axis="x", which="major")
 
@@ -123,7 +124,7 @@ def init_plot(title):
     ax.grid(True, axis="y", which="major")
 
     ax.yaxis.set_minor_locator(MultipleLocator(2))
-    ax.grid(True, axis="y", which="minor", linestyle="dashed", color="#DDDDDD")
+    ax.grid(True, axis="y", which="minor")
 
     return ax
 
@@ -194,6 +195,8 @@ def main():
     logger = logging.getLogger("matplotlib")
     # set WARNING for Matplotlib
     logger.setLevel(logging.WARNING)
+
+    mplhlpr.styles.configure_mpl_styles()
 
     parser = argparse.ArgumentParser(
         description="Plot response rate from shotgun experiment"

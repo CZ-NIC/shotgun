@@ -19,23 +19,24 @@ import matplotlib.colors
 from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 
+import mplhlpr.styles
 
 SCALE_MAGIC = 10000
 
 
 def init_plot(title):
-    _, ax = plt.subplots(figsize=(9, 9))
+    _, ax = plt.subplots()
 
     ax.set_xscale("log")
     ax.set_yscale("log")
 
     ax.grid(True, which="major")
-    ax.grid(True, which="minor", linestyle="dotted", color="#DDDDDD")
+    ax.grid(True, which="minor")
     ax.set_ylim(0.00009, 110)
 
     ax.set_xlabel("Number of queries per client")
     ax.set_ylabel("Percentage of clients")
-    ax.set_title(title)
+    mplhlpr.styles.ax_set_title(ax, title)
 
     colors = [
         matplotlib.colors.to_rgba(c)
@@ -103,6 +104,8 @@ def main():
     logger = logging.getLogger("matplotlib")
     # set WARNING for Matplotlib
     logger.setLevel(logging.WARNING)
+
+    mplhlpr.styles.configure_mpl_styles()
 
     parser = argparse.ArgumentParser(
         description="Analyze query distribution among clients in input pcap"

@@ -1,0 +1,65 @@
+# Inteded as augment to "shotgun" style.
+# Size and font is meant to be suitable for widescreen presentations
+# with slides 33.87 cm (width) x 19.05 cm (height)
+#
+# Usage:
+# export SHOTGUN_MPLSTYLES="shotgun,presentation"
+#
+# If resulting files are too big or rendering too slow, try adding "fast".
+# export SHOTGUN_MPLSTYLES="shotgun,presentation,fast"
+
+###### FONT
+font.family:  sans-serif
+#font.style:   normal
+#font.variant: normal
+#font.weight:  normal
+#font.stretch: normal
+font.size:    14
+
+font.sans-serif: Mada, DejaVu Sans, Bitstream Vera Sans, Computer Modern Sans Serif, Lucida Grande, Verdana, Geneva, Lucid, Arial, Helvetica, Avant Garde, sans-serif
+
+###### AXES
+# hide chart title - slide has it's own
+axes.titlesize: 0
+
+###### FIGURE
+#figure.labelsize:   large     # size of the figure label (``Figure.sup[x|y]label()``)
+figure.figsize:     10.161, 4.755  # figure size in inches
+#figure.dpi:         100       # figure dots per inch
+#figure.facecolor:   white     # figure face color
+#figure.edgecolor:   white     # figure edge color
+#figure.frameon:     True      # enable figure frame
+
+
+###### Tweak to suit target presentation software
+
+## SAVING FIGURES
+#savefig.format:      svg       # {png, ps, pdf, svg}
+#savefig.transparent: False     # whether figures are saved with a transparent
+                                # background by default
+
+
+### ps backend params
+#ps.papersize:      letter  # {auto, letter, legal, ledger, A0-A10, B0-B10}
+#ps.useafm:         False   # use of AFM fonts, results in small files
+#ps.usedistiller:   False   # {ghostscript, xpdf, None}
+                            # Experimental: may produce smaller files.
+                            # xpdf intended for production of publication quality files,
+                            # but requires ghostscript, xpdf and ps2eps
+#ps.distiller.res:  6000    # dpi
+#ps.fonttype:       3       # Output Type 3 (Type3) or Type 42 (TrueType)
+
+### PDF backend params
+#pdf.compression:    6  # integer from 0 to 9
+                        # 0 disables compression (good for debugging)
+#pdf.fonttype:       3  # Output Type 3 (Type3) or Type 42 (TrueType)
+#pdf.use14corefonts: False
+#pdf.inheritcolor:   False
+
+### SVG backend params
+#svg.image_inline: True  # Write raster image data directly into the SVG file
+#svg.fonttype: path      # How to handle SVG fonts:
+                         #     path: Embed characters as paths -- supported
+                         #           by most SVG renderers
+                         #     None: Assume fonts are installed on the
+                         #           machine where the SVG will be viewed.

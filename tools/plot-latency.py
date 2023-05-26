@@ -24,6 +24,7 @@ import matplotlib.ticker as mtick
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import mplhlpr.styles
 
 JSON_VERSION = 20200527
 MIN_X_EXP = -1
@@ -46,8 +47,7 @@ def siname(n):
 
 
 def init_plot(title):
-    # plt.rcParams["font.family"] = "monospace"
-    _, ax = plt.subplots(figsize=(9, 9))
+    _, ax = plt.subplots()
 
     ax.set_xscale("log")
     ax.xaxis.set_major_formatter(mtick.FormatStrFormatter("%s"))
@@ -55,11 +55,11 @@ def init_plot(title):
     ax.yaxis.set_major_formatter(mtick.FormatStrFormatter("%s"))
 
     ax.grid(True, which="major")
-    ax.grid(True, which="minor", linestyle="dotted", color="#DDDDDD")
+    ax.grid(True, which="minor")
 
     ax.set_xlabel("Slowest percentile")
     ax.set_ylabel("Response time [ms]")
-    ax.set_title(title)
+    mplhlpr.styles.ax_set_title(ax, title)
 
     return ax
 
@@ -239,6 +239,8 @@ def main():
     logger = logging.getLogger("matplotlib")
     # set WARNING for Matplotlib
     logger.setLevel(logging.WARNING)
+
+    mplhlpr.styles.configure_mpl_styles()
 
     args = parse_args()
 

@@ -14,6 +14,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import mplhlpr.styles
 
 JSON_VERSION = 20200527
 
@@ -40,15 +41,15 @@ def siname(n):
 
 
 def init_plot(title):
-    _, ax = plt.subplots(figsize=(8, 6))
+    _, ax = plt.subplots()
 
     ax.set_xlabel("Time [s]")
     ax.set_ylabel("Number of connections")
-    ax.set_title(title)
+    mplhlpr.styles.ax_set_title(ax, title)
 
     ax.grid(True, axis="x", which="major")
     ax.grid(True, axis="y", which="major")
-    ax.grid(True, axis="y", which="minor", linestyle="--", color="#DDDDDD")
+    ax.grid(True, axis="y", which="minor")
 
     return ax
 
@@ -79,6 +80,8 @@ def main():
     logger = logging.getLogger("matplotlib")
     # set WARNING for Matplotlib
     logger.setLevel(logging.WARNING)
+
+    mplhlpr.styles.configure_mpl_styles()
 
     parser = argparse.ArgumentParser(
         description="Plot connections over time from shotgun experiment"

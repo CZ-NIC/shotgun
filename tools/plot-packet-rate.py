@@ -17,18 +17,20 @@ import matplotlib.colors
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import mplhlpr.styles
+
 sinames = ["", " k", " M", " G", " T"]
 
 
 def init_plot(title):
-    _, ax = plt.subplots(figsize=(8, 6))
+    _, ax = plt.subplots()
 
     ax.set_xlabel("Time [s]")
     ax.set_ylabel("Packets per sampling period")
-    ax.set_title(title)
+    mplhlpr.styles.ax_set_title(ax, title)
 
-    ax.grid(True, axis="x", which="both", linestyle="dotted")
-    ax.grid(True, axis="y", which="both", linestyle="dotted")
+    ax.grid(True, axis="x", which="both")
+    ax.grid(True, axis="y", which="both")
     plt.minorticks_on()
 
     default_cycler = cycler(marker=["x", "o", "v", "s"]) * cycler(
@@ -133,6 +135,8 @@ def main():
     logger = logging.getLogger("matplotlib")
     # set WARNING for Matplotlib
     logger.setLevel(logging.WARNING)
+
+    mplhlpr.styles.configure_mpl_styles()
 
     parser = argparse.ArgumentParser(description="Plot packet rate")
 
