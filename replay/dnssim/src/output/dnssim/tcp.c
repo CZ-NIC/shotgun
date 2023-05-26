@@ -12,14 +12,14 @@
 
 static core_log_t _log = LOG_T_INIT("output.dnssim");
 
-static void _move_queries_to_pending(_output_dnssim_query_tcp_t* qry)
+static void _move_queries_to_pending(_output_dnssim_query_stream_t* qry)
 {
-    _output_dnssim_query_tcp_t* qry_tmp;
+    _output_dnssim_query_stream_t* qry_tmp;
     while (qry != NULL) {
         mlassert(qry->conn, "query must be associated with conn");
         mlassert(qry->conn->state == _OUTPUT_DNSSIM_CONN_CLOSED, "conn must be closed");
         mlassert(qry->conn->client, "conn must be associated with client");
-        qry_tmp       = (_output_dnssim_query_tcp_t*)qry->qry.next;
+        qry_tmp       = (_output_dnssim_query_stream_t*)qry->qry.next;
         qry->qry.next = NULL;
         _ll_append(qry->conn->client->pending, &qry->qry);
         qry->conn         = NULL;
@@ -42,9 +42,9 @@ static void _on_tcp_closed(uv_handle_t* handle)
     conn->state = _OUTPUT_DNSSIM_CONN_CLOSED;
 
     /* Orphan any queries that are still unresolved. */
-    _move_queries_to_pending((_output_dnssim_query_tcp_t*)conn->queued);
+    _move_queries_to_pending((_output_dnssim_query_stream_t*)conn->queued);
     conn->queued = NULL;
-    _move_queries_to_pending((_output_dnssim_query_tcp_t*)conn->sent);
+    _move_queries_to_pending((_output_dnssim_query_stream_t*)conn->sent);
     conn->sent = NULL;
 
     /* TODO Improve client re-connect behavior in case the connection fails to
@@ -65,12 +65,12 @@ static void _on_tcp_closed(uv_handle_t* handle)
 
 static void _on_tcp_query_written(uv_write_t* wr_req, int status)
 {
-    _output_dnssim_query_tcp_t* qry = (_output_dnssim_query_tcp_t*)wr_req->data;
+    _output_dnssim_query_stream_t* qry = (_output_dnssim_query_stream_t*)wr_req->data;
     mlassert(qry, "qry/wr_req->data is nil");
     mlassert(qry->conn, "query must be associated with connection");
     _output_dnssim_connection_t* conn = qry->conn;
 
-    free(((_output_dnssim_query_tcp_t*)qry)->bufs[0].base);
+    free(((_output_dnssim_query_stream_t*)qry)->bufs[0].base);
 
     if (qry->qry.state == _OUTPUT_DNSSIM_QUERY_PENDING_CLOSE) {
         qry->qry.state                = status < 0 ? _OUTPUT_DNSSIM_QUERY_WRITE_FAILED : _OUTPUT_DNSSIM_QUERY_SENT;
@@ -102,7 +102,7 @@ static void _on_tcp_query_written(uv_write_t* wr_req, int status)
     }
 }
 
-void _output_dnssim_tcp_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_tcp_t* qry)
+void _output_dnssim_tcp_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry)
 {
     mlassert(qry, "qry can't be null");
     mlassert(qry->qry.state == _OUTPUT_DNSSIM_QUERY_PENDING_WRITE, "qry must be pending write");
@@ -304,9 +304,9 @@ int _output_dnssim_create_query_tcp(output_dnssim_t* self, _output_dnssim_reques
     lassert(req, "req is nil");
     lassert(req->client, "request must have a client associated with it");
 
-    _output_dnssim_query_tcp_t* qry;
+    _output_dnssim_query_stream_t* qry;
 
-    lfatal_oom(qry = calloc(1, sizeof(_output_dnssim_query_tcp_t)));
+    lfatal_oom(qry = calloc(1, sizeof(_output_dnssim_query_stream_t)));
 
     qry->qry.transport = OUTPUT_DNSSIM_TRANSPORT_TCP;
     qry->qry.req       = req;
@@ -317,7 +317,7 @@ int _output_dnssim_create_query_tcp(output_dnssim_t* self, _output_dnssim_reques
     return _output_dnssim_handle_pending_queries(req->client);
 }
 
-void _output_dnssim_close_query_tcp(_output_dnssim_query_tcp_t* qry)
+void _output_dnssim_close_query_tcp(_output_dnssim_query_stream_t* qry)
 {
     mlassert(qry, "qry can't be null");
     mlassert(qry->qry.req, "query must be part of a request");

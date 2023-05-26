@@ -64,7 +64,7 @@ static void udp_recv_cb(uv_udp_t* udp, ssize_t nread, const uv_buf_t* buf,
                         const struct sockaddr* addr, unsigned flags)
 {
     if (nread < 0) {
-        mlwarning("nread error: %s", uv_strerror((int)nread));
+        mlwarning("quic nread error: %s (%s)", uv_strerror((int)nread), uv_err_name((int)nread));
         return;
     }
 
@@ -99,6 +99,12 @@ static void nudge_timer_cb(uv_timer_t *timer)
 {
     _output_dnssim_connection_t* conn = timer->data;
     quic_send(conn, NGTCP2_STREAM_DATA_FLAG_NONE, -1);
+}
+
+static void conn_timer_cb(uv_timer_t* handle)
+{
+    _output_dnssim_connection_t* conn = (_output_dnssim_connection_t*)handle->data;
+    _output_dnssim_conn_close(conn);
 }
 
 
@@ -171,14 +177,23 @@ static int recv_stream_data_cb(ngtcp2_conn* qconn, uint32_t flags,
     _output_dnssim_connection_t* conn = (_output_dnssim_connection_t*)user_data;
     mlassert(conn, "conn is nil");
 
-    _output_dnssim_query_tcp_t* qry = _output_dnssim_get_stream_qry(conn, stream_id);
+    _output_dnssim_query_stream_t* qry = _output_dnssim_get_stream_qry(conn, stream_id);
     mldebug("quic: data chunk recv, qconn=%p, len=%d", qconn, datalen);
     if (!qry) {
         mldebug("no query associated with this stream id, ignoring");
         return 0;
     }
 
-    return _output_dnssim_append_to_query_buf(qry, data, datalen);
+    int ret = _output_dnssim_append_to_query_buf(qry, data, datalen);
+    if (ret)
+        return ret;
+
+    if (flags & NGTCP2_STREAM_DATA_FLAG_FIN && qry->recv_buf_len) {
+        _output_dnssim_read_dnsmsg(conn, qry->recv_buf_len, (char*)qry->recv_buf);
+        qry->recv_buf_len = 0;
+    }
+
+    return 0;
 }
 
 static int stream_close_cb(ngtcp2_conn* qconn, uint32_t flags,
@@ -188,14 +203,17 @@ static int stream_close_cb(ngtcp2_conn* qconn, uint32_t flags,
     _output_dnssim_connection_t* conn = user_data;
     mlassert(conn, "conn is nil");
 
-    _output_dnssim_query_tcp_t* qry = _output_dnssim_get_stream_qry(conn, stream_id);
+    _output_dnssim_query_stream_t* qry = _output_dnssim_get_stream_qry(conn, stream_id);
     mldebug("quic: stream closed, qconn=%p", qconn);
     if (!qry) {
         mldebug("no query associated with this stream id, ignoring");
         return 0;
     }
 
-    _output_dnssim_read_dnsmsg(conn, qry->recv_buf_len, (char*)qry->recv_buf);
+    if (qry->recv_buf_len) {
+        _output_dnssim_read_dnsmsg(conn, qry->recv_buf_len, (char*)qry->recv_buf);
+        qry->recv_buf_len = 0;
+    }
 
     return 0;
 }
@@ -215,11 +233,11 @@ static const ngtcp2_callbacks quic_client_callbacks = {
     .version_negotiation      = ngtcp2_crypto_version_negotiation_cb,
 
     // Our callbacks
-    .rand = rand_cb,
+    .rand                  = rand_cb,
     .get_new_connection_id = get_new_connection_id_cb,
-    .handshake_confirmed = handshake_confirmed_cb,
-    .recv_stream_data = recv_stream_data_cb,
-    .stream_close = stream_close_cb,
+    .handshake_confirmed   = handshake_confirmed_cb,
+    .recv_stream_data      = recv_stream_data_cb,
+    .stream_close          = stream_close_cb,
 };
 
 
@@ -388,6 +406,10 @@ int  _output_dnssim_quic_connect(output_dnssim_t* self, _output_dnssim_connectio
 
     ngtcp2_transport_params params;
     ngtcp2_transport_params_default(&params);
+    params.initial_max_streams_uni = 0;
+    params.initial_max_streams_bidi = 0;
+    params.initial_max_stream_data_bidi_local = NGTCP2_MAX_VARINT;
+    params.initial_max_data = NGTCP2_MAX_VARINT;
 
     /* CIDs */
     ngtcp2_cid dcid;
@@ -448,6 +470,23 @@ int  _output_dnssim_quic_connect(output_dnssim_t* self, _output_dnssim_connectio
     ngtcp2_conn_set_tls_native_handle(conn->quic->qconn, conn->tls->session);
 
     uv_timer_start(&conn->quic->nudge_timer, nudge_timer_cb, 0, 100);
+
+    /* Set connection handshake timeout. */
+    lfatal_oom(conn->handshake_timer = malloc(sizeof(uv_timer_t)));
+    uv_timer_init(&_self->loop, conn->handshake_timer);
+    conn->handshake_timer->data = (void*)conn;
+    uv_timer_start(conn->handshake_timer, conn_timer_cb, self->handshake_timeout_ms, 0);
+
+    /* Set idle connection timer. */
+    if (self->idle_timeout_ms > 0) {
+        lfatal_oom(conn->idle_timer = malloc(sizeof(uv_timer_t)));
+        uv_timer_init(&_self->loop, conn->idle_timer);
+        conn->idle_timer->data = (void*)conn;
+
+        /* Start and stop the timer to set the repeat value without running the timer. */
+        uv_timer_start(conn->idle_timer, conn_timer_cb, self->idle_timeout_ms, self->idle_timeout_ms);
+        uv_timer_stop(conn->idle_timer);
+    }
 
     ret = uv_udp_recv_start(conn->transport.udp, udp_alloc_cb, udp_recv_cb);
     if (ret) {
@@ -536,7 +575,7 @@ void _output_dnssim_quic_close(_output_dnssim_connection_t* conn)
     }
 }
 
-void _output_dnssim_quic_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_tcp_t* qry)
+void _output_dnssim_quic_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry)
 {
     mlassert(qry, "qry can't be null");
     mlassert(qry->qry.state == _OUTPUT_DNSSIM_QUERY_PENDING_WRITE, "qry must be pending write");
@@ -565,7 +604,9 @@ void _output_dnssim_quic_write_query(_output_dnssim_connection_t* conn, _output_
     };
 
     ret = ngtcp2_conn_open_bidi_stream(conn->quic->qconn, &qry->stream_id, NULL);
-    if (ret) {
+    if (ret == NGTCP2_ERR_STREAM_ID_BLOCKED) {
+        return;
+    } else if (ret) {
         lwarning("failed to open bidi stream: %s", ngtcp2_strerror(ret));
         return;
     }
@@ -592,26 +633,27 @@ void _output_dnssim_quic_write_query(_output_dnssim_connection_t* conn, _output_
     qry->qry.state = _OUTPUT_DNSSIM_QUERY_SENT;
 }
 
-int  _output_dnssim_create_query_quic(output_dnssim_t* self, _output_dnssim_request_t* req)
+int _output_dnssim_create_query_quic(output_dnssim_t* self, _output_dnssim_request_t* req)
 {
     mlassert_self();
     lassert(req, "req is nil");
     lassert(req->client, "request must have a client associated with it");
 
-    _output_dnssim_query_quic_t* qry;
+    _output_dnssim_query_stream_t* qry;
 
     lfatal_oom(qry = calloc(1, sizeof(*qry)));
 
     qry->qry.transport = OUTPUT_DNSSIM_TRANSPORT_QUIC;
     qry->qry.req = req;
     qry->qry.state = _OUTPUT_DNSSIM_QUERY_PENDING_WRITE;
+    qry->stream_id     = -1;
     req->qry = &qry->qry;
     _ll_append(req->client->pending, &qry->qry);
 
     return _output_dnssim_handle_pending_queries(req->client);
 }
 
-void _output_dnssim_close_query_quic(_output_dnssim_query_quic_t* qry)
+void _output_dnssim_close_query_quic(_output_dnssim_query_stream_t* qry)
 {
     mlassert(qry, "qry can't be null");
     mlassert(qry->qry.req, "query must be part of a request");
@@ -625,6 +667,8 @@ void _output_dnssim_close_query_quic(_output_dnssim_query_quic_t* qry)
         qry->conn = NULL;
         _output_dnssim_conn_idle(conn);
     }
+
+    free(qry->recv_buf);
 
     _ll_remove(req->qry, &qry->qry);
     free(qry);

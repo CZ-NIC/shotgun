@@ -79,7 +79,7 @@ static int _http2_on_header(nghttp2_session* session, const nghttp2_frame* frame
                  * slightly better than mocking SERVFAIL for statistics. */
                 _output_dnssim_connection_t* conn = (_output_dnssim_connection_t*)user_data;
                 mlassert(conn, "conn is nil");
-                _output_dnssim_query_tcp_t* qry = _output_dnssim_get_stream_qry(conn, frame->hd.stream_id);
+                _output_dnssim_query_stream_t* qry = _output_dnssim_get_stream_qry(conn, frame->hd.stream_id);
 
                 if (qry != NULL) {
                     _output_dnssim_close_query_https2(qry);
@@ -96,7 +96,7 @@ static int _http2_on_data_recv(nghttp2_session* session, uint8_t flags, int32_t 
     _output_dnssim_connection_t* conn = (_output_dnssim_connection_t*)user_data;
     mlassert(conn, "conn is nil");
 
-    _output_dnssim_query_tcp_t* qry = _output_dnssim_get_stream_qry(conn, stream_id);
+    _output_dnssim_query_stream_t* qry = _output_dnssim_get_stream_qry(conn, stream_id);
     mldebug("http2: data chunk recv, session=%p, len=%d", session, len);
     if (!qry) {
         mldebug("no query associated with this stream id, ignoring");
@@ -152,7 +152,7 @@ static int _http2_on_frame_recv(nghttp2_session* session, const nghttp2_frame* f
     case NGHTTP2_DATA:
         if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
             mldebug("http2 (%p): final DATA frame recv", session);
-            _output_dnssim_query_tcp_t* qry = _output_dnssim_get_stream_qry(conn, frame->hd.stream_id);
+            _output_dnssim_query_stream_t* qry = _output_dnssim_get_stream_qry(conn, frame->hd.stream_id);
 
             if (qry != NULL) {
                 conn->http2->current_qry = qry;
@@ -314,9 +314,9 @@ int _output_dnssim_create_query_https2(output_dnssim_t* self, _output_dnssim_req
     lassert(req, "req is nil");
     lassert(req->client, "request must have a client associated with it");
 
-    _output_dnssim_query_tcp_t* qry;
+    _output_dnssim_query_stream_t* qry;
 
-    lfatal_oom(qry = calloc(1, sizeof(_output_dnssim_query_tcp_t)));
+    lfatal_oom(qry = calloc(1, sizeof(_output_dnssim_query_stream_t)));
 
     qry->qry.transport = OUTPUT_DNSSIM_TRANSPORT_HTTPS2;
     qry->qry.req       = req;
@@ -328,7 +328,7 @@ int _output_dnssim_create_query_https2(output_dnssim_t* self, _output_dnssim_req
     return _output_dnssim_handle_pending_queries(req->client);
 }
 
-void _output_dnssim_close_query_https2(_output_dnssim_query_tcp_t* qry)
+void _output_dnssim_close_query_https2(_output_dnssim_query_stream_t* qry)
 {
     mlassert(qry, "qry can't be null");
     mlassert(qry->qry.req, "query must be part of a request");
@@ -359,7 +359,7 @@ void _output_dnssim_https2_close(_output_dnssim_connection_t* conn)
     _output_dnssim_tls_close(conn);
 }
 
-static int _http2_send_query_get(_output_dnssim_connection_t* conn, _output_dnssim_query_tcp_t* qry)
+static int _http2_send_query_get(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry)
 {
     mlassert(conn, "conn can't be null");
     mlassert(qry, "qry can't be null");
@@ -422,7 +422,7 @@ static int _http2_send_query_get(_output_dnssim_connection_t* conn, _output_dnss
     return 0;
 }
 
-static int _http2_send_query_post(_output_dnssim_connection_t* conn, _output_dnssim_query_tcp_t* qry)
+static int _http2_send_query_post(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry)
 {
     mlassert(conn, "conn can't be null");
     mlassert(qry, "qry can't be null");
@@ -489,7 +489,7 @@ static int _http2_send_query_post(_output_dnssim_connection_t* conn, _output_dns
     return 0;
 }
 
-void _output_dnssim_https2_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_tcp_t* qry)
+void _output_dnssim_https2_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry)
 {
     mlassert(qry, "qry can't be null");
     mlassert(qry->qry.state == _OUTPUT_DNSSIM_QUERY_PENDING_WRITE, "qry must be pending write");

@@ -211,25 +211,25 @@ static void _close_query(_output_dnssim_query_t* qry)
         _output_dnssim_close_query_udp((_output_dnssim_query_udp_t*)qry);
         break;
     case OUTPUT_DNSSIM_TRANSPORT_TCP:
-        _output_dnssim_close_query_tcp((_output_dnssim_query_tcp_t*)qry);
+        _output_dnssim_close_query_tcp((_output_dnssim_query_stream_t*)qry);
         break;
     case OUTPUT_DNSSIM_TRANSPORT_TLS:
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
-        _output_dnssim_close_query_tls((_output_dnssim_query_tcp_t*)qry);
+        _output_dnssim_close_query_tls((_output_dnssim_query_stream_t*)qry);
 #else
         mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
 #endif
         break;
     case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
-        _output_dnssim_close_query_https2((_output_dnssim_query_tcp_t*)qry);
+        _output_dnssim_close_query_https2((_output_dnssim_query_stream_t*)qry);
 #else
         mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
 #endif
         break;
     case OUTPUT_DNSSIM_TRANSPORT_QUIC:
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
-        _output_dnssim_close_query_quic((_output_dnssim_query_quic_t*)qry);
+        _output_dnssim_close_query_quic((_output_dnssim_query_stream_t*)qry);
 #else
         mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
 #endif
@@ -380,7 +380,7 @@ void _output_dnssim_on_uv_alloc(uv_handle_t* handle, size_t suggested_size, uv_b
     buf->len = suggested_size;
 }
 
-int _output_dnssim_append_to_query_buf(_output_dnssim_query_tcp_t* qry, const uint8_t* data, size_t datalen)
+int _output_dnssim_append_to_query_buf(_output_dnssim_query_stream_t* qry, const uint8_t* data, size_t datalen)
 {
     mlassert(qry->recv_buf_len || !qry->recv_buf,
             "recv_buf was assigned while recv_buf_len was zero");

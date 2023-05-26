@@ -161,13 +161,13 @@ void _output_dnssim_conn_idle(_output_dnssim_connection_t* conn)
 
 static void _send_pending_queries(_output_dnssim_connection_t* conn)
 {
-    _output_dnssim_query_tcp_t* qry;
+    _output_dnssim_query_stream_t* qry;
     mlassert(conn, "conn is nil");
     mlassert(conn->client, "conn->client is nil");
-    qry = (_output_dnssim_query_tcp_t*)conn->client->pending;
+    qry = (_output_dnssim_query_stream_t*)conn->client->pending;
 
     while (qry != NULL && conn->state == _OUTPUT_DNSSIM_CONN_ACTIVE) {
-        _output_dnssim_query_tcp_t* next = (_output_dnssim_query_tcp_t*)qry->qry.next;
+        _output_dnssim_query_stream_t* next = (_output_dnssim_query_stream_t*)qry->qry.next;
         if (qry->qry.state == _OUTPUT_DNSSIM_QUERY_PENDING_WRITE) {
             switch (qry->qry.transport) {
             case OUTPUT_DNSSIM_TRANSPORT_TCP:
@@ -494,15 +494,15 @@ void _output_dnssim_read_dnsmsg(_output_dnssim_connection_t* conn, size_t len, c
     conn->dnsbuf_free_after_use = false;
 }
 
-_output_dnssim_query_tcp_t* _output_dnssim_get_stream_qry(
+_output_dnssim_query_stream_t* _output_dnssim_get_stream_qry(
         _output_dnssim_connection_t* conn, int64_t stream_id)
 {
     mlassert(conn, "conn is nil");
     mlassert(stream_id >= 0, "invalid stream_id");
 
-    _output_dnssim_query_tcp_t* qry = (_output_dnssim_query_tcp_t*)conn->sent;
+    _output_dnssim_query_stream_t* qry = (_output_dnssim_query_stream_t*)conn->sent;
     while (qry != NULL && qry->stream_id != stream_id) {
-        qry = (_output_dnssim_query_tcp_t*)qry->qry.next;
+        qry = (_output_dnssim_query_stream_t*)qry->qry.next;
     }
 
     return qry;

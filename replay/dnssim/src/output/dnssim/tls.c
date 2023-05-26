@@ -348,9 +348,9 @@ int _output_dnssim_create_query_tls(output_dnssim_t* self, _output_dnssim_reques
     lassert(req, "req is nil");
     lassert(req->client, "request must have a client associated with it");
 
-    _output_dnssim_query_tcp_t* qry;
+    _output_dnssim_query_stream_t* qry;
 
-    lfatal_oom(qry = calloc(1, sizeof(_output_dnssim_query_tcp_t)));
+    lfatal_oom(qry = calloc(1, sizeof(_output_dnssim_query_stream_t)));
 
     qry->qry.transport = OUTPUT_DNSSIM_TRANSPORT_TLS;
     qry->qry.req       = req;
@@ -361,7 +361,7 @@ int _output_dnssim_create_query_tls(output_dnssim_t* self, _output_dnssim_reques
     return _output_dnssim_handle_pending_queries(req->client);
 }
 
-void _output_dnssim_close_query_tls(_output_dnssim_query_tcp_t* qry)
+void _output_dnssim_close_query_tls(_output_dnssim_query_stream_t* qry)
 {
     mlassert(qry, "qry can't be null");
     mlassert(qry->qry.req, "query must be part of a request");
@@ -404,7 +404,7 @@ void _output_dnssim_tls_close(_output_dnssim_connection_t* conn)
         _output_dnssim_tcp_close(conn);
 }
 
-void _output_dnssim_tls_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_tcp_t* qry)
+void _output_dnssim_tls_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry)
 {
     mlassert(qry, "qry can't be null");
     mlassert(qry->qry.state == _OUTPUT_DNSSIM_QUERY_PENDING_WRITE, "qry must be pending write");
