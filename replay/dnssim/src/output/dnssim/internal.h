@@ -175,7 +175,7 @@ typedef struct _output_dnssim_http2_ctx {
 typedef struct _output_dnssim_quic_ctx {
     ngtcp2_conn* qconn;
     ngtcp2_crypto_conn_ref qconn_ref;
-    ngtcp2_path path;
+    ngtcp2_pkt_info pi;
     uv_timer_t nudge_timer;
 
     uint32_t max_concurrent_streams;
