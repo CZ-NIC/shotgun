@@ -188,10 +188,8 @@ static int recv_stream_data_cb(ngtcp2_conn* qconn, uint32_t flags,
     if (ret)
         return ret;
 
-    if (flags & NGTCP2_STREAM_DATA_FLAG_FIN && qry->recv_buf_len) {
-        _output_dnssim_read_dnsmsg(conn, qry->recv_buf_len, (char*)qry->recv_buf);
-        qry->recv_buf_len = 0;
-    }
+    if (flags & NGTCP2_STREAM_DATA_FLAG_FIN && qry->recv_buf_len)
+        _output_dnssim_read_dns_stream(conn, qry->recv_buf_len, (char*)qry->recv_buf);
 
     return 0;
 }
@@ -565,6 +563,7 @@ void _output_dnssim_quic_close(_output_dnssim_connection_t* conn)
 
     if (conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_UDP) {
         mldebug("stopping UDP reception");
+        uv_udp_connect(conn->transport.udp, NULL); /* disconnect */
         uv_udp_recv_stop(conn->transport.udp);
         uv_close((uv_handle_t*)conn->transport.udp, _output_dnssim_quic_handle_on_close);
         uv_timer_stop(&conn->quic->nudge_timer);
