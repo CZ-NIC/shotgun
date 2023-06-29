@@ -291,10 +291,10 @@ void _output_dnssim_https2_process_input_data(_output_dnssim_connection_t* conn,
     conn->prevent_close = false;
     if (ret < 0) {
         mlwarning("failed nghttp2_session_mem_recv: %s", nghttp2_strerror(ret));
-        _output_dnssim_conn_close(conn);
+        _output_dnssim_conn_close(conn, true);
         return;
     } else if (conn->state == _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED) {
-        _output_dnssim_conn_close(conn);
+        _output_dnssim_conn_close(conn, false);
         return;
     }
     mlassert(ret == len, "nghttp2_session_mem_recv didn't process all data");
@@ -303,7 +303,7 @@ void _output_dnssim_https2_process_input_data(_output_dnssim_connection_t* conn,
     ret = nghttp2_session_send(conn->http2->session);
     if (ret < 0) {
         mlwarning("failed nghttp2_session_send: %s", nghttp2_strerror(ret));
-        _output_dnssim_conn_close(conn);
+        _output_dnssim_conn_close(conn, true);
         return;
     }
 }
@@ -506,7 +506,7 @@ void _output_dnssim_https2_write_query(_output_dnssim_connection_t* conn, _outpu
 
     if (!nghttp2_session_check_request_allowed(conn->http2->session)) {
         mldebug("http2 (%p): request not allowed", conn->http2->session);
-        _output_dnssim_conn_close(conn);
+        _output_dnssim_conn_close(conn, true);
         return;
     }
 
@@ -522,7 +522,7 @@ void _output_dnssim_https2_write_query(_output_dnssim_connection_t* conn, _outpu
     }
 
     if (ret < 0) {
-        _output_dnssim_conn_close(conn);
+        _output_dnssim_conn_close(conn, true);
         return;
     }
 

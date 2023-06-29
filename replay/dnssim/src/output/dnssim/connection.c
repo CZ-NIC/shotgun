@@ -68,7 +68,7 @@ static void _on_idle_timer_closed(uv_handle_t* handle)
     _output_dnssim_conn_maybe_free(conn);
 }
 
-void _output_dnssim_conn_close(_output_dnssim_connection_t* conn)
+void _output_dnssim_conn_close(_output_dnssim_connection_t* conn, bool force)
 {
     mlassert(conn, "conn can't be nil");
     mlassert(conn->stats, "conn must have stats");
@@ -133,7 +133,7 @@ void _output_dnssim_conn_close(_output_dnssim_connection_t* conn)
         break;
     case OUTPUT_DNSSIM_TRANSPORT_QUIC:
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
-        _output_dnssim_quic_close(conn);
+        _output_dnssim_quic_close(conn, force);
 #else
         lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
 #endif
@@ -151,7 +151,7 @@ void _output_dnssim_conn_idle(_output_dnssim_connection_t* conn)
 
     if (conn->queued == NULL && conn->sent == NULL) {
         if (conn->idle_timer == NULL)
-            _output_dnssim_conn_close(conn);
+            _output_dnssim_conn_close(conn, true);
         else if (!conn->is_idle) {
             conn->is_idle = true;
             uv_timer_again(conn->idle_timer);
@@ -459,7 +459,7 @@ void _output_dnssim_read_dns_stream(_output_dnssim_connection_t* conn, size_t le
         chunk = _read_dns_stream_chunk(conn, len - pos, data + pos);
         if (chunk < 0) {
             mlwarning("lost orientation in DNS stream, closing");
-            _output_dnssim_conn_close(conn);
+            _output_dnssim_conn_close(conn, true);
             break;
         } else {
             pos += chunk;

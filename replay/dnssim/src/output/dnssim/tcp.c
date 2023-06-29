@@ -85,7 +85,7 @@ static void _on_tcp_query_written(uv_write_t* wr_req, int status)
             mlinfo("tcp write failed: %s", uv_strerror(status));
         if (qry != NULL)
             qry->qry.state = _OUTPUT_DNSSIM_QUERY_WRITE_FAILED;
-        _output_dnssim_conn_close(conn);
+        _output_dnssim_conn_close(conn, true);
         return;
     }
 
@@ -167,9 +167,12 @@ static void _on_tcp_read(uv_stream_t* handle, ssize_t nread, const uv_buf_t* buf
             break;
         }
     } else if (nread < 0) {
-        if (nread != UV_EOF)
+        if (nread != UV_EOF) {
             mlinfo("tcp conn unexpected close: %s", uv_strerror(nread));
-        _output_dnssim_conn_close(conn);
+            _output_dnssim_conn_close(conn, true);
+        } else {
+            _output_dnssim_conn_close(conn, false);
+        }
     }
 
     if (buf->base != NULL)
@@ -186,7 +189,7 @@ static void _on_tcp_connected(uv_connect_t* conn_req, int status)
 
     if (status < 0) {
         mldebug("tcp connect failed: %s", uv_strerror(status));
-        _output_dnssim_conn_close(conn);
+        _output_dnssim_conn_close(conn, true);
         return;
     }
 
@@ -194,7 +197,7 @@ static void _on_tcp_connected(uv_connect_t* conn_req, int status)
     int ret = uv_read_start((uv_stream_t*)conn->transport.tcp, _output_dnssim_on_uv_alloc, _on_tcp_read);
     if (ret < 0) {
         mlwarning("tcp uv_read_start() failed: %s", uv_strerror(ret));
-        _output_dnssim_conn_close(conn);
+        _output_dnssim_conn_close(conn, true);
         return;
     }
 
@@ -224,7 +227,7 @@ static void _on_tcp_connected(uv_connect_t* conn_req, int status)
 static void _on_connection_timeout(uv_timer_t* handle)
 {
     _output_dnssim_connection_t* conn = (_output_dnssim_connection_t*)handle->data;
-    _output_dnssim_conn_close(conn);
+    _output_dnssim_conn_close(conn, true);
 }
 
 int _output_dnssim_tcp_connect(output_dnssim_t* self, _output_dnssim_connection_t* conn)
@@ -283,7 +286,7 @@ int _output_dnssim_tcp_connect(output_dnssim_t* self, _output_dnssim_connection_
     conn->state = _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE;
     return 0;
 failure:
-    _output_dnssim_conn_close(conn);
+    _output_dnssim_conn_close(conn, true);
     return ret;
 }
 
