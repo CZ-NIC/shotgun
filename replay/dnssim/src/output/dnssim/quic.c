@@ -189,7 +189,7 @@ static int recv_stream_data_cb(ngtcp2_conn* qconn, uint32_t flags,
         return ret;
 
     if (flags & NGTCP2_STREAM_DATA_FLAG_FIN && qry->recv_buf_len)
-        _output_dnssim_read_dns_stream(conn, qry->recv_buf_len, (char*)qry->recv_buf);
+        _output_dnssim_read_dns_stream(conn, qry->recv_buf_len, (char*)qry->recv_buf, stream_id);
 
     return 0;
 }

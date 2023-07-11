@@ -331,10 +331,10 @@ int _process_dnsmsg(_output_dnssim_connection_t* conn)
     dns_a.obj_prev = (core_object_t*)&payload;
     int ret        = core_object_dns_parse_header(&dns_a);
     if (ret != 0) {
-        lwarning("tcp response malformed");
+        lwarning("stream response malformed");
         return _ERR_MALFORMED;
     }
-    ldebug("tcp recv dnsmsg id: %04x", dns_a.id);
+    ldebug("stream recv dnsmsg id: %04x", dns_a.id);
 
     _output_dnssim_query_t* qry;
 
@@ -358,7 +358,24 @@ int _process_dnsmsg(_output_dnssim_connection_t* conn)
             lwarning("https2 response question mismatch");
             break;
         }
-    // TODO: special QUIC case - match by stream ID
+    } else if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_QUIC) {
+        lassert(conn->quic, "conn must have quic ctx");
+
+        qry = &_output_dnssim_get_stream_qry(conn, conn->dnsbuf_stream_id)->qry;
+        if (qry) {
+            ret = _output_dnssim_answers_request(qry->req, &dns_a);
+            switch (ret) {
+            case _ERR_MSGID:
+            case 0:
+                _output_dnssim_request_answered(qry->req, &dns_a);
+                break;
+
+            default:
+                    lwarning("response question mismatch");
+            }
+        } else {
+            lwarning("could not find qry for stream_id");
+        }
     } else {
         qry = conn->sent;
         while (qry != NULL) {
@@ -427,7 +444,7 @@ static int _parse_dnsbuf_data(_output_dnssim_connection_t* conn)
     return ret;
 }
 
-static unsigned int _read_dns_stream_chunk(_output_dnssim_connection_t* conn, size_t len, const char* data)
+static unsigned int _read_dns_stream_chunk(_output_dnssim_connection_t* conn, size_t len, const char* data, int64_t stream_id)
 {
     mlassert(conn, "conn can't be nil");
     mlassert(data, "data can't be nil");
@@ -457,7 +474,13 @@ static unsigned int _read_dns_stream_chunk(_output_dnssim_connection_t* conn, si
         nread = len;
     } else { /* Complete and clean read. */
         mlassert(expected <= len, "not enough data to perform complete read");
+        // TODO: This is really weird - why can't we just pass these to the
+        //       function? Apart from the dubious ownership, a connection now
+        //       does not necessarily contain only a single stream of data, so
+        //       this could result in a really nasty race condition further down
+        //       the road.
         conn->dnsbuf_data = (char*)data;
+        conn->dnsbuf_stream_id = stream_id;
         conn->dnsbuf_pos  = conn->dnsbuf_len;
         nread             = expected;
     }
@@ -472,12 +495,12 @@ static unsigned int _read_dns_stream_chunk(_output_dnssim_connection_t* conn, si
     return nread;
 }
 
-void _output_dnssim_read_dns_stream(_output_dnssim_connection_t* conn, size_t len, const char* data)
+void _output_dnssim_read_dns_stream(_output_dnssim_connection_t* conn, size_t len, const char* data, int64_t stream_id)
 {
     int pos   = 0;
     int chunk = 0;
     while (pos < len) {
-        chunk = _read_dns_stream_chunk(conn, len - pos, data + pos);
+        chunk = _read_dns_stream_chunk(conn, len - pos, data + pos, stream_id);
         if (chunk < 0) {
             mlwarning("lost orientation in DNS stream, closing");
             _output_dnssim_conn_close(conn, true);
@@ -500,7 +523,7 @@ void _output_dnssim_read_dnsmsg(_output_dnssim_connection_t* conn, size_t len, c
     /* Read dnsmsg of given length from input data. */
     conn->dnsbuf_len = len;
     conn->read_state = _OUTPUT_DNSSIM_READ_STATE_DNSMSG;
-    int nread        = _read_dns_stream_chunk(conn, len, data);
+    int nread        = _read_dns_stream_chunk(conn, len, data, -1);
 
     if (nread != len) {
         mlwarning("failed to read received dnsmsg");

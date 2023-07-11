@@ -231,6 +231,7 @@ struct _output_dnssim_connection {
 
     /* Receive buffer used for incomplete messages or dnslen. */
     char* dnsbuf_data;
+    int64_t dnsbuf_stream_id;
     bool  dnsbuf_free_after_use;
 
     /* Statistics interval in which the handshake is tracked. */
@@ -335,7 +336,7 @@ void _output_dnssim_conn_idle(_output_dnssim_connection_t* conn);
 int  _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client);
 void _output_dnssim_conn_activate(_output_dnssim_connection_t* conn);
 void _output_dnssim_conn_maybe_free(_output_dnssim_connection_t* conn);
-void _output_dnssim_read_dns_stream(_output_dnssim_connection_t* conn, size_t len, const char* data);
+void _output_dnssim_read_dns_stream(_output_dnssim_connection_t* conn, size_t len, const char* data, int64_t stream_id);
 void _output_dnssim_read_dnsmsg(_output_dnssim_connection_t* conn, size_t len, const char* data);
 _output_dnssim_query_stream_t* _output_dnssim_get_stream_qry(_output_dnssim_connection_t* conn, int64_t stream_id);
 

@@ -148,7 +148,7 @@ static void _on_tcp_read(uv_stream_t* handle, ssize_t nread, const uv_buf_t* buf
         mldebug("tcp nread: %d", nread);
         switch (_self->transport) {
         case OUTPUT_DNSSIM_TRANSPORT_TCP:
-            _output_dnssim_read_dns_stream(conn, nread, buf->base);
+            _output_dnssim_read_dns_stream(conn, nread, buf->base, -1);
             break;
         case OUTPUT_DNSSIM_TRANSPORT_TLS:
         case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:

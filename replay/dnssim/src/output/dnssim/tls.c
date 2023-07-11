@@ -93,7 +93,7 @@ void _output_dnssim_tls_process_input_data(_output_dnssim_connection_t* conn)
         if (count > 0) {
             switch (_self->transport) {
             case OUTPUT_DNSSIM_TRANSPORT_TLS:
-                _output_dnssim_read_dns_stream(conn, count, _self->wire_buf);
+                _output_dnssim_read_dns_stream(conn, count, _self->wire_buf, -1);
                 break;
             case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
                 _output_dnssim_https2_process_input_data(conn, count, _self->wire_buf);
