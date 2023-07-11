@@ -33,7 +33,7 @@ void _output_dnssim_conn_maybe_free(_output_dnssim_connection_t* conn)
 {
     mlassert(conn, "conn can't be nil");
     mlassert(conn->client, "conn must belong to a client");
-    if (!_conn_has_transport(conn) && conn->handshake_timer == NULL && conn->idle_timer == NULL) {
+    if (!_conn_has_transport(conn) && conn->handshake_timer == NULL && conn->idle_timer == NULL && conn->nudge_timer == NULL) {
         _ll_try_remove(conn->client->conn, conn);
         if (conn->tls != NULL) {
             free(conn->tls);
@@ -42,6 +42,10 @@ void _output_dnssim_conn_maybe_free(_output_dnssim_connection_t* conn)
         if (conn->http2 != NULL) {
             free(conn->http2);
             conn->http2 = NULL;
+        }
+        if (conn->quic != NULL) {
+            free(conn->quic);
+            conn->quic = NULL;
         }
         free(conn);
     }
@@ -65,6 +69,16 @@ static void _on_idle_timer_closed(uv_handle_t* handle)
     free(conn->idle_timer);
     conn->is_idle    = false;
     conn->idle_timer = NULL;
+    _output_dnssim_conn_maybe_free(conn);
+}
+
+static void _on_nudge_timer_closed(uv_handle_t* handle)
+{
+    _output_dnssim_connection_t* conn = (_output_dnssim_connection_t*)handle->data;
+    mlassert(conn, "conn is nil");
+    mlassert(conn->nudge_timer, "conn must have nudge timer when closing it");
+    free(conn->nudge_timer);
+    conn->nudge_timer = NULL;
     _output_dnssim_conn_maybe_free(conn);
 }
 
@@ -111,6 +125,10 @@ void _output_dnssim_conn_close(_output_dnssim_connection_t* conn, bool force)
         conn->is_idle = false;
         uv_timer_stop(conn->idle_timer);
         uv_close((uv_handle_t*)conn->idle_timer, _on_idle_timer_closed);
+    }
+    if (conn->nudge_timer != NULL) {
+        uv_timer_stop(conn->nudge_timer);
+        uv_close((uv_handle_t*)conn->nudge_timer, _on_nudge_timer_closed);
     }
 
     switch (_self->transport) {
@@ -340,6 +358,7 @@ int _process_dnsmsg(_output_dnssim_connection_t* conn)
             lwarning("https2 response question mismatch");
             break;
         }
+    // TODO: special QUIC case - match by stream ID
     } else {
         qry = conn->sent;
         while (qry != NULL) {
@@ -367,8 +386,10 @@ static int _parse_dnsbuf_data(_output_dnssim_connection_t* conn)
 
     switch (conn->read_state) {
     case _OUTPUT_DNSSIM_READ_STATE_DNSLEN: {
+        uint16_t dnslen;
         uint16_t* p_dnslen = (uint16_t*)conn->dnsbuf_data;
-        conn->dnsbuf_len   = ntohs(*p_dnslen);
+        memcpy(&dnslen, p_dnslen, sizeof(uint16_t)); /* Avoid misalignment */
+        conn->dnsbuf_len   = ntohs(dnslen);
         if (conn->dnsbuf_len == 0) {
             mlwarning("invalid dnslen received: 0");
             conn->dnsbuf_len = 2;

@@ -243,55 +243,64 @@ static const ngtcp2_callbacks quic_client_callbacks = {
 
 static uint64_t quic_timestamp(void)
 {
-	struct timespec ts;
-	if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
-		return 0;
-	}
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return 0;
+    }
 
-	return (uint64_t)ts.tv_sec * NGTCP2_SECONDS + (uint64_t)ts.tv_nsec;
+    return (uint64_t)ts.tv_sec * NGTCP2_SECONDS + (uint64_t)ts.tv_nsec;
 }
 
 static int quic_send_data(_output_dnssim_connection_t *conn, uint32_t flags,
                           ngtcp2_vec *vecs, ngtcp2_ssize vecs_len,
                           int64_t stream_id)
 {
+    if (!conn->transport_type)
+        return -1;
+    mlassert(conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_UDP,
+            "Transport type must be UDP");
+    if (uv_is_closing((uv_handle_t *)conn->transport.udp))
+        return -1;
+    if (ngtcp2_conn_in_closing_period(conn->quic->qconn))
+        return -1;
+
     output_dnssim_t* self = conn->client->dnssim;
     const size_t destlen = ngtcp2_conn_get_max_tx_udp_payload_size(conn->quic->qconn);
-    _output_dnssim_quic_send_wrapper_t* sw =
+    _output_dnssim_quic_send_wrapper_t* send_wrapper =
         _output_dnssim_quic_send_wrapper_new(destlen);
 
     ngtcp2_ssize send_datalen = 0;
     ngtcp2_ssize write_ret = ngtcp2_conn_writev_stream(conn->quic->qconn,
             (ngtcp2_path *)ngtcp2_conn_get_path(conn->quic->qconn),
-            &conn->quic->pi, sw->buffer, destlen, &send_datalen, flags,
-            stream_id, vecs, vecs_len, quic_timestamp());
+            &conn->quic->pi, send_wrapper->buffer, destlen, &send_datalen,
+            flags, stream_id, vecs, vecs_len, quic_timestamp());
     if (write_ret == NGTCP2_ERR_DRAINING) {
         lwarning("ngtcp2_conn_writev_stream draining - force closing", ngtcp2_strerror(write_ret));
         _output_dnssim_conn_close(conn, true);
 
-        free(sw);
+        free(send_wrapper);
         return -1;
     } else if (write_ret < 0) {
         lwarning("failed ngtcp2_conn_writev_stream: %s", ngtcp2_strerror(write_ret));
         _output_dnssim_conn_close(conn, true);
 
-        free(sw);
+        free(send_wrapper);
         return -1;
     } else if (conn->state == _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED) {
         lwarning("close requested");
         _output_dnssim_conn_close(conn, false);
 
-        free(sw);
+        free(send_wrapper);
         return -1;
     } else if (write_ret == 0) {
-        free(sw);
+        free(send_wrapper);
         return 0;
     }
 
     ngtcp2_conn_update_pkt_tx_time(conn->quic->qconn, quic_timestamp());
 
-    uv_buf_t uv_buf = { (char*)sw->buffer, write_ret };
-    int send_ret = uv_udp_send(&sw->req, conn->transport.udp, &uv_buf, 1, NULL,
+    uv_buf_t uv_buf = { (char*)send_wrapper->buffer, write_ret };
+    int send_ret = uv_udp_send(&send_wrapper->req, conn->transport.udp, &uv_buf, 1, NULL,
             udp_send_cb);
     if (send_ret < 0)
         lwarning("uv_udp_send error: (%d) %s", send_ret, uv_strerror(send_ret));
@@ -376,12 +385,13 @@ int  _output_dnssim_quic_init(_output_dnssim_connection_t* conn)
         return ret;
     }
 
-    ret = uv_timer_init(&_self->loop, &conn->quic->nudge_timer);
+    lfatal_oom(conn->nudge_timer = calloc(1, sizeof(uv_timer_t)));
+    ret = uv_timer_init(&_self->loop, conn->nudge_timer);
     if (ret) {
         lwarning("failed initialize quic nudge timer: %s", uv_strerror(ret));
         return ret;
     }
-    conn->quic->nudge_timer.data = conn;
+    conn->nudge_timer->data = conn;
 
     return 0;
 }
@@ -473,7 +483,7 @@ int  _output_dnssim_quic_connect(output_dnssim_t* self, _output_dnssim_connectio
     gnutls_session_set_ptr(conn->tls->session, &conn->quic->qconn_ref);
     ngtcp2_conn_set_tls_native_handle(conn->quic->qconn, conn->tls->session);
 
-    uv_timer_start(&conn->quic->nudge_timer, nudge_timer_cb, 0, 100);
+    uv_timer_start(conn->nudge_timer, nudge_timer_cb, 0, 100);
 
     /* Set connection handshake timeout. */
     lfatal_oom(conn->handshake_timer = malloc(sizeof(uv_timer_t)));
@@ -533,10 +543,8 @@ void _output_dnssim_quic_process_input_data(_output_dnssim_connection_t* conn,
                 ? sizeof(struct sockaddr_in6)
                 : sizeof(struct sockaddr_in));
 
-    conn->prevent_close = true;
     ret = ngtcp2_conn_read_pkt(conn->quic->qconn, &ps.path, &conn->quic->pi,
             (uint8_t*)data, len, quic_timestamp());
-    conn->prevent_close = false;
     if (ret < 0) {
         lwarning("failed ngtcp2_conn_read_pkt: %s", ngtcp2_strerror(ret));
         _output_dnssim_conn_close(conn, true);
@@ -555,6 +563,11 @@ static void _output_dnssim_quic_handle_on_close(uv_handle_t* handle)
     free(conn->transport.udp);
     conn->transport.udp = NULL;
     conn->transport_type = _OUTPUT_DNSSIM_CONN_TRANSPORT_NULL;
+
+    ngtcp2_conn_del(conn->quic->qconn);
+    _output_dnssim_tls_close(conn);
+
+    _output_dnssim_conn_maybe_free(conn);
 }
 
 void _output_dnssim_quic_close(_output_dnssim_connection_t* conn, bool force)
@@ -565,16 +578,11 @@ void _output_dnssim_quic_close(_output_dnssim_connection_t* conn, bool force)
     mlassert(conn->client, "conn conn must belong to a client");
 
     if (force) {
-        ngtcp2_conn_del(conn->quic->qconn);
-        _output_dnssim_tls_close(conn);
-
         if (conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_UDP) {
             mldebug("stopping UDP reception");
             uv_udp_connect(conn->transport.udp, NULL); /* disconnect */
             uv_udp_recv_stop(conn->transport.udp);
             uv_close((uv_handle_t*)conn->transport.udp, _output_dnssim_quic_handle_on_close);
-            uv_timer_stop(&conn->quic->nudge_timer);
-            uv_close((uv_handle_t*)&conn->quic->nudge_timer, NULL);
         } else {
             mlassert(conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_NULL,
                     "transport type of QUIC must be UDP or NULL");
@@ -586,6 +594,11 @@ void _output_dnssim_quic_close(_output_dnssim_connection_t* conn, bool force)
         mlwarning("Call to conn close, but close packet already sent");
     }
 }
+
+struct quic_sent_payload {
+    uint16_t length;
+    char data[];
+};
 
 void _output_dnssim_quic_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry)
 {
@@ -609,13 +622,16 @@ void _output_dnssim_quic_write_query(_output_dnssim_connection_t* conn, _output_
     }
 
     core_object_payload_t* content = qry->qry.req->payload;
-    qry->quic_net_content_len = htons(content->len);
+    struct quic_sent_payload *pl;
+    mlfatal_oom(pl = malloc(sizeof(*pl) + content->len));
+    pl->length = htons(content->len);
+    memcpy(pl->data, content->payload, content->len);
     ngtcp2_vec vecs[2] = {
-        { (uint8_t*)&qry->quic_net_content_len, sizeof(qry->quic_net_content_len) },
-        { (uint8_t*)content->payload, content->len }
+        { (uint8_t*)&pl->length, sizeof(pl->length) },
+        { (uint8_t*)pl->data, content->len }
     };
 
-    ret = ngtcp2_conn_open_bidi_stream(conn->quic->qconn, &qry->stream_id, NULL);
+    ret = ngtcp2_conn_open_bidi_stream(conn->quic->qconn, &qry->stream_id, pl);
     if (ret == NGTCP2_ERR_STREAM_ID_BLOCKED) {
         return;
     } else if (ret) {

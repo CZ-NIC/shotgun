@@ -86,9 +86,6 @@ struct _output_dnssim_query_stream {
     /* HTTP/2 or QUIC stream id that was used to send this query. */
     int64_t stream_id;
 
-    /* Reserved memory for content length in network byte order. */
-    uint16_t quic_net_content_len;
-
     /* Receive buffer (currently used only by HTTP/2). */
     uint8_t* recv_buf;
     ssize_t  recv_buf_len;
@@ -168,7 +165,6 @@ typedef struct _output_dnssim_quic_ctx {
     ngtcp2_conn* qconn;
     ngtcp2_crypto_conn_ref qconn_ref;
     ngtcp2_pkt_info pi;
-    uv_timer_t nudge_timer;
     bool close_sent;
 
     uint32_t max_concurrent_streams;
@@ -197,6 +193,9 @@ struct _output_dnssim_connection {
     /* Idle timer for connection reuse. rfc7766#section-6.2.3 */
     uv_timer_t* idle_timer;
     bool        is_idle;
+
+    /* Timer that nudges the connection logic periodically - e.g. for QUIC. */
+    uv_timer_t *nudge_timer;
 
     /* List of queries that have been queued (pending write callback). */
     _output_dnssim_query_t* queued;
