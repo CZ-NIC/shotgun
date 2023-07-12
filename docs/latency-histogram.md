@@ -8,7 +8,7 @@ article](https://blog.powerdns.com/2017/11/02/dns-performance-metrics-the-logari
 provides an in-depth explanation about the chart and how to interpret it.
 
 ```
-$ tools/plot-latency.py -t "DNS Latency Overhead" UDP.json TCP.json DoT.json DoH.json
+$ tools/plot-latency.py -t "DNS Latency Overhead" UDP.json TCP.json DoT.json DoH.json DoQ.json
 ```
 
 ![latency overhead](img/latency.png)

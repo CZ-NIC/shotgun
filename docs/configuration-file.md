@@ -32,6 +32,7 @@ The following configuration parameters for traffic senders are supported.
 - `tcp`: DNS over TCP
 - `dot`: DNS over TLS over TCP
 - `doh`: DNS over HTTP/2 over TLS over TCP
+- `doq`: DNS over QUIC
 
 ### weight
 
@@ -60,7 +61,11 @@ gnutls_priority = "NORMAL:%NO_TICKETS"  # don't use TLS Session Resumption
 gnutls_priority = "NORMAL:-VERS-ALL:+VERS-TLS1.3"  # only use TLS 1.3
 ```
 
-String. Defaults to `NORMAL` which is determined by the system's GnuTLS library.
+String. For conventional TLS over TCP connections, this defaults to `NORMAL`,
+which is determined by the system's GnuTLS library. For QUIC, this defaults to
+`NORMAL:-VERS-TLS1.0:-VERS-TLS1.1:-VERS-TLS1.2`, i.e. always sets the minimum
+TLS version to 1.3 as dictated by [section 4.2 of RFC
+9001](https://www.rfc-editor.org/rfc/rfc9001.html#section-4.2).
 
 ### http_method
 
