@@ -1,12 +1,13 @@
 # Complex scenario simulating clients using all types of supported protocols
-# (Do53 - UDP and TCP, DoH and DoT).
+# (Do53 - UDP and TCP, DoH, DoT, and DoQ).
 #
 # Clients are randomly assigned exactly one of the configured traffic settings.
 # The assignment respects the configured weights. In the following example:
-#   60 % of clients use UDP
-#    5 % + 5 % of clients use TCP (with/without utilizing idle connections)
-#   10 % + 5 % of clients use DoT (with/without TLS Session Resumption)
-#   10 % + 5 % of clients use DoH (using GET or POST)
+#   60/110 of clients use UDP
+#    5/110 + 5/110 of clients use TCP (with/without utilizing idle connections)
+#   10/110 + 5/110 of clients use DoT (with/without TLS Session Resumption)
+#   10/110 + 5/110 of clients use DoH (using GET or POST)
+#   10/110 of clients use DoQ
 #
 # You can use this example as a starting point to create your own
 # configurations with various clients and traffic distribution. Refer to other
@@ -51,6 +52,11 @@ http_method = "GET"
 protocol = "doh"
 weight = 5
 http_method = "POST"
+
+# DNS-over-QUIC clients.
+[traffic.DoQ]
+protocol = "doq"
+weight = 10
 
 
 [charts]

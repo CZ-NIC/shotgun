@@ -1,0 +1,47 @@
+# DNS-over-QUIC traffic senders.
+#
+# Below is a configuration example for DoQ clients. You may use this as
+# inspiration to craft your own client-types.
+#
+# GnuTLS priority string (with the key `gnutls_priority`) may be used to control
+# TLS protocol version, used ciphers suites etc. For more GnuTLS priority
+# options, refer to: https://gnutls.org/manual/html_node/Priority-Strings.html
+[traffic]
+
+# Default DoQ clients
+[traffic.DoQ]
+protocol = "doq"
+
+# DoQ clients using only TLS1.3
+#
+# At the time of writing, this will effectively be the same as the default, but
+# at a point in the future that a new TLS version comes about, this will only
+# allow 1.3 as opposed to the default, which should allow the new one as well.
+# This is mainly here to demonstrate that the `gnutls_priority` key works for
+# DoQ as well as DoT.
+
+#[traffic.DoQ-tls1_3]
+#protocol = "doq"
+#gnutls_priority = "NORMAL:-VERS-ALL:+VERS-TLS1.3"
+
+
+[charts]
+
+[charts.latency]
+type = "latency"
+
+[charts.response-rate]
+type = "response-rate"
+
+[charts.response-rate-rcodes]
+type = "response-rate"
+rcodes-above-pct = 0
+
+[charts.connections]
+type = "connections"
+kind = "active"
+
+[charts.handshakes]
+type = "connections"
+kind = ["quic_hs", "failed_hs"]
+title = "Handshakes over Time"
