@@ -250,6 +250,7 @@ int _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client)
         conn->state  = _OUTPUT_DNSSIM_CONN_INITIALIZED;
         conn->client = client;
         conn->stats  = self->stats_current;
+        conn->dnsbuf_stream_id = -1;
         if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_TLS) {
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
             ret = _output_dnssim_tls_init(conn);
@@ -299,6 +300,9 @@ void _output_dnssim_conn_activate(_output_dnssim_connection_t* conn)
     mlassert(conn, "conn is nil");
     mlassert(conn->client, "conn must be associated with a client");
     mlassert(conn->client->dnssim, "client must be associated with dnssim");
+
+    if (conn->state >= _OUTPUT_DNSSIM_CONN_ACTIVE)
+        return;
 
     if (conn->handshake_timer)
         uv_timer_stop(conn->handshake_timer);
@@ -360,6 +364,9 @@ int _process_dnsmsg(_output_dnssim_connection_t* conn)
         }
     } else if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_QUIC) {
         lassert(conn->quic, "conn must have quic ctx");
+
+        if (conn->dnsbuf_stream_id < 0)
+            return 0;
 
         qry = &_output_dnssim_get_stream_qry(conn, conn->dnsbuf_stream_id)->qry;
         if (qry) {
@@ -440,6 +447,7 @@ static int _parse_dnsbuf_data(_output_dnssim_connection_t* conn)
         free(conn->dnsbuf_data);
     }
     conn->dnsbuf_data = NULL;
+    conn->dnsbuf_stream_id = -1;
 
     return ret;
 }

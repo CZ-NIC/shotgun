@@ -160,6 +160,12 @@ typedef struct _output_dnssim_http2_ctx {
     bool remote_settings_received;
 } _output_dnssim_http2_ctx_t;
 
+typedef struct _output_dnssim_quic_packet {
+    uv_udp_send_t req;
+    size_t buffer_len;
+    uint8_t buffer[];
+} _output_dnssim_quic_packet_t;
+
 /* QUIC context for a single connection. */
 typedef struct _output_dnssim_quic_ctx {
     ngtcp2_conn* qconn;
@@ -171,6 +177,8 @@ typedef struct _output_dnssim_quic_ctx {
     uint32_t open_streams;
 
     uint8_t secret[32];
+
+    _output_dnssim_quic_packet_t *unsent_packet;
 } _output_dnssim_quic_ctx_t;
 
 struct _output_dnssim_connection {
