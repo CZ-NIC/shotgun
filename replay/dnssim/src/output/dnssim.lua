@@ -136,7 +136,7 @@ void output_dnssim_log_name(output_dnssim_t* self, const char* name);
 void output_dnssim_set_transport(output_dnssim_t* self, output_dnssim_transport_t tr);
 int  output_dnssim_target(output_dnssim_t* self, const char* ip, uint16_t port);
 int  output_dnssim_bind(output_dnssim_t* self, const char* ip);
-int  output_dnssim_tls_priority(output_dnssim_t* self, const char* priority);
+int  output_dnssim_tls_priority(output_dnssim_t* self, const char* priority, bool is_quic);
 int  output_dnssim_run_nowait(output_dnssim_t* self);
 void output_dnssim_timeout_ms(output_dnssim_t* self, uint64_t timeout_ms);
 void output_dnssim_h2_uri_path(output_dnssim_t* self, const char* uri_path);
@@ -277,7 +277,7 @@ end
 -- .I https://gnutls.org/manual/html_node/Priority-Strings.html
 function DnsSim:tls(tls_priority)
     if tls_priority ~= nil then
-        C.output_dnssim_tls_priority(self.obj, tls_priority)
+        C.output_dnssim_tls_priority(self.obj, tls_priority, false)
     end
     C.output_dnssim_set_transport(self.obj, C.OUTPUT_DNSSIM_TRANSPORT_TLS)
 end
@@ -308,7 +308,7 @@ end
 -- documentation.
 function DnsSim:https2(http2_options, tls_priority)
     if tls_priority ~= nil then
-        C.output_dnssim_tls_priority(self.obj, tls_priority)
+        C.output_dnssim_tls_priority(self.obj, tls_priority, false)
     end
 
     local uri_path = "/dns-query"
@@ -344,7 +344,7 @@ end
 -- documentation.
 function DnsSim:quic(tls_priority)
     if tls_priority ~= nil then
-        C.output_dnssim_tls_priority(self.obj, tls_priority)
+        C.output_dnssim_tls_priority(self.obj, tls_priority, true)
     end
     C.output_dnssim_set_transport(self.obj, C.OUTPUT_DNSSIM_TRANSPORT_QUIC)
 end

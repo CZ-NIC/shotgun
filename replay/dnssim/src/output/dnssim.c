@@ -339,7 +339,7 @@ int output_dnssim_bind(output_dnssim_t* self, const char* ip)
     return 0;
 }
 
-int output_dnssim_tls_priority(output_dnssim_t* self, const char* priority)
+int output_dnssim_tls_priority(output_dnssim_t* self, const char* priority, bool is_quic)
 {
     mlassert_self();
     lassert(priority, "priority is nil");
@@ -349,6 +349,12 @@ int output_dnssim_tls_priority(output_dnssim_t* self, const char* priority)
         free(_self->tls_priority);
     }
     lfatal_oom(_self->tls_priority = malloc(sizeof(gnutls_priority_t)));
+
+    if (strcmp(priority, "dnssim-default") == 0) {
+        priority = (is_quic) /* only TLS1.3 and up for QUIC; otherwise GnuTLS defaults */
+            ? "NORMAL:-VERS-TLS1.0:-VERS-TLS1.1:-VERS-TLS1.2"
+            : "NORMAL";
+    }
 
     int ret = gnutls_priority_init(_self->tls_priority, priority, NULL);
     if (ret < 0) {
