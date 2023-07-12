@@ -671,6 +671,7 @@ int _output_dnssim_create_query_quic(output_dnssim_t* self, _output_dnssim_reque
 
     lfatal_oom(qry = calloc(1, sizeof(*qry)));
 
+    req->dns_q->id = 0; /* DoQ mandates that ID is zero */
     qry->qry.transport = OUTPUT_DNSSIM_TRANSPORT_QUIC;
     qry->qry.req = req;
     qry->qry.state = _OUTPUT_DNSSIM_QUERY_PENDING_WRITE;
