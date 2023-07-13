@@ -182,6 +182,8 @@ static int recv_rx_key_cb(ngtcp2_conn *qconn, ngtcp2_encryption_level lv,
 static int handshake_confirmed_cb(ngtcp2_conn *qconn, void *user_data)
 {
     _output_dnssim_connection_t* conn = user_data;
+    if (gnutls_session_is_resumed(conn->tls->session))
+        conn->stats->conn_resumed++;
     _output_dnssim_conn_activate(conn);
     return 0;
 }

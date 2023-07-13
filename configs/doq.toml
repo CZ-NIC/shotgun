@@ -45,3 +45,8 @@ kind = "active"
 type = "connections"
 kind = ["quic_hs", "failed_hs"]
 title = "Handshakes over Time"
+
+[charts.resumptions]
+type = "connections"
+kind = ["quic_hs", "tls_resumed"]
+title = "TLS Session Resumption for New Connections"

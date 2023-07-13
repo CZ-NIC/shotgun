@@ -31,11 +31,6 @@ static int _tls_handshake(_output_dnssim_connection_t* conn)
     mlassert(conn->client, "conn must belong to a client");
     mlassert(conn->state <= _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE, "conn in invalid state");
 
-    /* Set TLS session resumption ticket if available. */
-    if (conn->state < _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE && conn->client->tls_ticket.size != 0) {
-        gnutls_datum_t* ticket = &conn->client->tls_ticket;
-        gnutls_session_set_data(conn->tls->session, ticket->data, ticket->size);
-    }
     conn->state = _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE;
 
     return gnutls_handshake(conn->tls->session);
@@ -287,6 +282,7 @@ int _tls_pull_timeout(gnutls_transport_ptr_t ptr, unsigned int ms)
 int _output_dnssim_tls_init(_output_dnssim_connection_t* conn)
 {
     mlassert(conn, "conn is nil");
+    mlassert(conn->client, "conn does not have client");
     mlassert(conn->tls == NULL, "conn already has tls context");
 
     int ret;
@@ -332,6 +328,12 @@ int _output_dnssim_tls_init(_output_dnssim_connection_t* conn)
         free(conn->tls);
         conn->tls = 0;
         return ret;
+    }
+
+    /* Set TLS session resumption ticket if available. */
+    if (conn->client->tls_ticket.size != 0) {
+        gnutls_datum_t* ticket = &conn->client->tls_ticket;
+        gnutls_session_set_data(conn->tls->session, ticket->data, ticket->size);
     }
 
     gnutls_transport_set_pull_function(conn->tls->session, _tls_pull);
