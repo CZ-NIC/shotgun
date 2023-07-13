@@ -12,6 +12,11 @@
 [traffic.DoQ]
 protocol = "doq"
 
+# DoQ clients without TLS Session Resumption
+#[traffic.DoQ-no_tickets]
+#protocol = "doq"
+#gnutls_priority = "NORMAL:-VERS-TLS1.0:-VERS-TLS1.1:-VERS-TLS1.2:%NO_TICKETS"
+
 # DoQ clients using only TLS1.3
 #
 # At the time of writing, this will effectively be the same as the default, but
