@@ -224,6 +224,7 @@ struct _output_dnssim_connection {
         _OUTPUT_DNSSIM_CONN_ACTIVE                = 30,
         _OUTPUT_DNSSIM_CONN_CONGESTED             = 35,
         _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED       = 38,
+        _OUTPUT_DNSSIM_CONN_GRACEFUL_CLOSING      = 39,
         _OUTPUT_DNSSIM_CONN_CLOSING               = 40,
         _OUTPUT_DNSSIM_CONN_CLOSED                = 50
     } state;
@@ -341,6 +342,7 @@ void _output_dnssim_tcp_close(_output_dnssim_connection_t* conn);
 void _output_dnssim_tcp_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry);
 void _output_dnssim_conn_close(_output_dnssim_connection_t* conn, bool force);
 void _output_dnssim_conn_idle(_output_dnssim_connection_t* conn);
+void _output_dnssim_conn_move_queries_to_pending(_output_dnssim_query_stream_t* qry);
 int  _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client);
 void _output_dnssim_conn_activate(_output_dnssim_connection_t* conn);
 void _output_dnssim_conn_maybe_free(_output_dnssim_connection_t* conn);

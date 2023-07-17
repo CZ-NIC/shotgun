@@ -106,6 +106,7 @@ void _output_dnssim_conn_close(_output_dnssim_connection_t* conn, bool force)
         break;
     case _OUTPUT_DNSSIM_CONN_INITIALIZED:
     case _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED:
+    case _OUTPUT_DNSSIM_CONN_GRACEFUL_CLOSING:
         break;
     default:
         lfatal("unknown conn state: %d", conn->state);
@@ -115,28 +116,34 @@ void _output_dnssim_conn_close(_output_dnssim_connection_t* conn, bool force)
         conn->state = _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED;
         return;
     }
-    conn->state = _OUTPUT_DNSSIM_CONN_CLOSING;
 
-    if (conn->handshake_timer != NULL) {
-        uv_timer_stop(conn->handshake_timer);
-        uv_close((uv_handle_t*)conn->handshake_timer, _on_handshake_timer_closed);
-    }
-    if (conn->idle_timer != NULL) {
-        conn->is_idle = false;
-        uv_timer_stop(conn->idle_timer);
-        uv_close((uv_handle_t*)conn->idle_timer, _on_idle_timer_closed);
-    }
-    if (conn->nudge_timer != NULL) {
-        uv_timer_stop(conn->nudge_timer);
-        uv_close((uv_handle_t*)conn->nudge_timer, _on_nudge_timer_closed);
+    if (force) {
+        conn->state =  _OUTPUT_DNSSIM_CONN_CLOSING;
+        if (conn->handshake_timer != NULL) {
+            uv_timer_stop(conn->handshake_timer);
+            uv_close((uv_handle_t*)conn->handshake_timer, _on_handshake_timer_closed);
+        }
+        if (conn->idle_timer != NULL) {
+            conn->is_idle = false;
+            uv_timer_stop(conn->idle_timer);
+            uv_close((uv_handle_t*)conn->idle_timer, _on_idle_timer_closed);
+        }
+        if (conn->nudge_timer != NULL) {
+            uv_timer_stop(conn->nudge_timer);
+            uv_close((uv_handle_t*)conn->nudge_timer, _on_nudge_timer_closed);
+        }
+    } else {
+        conn->state =  _OUTPUT_DNSSIM_CONN_GRACEFUL_CLOSING;
     }
 
     switch (_self->transport) {
     case OUTPUT_DNSSIM_TRANSPORT_TCP:
+        conn->state = _OUTPUT_DNSSIM_CONN_CLOSING; // graceful close not applicable
         _output_dnssim_tcp_close(conn);
         break;
     case OUTPUT_DNSSIM_TRANSPORT_TLS:
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+        conn->state = _OUTPUT_DNSSIM_CONN_CLOSING; // graceful close not applicable
         _output_dnssim_tls_close(conn);
 #else
         lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
@@ -144,6 +151,7 @@ void _output_dnssim_conn_close(_output_dnssim_connection_t* conn, bool force)
         break;
     case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+        conn->state = _OUTPUT_DNSSIM_CONN_CLOSING; // graceful close not applicable
         _output_dnssim_https2_close(conn);
 #else
         lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
@@ -169,11 +177,33 @@ void _output_dnssim_conn_idle(_output_dnssim_connection_t* conn)
 
     if (conn->queued == NULL && conn->sent == NULL) {
         if (conn->idle_timer == NULL)
-            _output_dnssim_conn_close(conn, true);
+            _output_dnssim_conn_close(conn, false);
         else if (!conn->is_idle) {
             conn->is_idle = true;
             uv_timer_again(conn->idle_timer);
         }
+    }
+}
+
+void _output_dnssim_conn_move_queries_to_pending(_output_dnssim_query_stream_t* qry)
+{
+    _output_dnssim_query_stream_t* qry_tmp;
+    while (qry != NULL) {
+        mlassert(qry->conn, "query must be associated with conn");
+        mlassert(qry->conn->state == _OUTPUT_DNSSIM_CONN_CLOSED, "conn must be closed");
+        mlassert(qry->conn->client, "conn must be associated with client");
+        qry_tmp       = (_output_dnssim_query_stream_t*)qry->qry.next;
+        qry->qry.next = NULL;
+        _ll_append(qry->conn->client->pending, &qry->qry);
+        qry->conn         = NULL;
+        qry->qry.state    = _OUTPUT_DNSSIM_QUERY_ORPHANED;
+        qry->stream_id    = -1;
+        qry->recv_buf_len = 0;
+        if (qry->recv_buf != NULL) {
+            free(qry->recv_buf);
+            qry->recv_buf = NULL;
+        }
+        qry = qry_tmp;
     }
 }
 

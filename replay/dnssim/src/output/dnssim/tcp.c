@@ -12,28 +12,6 @@
 
 static core_log_t _log = LOG_T_INIT("output.dnssim");
 
-static void _move_queries_to_pending(_output_dnssim_query_stream_t* qry)
-{
-    _output_dnssim_query_stream_t* qry_tmp;
-    while (qry != NULL) {
-        mlassert(qry->conn, "query must be associated with conn");
-        mlassert(qry->conn->state == _OUTPUT_DNSSIM_CONN_CLOSED, "conn must be closed");
-        mlassert(qry->conn->client, "conn must be associated with client");
-        qry_tmp       = (_output_dnssim_query_stream_t*)qry->qry.next;
-        qry->qry.next = NULL;
-        _ll_append(qry->conn->client->pending, &qry->qry);
-        qry->conn         = NULL;
-        qry->qry.state    = _OUTPUT_DNSSIM_QUERY_ORPHANED;
-        qry->stream_id    = -1;
-        qry->recv_buf_len = 0;
-        if (qry->recv_buf != NULL) {
-            free(qry->recv_buf);
-            qry->recv_buf = NULL;
-        }
-        qry = qry_tmp;
-    }
-}
-
 static void _on_tcp_closed(uv_handle_t* handle)
 {
     _output_dnssim_connection_t* conn = (_output_dnssim_connection_t*)handle->data;
@@ -42,9 +20,9 @@ static void _on_tcp_closed(uv_handle_t* handle)
     conn->state = _OUTPUT_DNSSIM_CONN_CLOSED;
 
     /* Orphan any queries that are still unresolved. */
-    _move_queries_to_pending((_output_dnssim_query_stream_t*)conn->queued);
+    _output_dnssim_conn_move_queries_to_pending((_output_dnssim_query_stream_t*)conn->queued);
     conn->queued = NULL;
-    _move_queries_to_pending((_output_dnssim_query_stream_t*)conn->sent);
+    _output_dnssim_conn_move_queries_to_pending((_output_dnssim_query_stream_t*)conn->sent);
     conn->sent = NULL;
 
     /* TODO Improve client re-connect behavior in case the connection fails to

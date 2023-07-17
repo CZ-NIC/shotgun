@@ -12,6 +12,11 @@
 [traffic.DoQ]
 protocol = "doq"
 
+# Aggressive DNS-over-QUIC clients that terminate connection as soon as queries are answered.
+#[traffic.DoQ-no_idle]
+#protocol = "doq"
+#idle_timeout_s = 0
+
 # DoQ clients without TLS Session Resumption
 #[traffic.DoQ-no_tickets]
 #protocol = "doq"
