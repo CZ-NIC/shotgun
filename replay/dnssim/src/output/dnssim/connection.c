@@ -47,6 +47,16 @@ void _output_dnssim_conn_maybe_free(_output_dnssim_connection_t* conn)
             free(conn->quic);
             conn->quic = NULL;
         }
+
+        _output_dnssim_stream_t* stream = conn->streams;
+        while (stream) {
+            _output_dnssim_stream_t* to_free = stream;
+            stream = to_free->next;
+            if (to_free->data_free_after_use)
+                free(to_free->data);
+            free(to_free);
+        }
+
         free(conn);
     }
 }
@@ -326,7 +336,6 @@ int _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client)
         conn->state  = _OUTPUT_DNSSIM_CONN_INITIALIZED;
         conn->client = client;
         conn->stats  = self->stats_current;
-        conn->dnsbuf_stream_id = -1;
         if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_TLS) {
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
             ret = _output_dnssim_tls_init(conn);
@@ -371,6 +380,34 @@ int _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client)
     return ret;
 }
 
+static _output_dnssim_stream_t*
+_output_dnssim_conn_find_stream(_output_dnssim_connection_t* conn,
+                                int64_t stream_id, bool create)
+{
+    _output_dnssim_stream_t* prev = NULL;
+    _output_dnssim_stream_t** target = &conn->streams;
+
+    /* Find stream with the specified id */
+    while (*target) {
+        if ((*target)->stream_id == stream_id)
+            return *target;
+
+        prev = *target;
+        target = &prev->next;
+    }
+
+    /* Stream not found and we do not want to create it */
+    if (!create)
+        return NULL;
+
+    mlfatal_oom(*target = calloc(1, sizeof(**target)));
+    (*target)->prev = prev;
+    (*target)->read_state = _OUTPUT_DNSSIM_READ_STATE_DNSLEN;
+    (*target)->stream_id = stream_id;
+    (*target)->data_len = 2;
+    return *target;
+}
+
 void _output_dnssim_conn_activate(_output_dnssim_connection_t* conn)
 {
     mlassert(conn, "conn is nil");
@@ -385,16 +422,13 @@ void _output_dnssim_conn_activate(_output_dnssim_connection_t* conn)
 
     conn->state = _OUTPUT_DNSSIM_CONN_ACTIVE;
     conn->client->dnssim->stats_current->conn_active++;
-    conn->read_state            = _OUTPUT_DNSSIM_READ_STATE_DNSLEN;
-    conn->dnsbuf_len            = 2;
-    conn->dnsbuf_pos            = 0;
-    conn->dnsbuf_free_after_use = false;
 
     _send_pending_queries(conn);
     _output_dnssim_conn_idle(conn);
 }
 
-int _process_dnsmsg(_output_dnssim_connection_t* conn)
+static int _process_dnsmsg(_output_dnssim_connection_t* conn,
+                           _output_dnssim_stream_t* stream)
 {
     mlassert(conn, "conn can't be nil");
     mlassert(conn->client, "conn must have client");
@@ -405,8 +439,8 @@ int _process_dnsmsg(_output_dnssim_connection_t* conn)
     core_object_payload_t payload = CORE_OBJECT_PAYLOAD_INIT(NULL);
     core_object_dns_t     dns_a   = CORE_OBJECT_DNS_INIT(&payload);
 
-    payload.payload = (uint8_t*)conn->dnsbuf_data;
-    payload.len     = conn->dnsbuf_len;
+    payload.payload = (uint8_t*)stream->data;
+    payload.len     = stream->data_len;
 
     dns_a.obj_prev = (core_object_t*)&payload;
     int ret        = core_object_dns_parse_header(&dns_a);
@@ -440,11 +474,10 @@ int _process_dnsmsg(_output_dnssim_connection_t* conn)
         }
     } else if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_QUIC) {
         lassert(conn->quic, "conn must have quic ctx");
+        lassert(stream->stream_id >= 0, "quic stream must have a non-negative id");
 
-        if (conn->dnsbuf_stream_id < 0)
-            return 0;
-
-        qry = &_output_dnssim_get_stream_qry(conn, conn->dnsbuf_stream_id)->qry;
+        /* TODO - maybe assign the query pointer to the stream? */
+        qry = &_output_dnssim_get_stream_qry(conn, stream->stream_id)->qry;
         if (qry) {
             ret = _output_dnssim_answers_request(qry->req, &dns_a);
             switch (ret) {
@@ -478,38 +511,41 @@ int _process_dnsmsg(_output_dnssim_connection_t* conn)
     return 0;
 }
 
-static int _parse_dnsbuf_data(_output_dnssim_connection_t* conn)
+static int _parse_dnsbuf_data(_output_dnssim_connection_t* conn,
+                              _output_dnssim_stream_t* stream)
 {
     mlassert(conn, "conn can't be nil");
-    mlassert(conn->dnsbuf_pos == conn->dnsbuf_len, "attempt to parse incomplete dnsbuf_data");
+    mlassert(stream, "stream can't be nil (parse_dnsbuf_data)");
+    mlassert(stream->data_pos == stream->data_len, "attempt to parse incomplete dnsbuf_data");
+
     int ret = 0;
 
-    switch (conn->read_state) {
+    switch (stream->read_state) {
     case _OUTPUT_DNSSIM_READ_STATE_DNSLEN: {
         uint16_t dnslen;
-        uint16_t* p_dnslen = (uint16_t*)conn->dnsbuf_data;
+        uint16_t* p_dnslen = (uint16_t*)stream->data;
         memcpy(&dnslen, p_dnslen, sizeof(uint16_t)); /* Avoid misalignment */
-        conn->dnsbuf_len   = ntohs(dnslen);
-        if (conn->dnsbuf_len == 0) {
+        stream->data_len = ntohs(dnslen);
+        if (stream->data_len == 0) {
             mlwarning("invalid dnslen received: 0");
-            conn->dnsbuf_len = 2;
-            conn->read_state = _OUTPUT_DNSSIM_READ_STATE_DNSLEN;
-        } else if (conn->dnsbuf_len < 12) {
-            mldebug("invalid dnslen received: %d", conn->dnsbuf_len);
+            stream->data_len = 2;
+            stream->read_state = _OUTPUT_DNSSIM_READ_STATE_DNSLEN;
+        } else if (stream->data_len < 12) {
+            mldebug("invalid dnslen received: %d", stream->data_len);
             ret = -1;
         } else {
-            mldebug("dnslen: %d", conn->dnsbuf_len);
-            conn->read_state = _OUTPUT_DNSSIM_READ_STATE_DNSMSG;
+            mldebug("dnslen: %d", stream->data_len);
+            stream->read_state = _OUTPUT_DNSSIM_READ_STATE_DNSMSG;
         }
         break;
     }
     case _OUTPUT_DNSSIM_READ_STATE_DNSMSG:
-        ret = _process_dnsmsg(conn);
+        ret = _process_dnsmsg(conn, stream);
         if (ret) {
-            conn->read_state = _OUTPUT_DNSSIM_READ_STATE_INVALID;
+            stream->read_state = _OUTPUT_DNSSIM_READ_STATE_INVALID;
         } else {
-            conn->dnsbuf_len = 2;
-            conn->read_state = _OUTPUT_DNSSIM_READ_STATE_DNSLEN;
+            stream->data_len = 2;
+            stream->read_state = _OUTPUT_DNSSIM_READ_STATE_DNSLEN;
         }
         break;
     default:
@@ -517,61 +553,69 @@ static int _parse_dnsbuf_data(_output_dnssim_connection_t* conn)
         break;
     }
 
-    conn->dnsbuf_pos = 0;
-    if (conn->dnsbuf_free_after_use) {
-        conn->dnsbuf_free_after_use = false;
-        free(conn->dnsbuf_data);
+    stream->data_pos = 0;
+    if (stream->data_free_after_use) {
+//        if (stream->prev) {
+//            stream->prev->next = stream->next;
+//        } else {
+//            conn->streams = stream->next;
+//        }
+//        if (stream->next) {
+//            stream->next->prev = stream->prev;
+//        }
+
+        stream->data_free_after_use = false;
+        free(stream->data);
+        stream->data = NULL;
+//        free(stream);
     }
-    conn->dnsbuf_data = NULL;
-    conn->dnsbuf_stream_id = -1;
 
     return ret;
 }
 
-static unsigned int _read_dns_stream_chunk(_output_dnssim_connection_t* conn, size_t len, const char* data, int64_t stream_id)
+static unsigned int _read_dns_stream_chunk(_output_dnssim_connection_t* conn,
+                                           _output_dnssim_stream_t* stream,
+                                           size_t len, const char* data)
 {
     mlassert(conn, "conn can't be nil");
     mlassert(data, "data can't be nil");
     mlassert(len > 0, "no data to read");
-    mlassert((conn->read_state == _OUTPUT_DNSSIM_READ_STATE_DNSLEN || conn->read_state == _OUTPUT_DNSSIM_READ_STATE_DNSMSG),
+    mlassert(stream, "stream can't be nil");
+    mlassert((stream->read_state == _OUTPUT_DNSSIM_READ_STATE_DNSLEN
+              || stream->read_state == _OUTPUT_DNSSIM_READ_STATE_DNSMSG),
         "connection has invalid read_state");
 
     int          ret = 0;
     unsigned int nread;
-    size_t       expected = conn->dnsbuf_len - conn->dnsbuf_pos;
+    size_t       expected = stream->data_len - stream->data_pos;
     mlassert(expected > 0, "no data expected");
 
-    if (conn->dnsbuf_free_after_use == false && expected > len) {
+    if (stream->data_free_after_use == false && expected > len) {
         /* Start of partial read. */
-        mlassert(conn->dnsbuf_pos == 0, "conn->dnsbuf_pos must be 0 at start of partial read");
-        mlassert(conn->dnsbuf_len > 0, "conn->dnsbuf_len must be set at start of partial read");
-        mlfatal_oom(conn->dnsbuf_data = malloc(conn->dnsbuf_len * sizeof(char)));
-        conn->dnsbuf_free_after_use = true;
+        mlassert(stream->data_pos == 0, "stream->data_pos must be 0 at start of partial read");
+        mlassert(stream->data_len > 0, "stream->data_len must be set at start of partial read");
+        mlassert(stream->data, "stream->data is already allocated");
+        mlfatal_oom(stream->data = malloc(stream->data_len));
+        stream->data_free_after_use = true;
     }
 
-    if (conn->dnsbuf_free_after_use) { /* Partial read is in progress. */
-        char* dest = conn->dnsbuf_data + conn->dnsbuf_pos;
+    if (stream->data_free_after_use) { /* Partial read is in progress. */
+        char* dest = stream->data + stream->data_pos;
         if (expected < len)
             len = expected;
         memcpy(dest, data, len);
-        conn->dnsbuf_pos += len;
+        stream->data_pos += len;
         nread = len;
     } else { /* Complete and clean read. */
         mlassert(expected <= len, "not enough data to perform complete read");
-        // TODO: This is really weird - why can't we just pass these to the
-        //       function? Apart from the dubious ownership, a connection now
-        //       does not necessarily contain only a single stream of data, so
-        //       this could result in a really nasty race condition further down
-        //       the road.
-        conn->dnsbuf_data = (char*)data;
-        conn->dnsbuf_stream_id = stream_id;
-        conn->dnsbuf_pos  = conn->dnsbuf_len;
+        stream->data = (char*)data;
+        stream->data_pos  = stream->data_len;
         nread             = expected;
     }
 
     /* If entire dnslen/dnsmsg was read, attempt to parse it. */
-    if (conn->dnsbuf_len == conn->dnsbuf_pos) {
-        ret = _parse_dnsbuf_data(conn);
+    if (stream->data_pos == stream->data_len) {
+        ret = _parse_dnsbuf_data(conn, stream);
         if (ret < 0)
             return ret;
     }
@@ -579,12 +623,19 @@ static unsigned int _read_dns_stream_chunk(_output_dnssim_connection_t* conn, si
     return nread;
 }
 
-void _output_dnssim_read_dns_stream(_output_dnssim_connection_t* conn, size_t len, const char* data, int64_t stream_id)
+void _output_dnssim_read_dns_stream(_output_dnssim_connection_t* conn,
+                                    size_t len, const char* data,
+                                    int64_t stream_id)
 {
+    mlassert(conn, "conn can't be nil");
+    _output_dnssim_stream_t* stream =
+        _output_dnssim_conn_find_stream(conn, stream_id, true);
+    mlassert(stream, "stream can't be nil (read_dns_stream)");
+
     int pos   = 0;
     int chunk = 0;
     while (pos < len) {
-        chunk = _read_dns_stream_chunk(conn, len - pos, data + pos, stream_id);
+        chunk = _read_dns_stream_chunk(conn, stream, len - pos, data + pos);
         if (chunk < 0) {
             mlwarning("lost orientation in DNS stream, closing");
             _output_dnssim_conn_close(conn);
@@ -601,25 +652,31 @@ void _output_dnssim_read_dnsmsg(_output_dnssim_connection_t* conn, size_t len, c
     mlassert(conn, "conn is nil");
     mlassert(len > 0, "len is zero");
     mlassert(data, "no data");
-    mlassert(conn->dnsbuf_pos == 0, "dnsbuf not empty");
-    mlassert(conn->dnsbuf_free_after_use == false, "dnsbuf read in progress");
+
+    _output_dnssim_stream_t* stream =
+        _output_dnssim_conn_find_stream(conn, -1, true);
+    mlassert(stream, "stream can't be nil (read_dnsmsg)");
+    mlassert(stream->data_pos == 0, "dnsbuf not empty");
+    mlassert(stream->data_free_after_use == false, "dnsbuf read in progress");
 
     /* Read dnsmsg of given length from input data. */
-    conn->dnsbuf_len = len;
-    conn->read_state = _OUTPUT_DNSSIM_READ_STATE_DNSMSG;
-    int nread        = _read_dns_stream_chunk(conn, len, data, -1);
+    stream->data_len = len;
+    stream->read_state = _OUTPUT_DNSSIM_READ_STATE_DNSMSG;
+    int nread        = _read_dns_stream_chunk(conn, stream, len, data);
 
     if (nread != len) {
         mlwarning("failed to read received dnsmsg");
-        if (conn->dnsbuf_free_after_use)
-            free(conn->dnsbuf_data);
+        if (stream->data_free_after_use) {
+            free(stream->data);
+            stream->data = NULL;
+        }
     }
 
     /* Clean state afterwards. */
-    conn->read_state            = _OUTPUT_DNSSIM_READ_STATE_DNSLEN;
-    conn->dnsbuf_len            = 2;
-    conn->dnsbuf_pos            = 0;
-    conn->dnsbuf_free_after_use = false;
+    stream->read_state          = _OUTPUT_DNSSIM_READ_STATE_DNSLEN;
+    stream->data_len            = 2;
+    stream->data_pos            = 0;
+    stream->data_free_after_use = false;
 }
 
 _output_dnssim_query_stream_t* _output_dnssim_get_stream_qry(

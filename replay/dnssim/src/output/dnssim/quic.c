@@ -448,7 +448,7 @@ int  _output_dnssim_quic_connect(output_dnssim_t* self, _output_dnssim_connectio
     ngtcp2_transport_params params;
     ngtcp2_transport_params_default(&params);
     params.initial_max_streams_uni = 0;
-    params.initial_max_streams_bidi = 0;
+    params.initial_max_streams_bidi = 1024;
     params.initial_max_stream_data_bidi_local = NGTCP2_MAX_VARINT;
     params.initial_max_data = NGTCP2_MAX_VARINT;
 
@@ -687,6 +687,7 @@ void _output_dnssim_quic_write_query(_output_dnssim_connection_t* conn, _output_
 
     ret = ngtcp2_conn_open_bidi_stream(conn->quic->qconn, &qry->stream_id, pl);
     if (ret == NGTCP2_ERR_STREAM_ID_BLOCKED) {
+        /* We'll just retry later */
         return;
     } else if (ret) {
         lwarning("failed to open bidi stream: %s", ngtcp2_strerror(ret));

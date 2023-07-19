@@ -180,6 +180,19 @@ typedef struct _output_dnssim_quic_ctx {
     _output_dnssim_quic_packet_t *unsent_packet;
 } _output_dnssim_quic_ctx_t;
 
+/* Linked list of stream buffers. */
+typedef struct _output_dnssim_stream _output_dnssim_stream_t;
+struct _output_dnssim_stream {
+    _output_dnssim_stream_t* prev;
+    _output_dnssim_stream_t* next;
+    _output_dnssim_read_state_t read_state;
+    bool  data_free_after_use;
+    int64_t stream_id;
+    size_t data_len;
+    size_t data_pos;
+    char* data;
+};
+
 struct _output_dnssim_connection {
     _output_dnssim_connection_t* next;
 
@@ -228,19 +241,12 @@ struct _output_dnssim_connection {
         _OUTPUT_DNSSIM_CONN_CLOSED                = 50
     } state;
 
-    /* State of the data stream read. */
-    _output_dnssim_read_state_t read_state;
-
-    /* Total length of the expected dns data (either 2 for dnslen, or dnslen itself). */
-    size_t dnsbuf_len;
-
-    /* Current position in the receive dns buffer. */
-    size_t dnsbuf_pos;
-
-    /* Receive buffer used for incomplete messages or dnslen. */
-    char* dnsbuf_data;
-    int64_t dnsbuf_stream_id;
-    bool  dnsbuf_free_after_use;
+    /* Linked list of receive buffers for incomplete messages or dnslen. For
+     * most transport protocols, this will only contain a single entry since
+     * they only support a single stream of data per connection. There will be
+     * multiple of these for e.g. QUIC, which supports multiple streams per
+     * connection. */
+    _output_dnssim_stream_t *streams;
 
     /* Statistics interval in which the handshake is tracked. */
     output_dnssim_stats_t* stats;
