@@ -58,7 +58,7 @@ void _output_dnssim_tls_process_input_data(_output_dnssim_connection_t* conn)
                 conn->stats->conn_resumed++;
             if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_HTTPS2) {
                 if (_output_dnssim_https2_setup(conn) < 0) {
-                    _output_dnssim_conn_close(conn, false);
+                    _output_dnssim_conn_bye(conn);
                     return;
                 }
             }
@@ -69,11 +69,11 @@ void _output_dnssim_tls_process_input_data(_output_dnssim_connection_t* conn)
         } else if (err == GNUTLS_E_FATAL_ALERT_RECEIVED) {
             gnutls_alert_description_t alert = gnutls_alert_get(conn->tls->session);
             mlwarning("gnutls_handshake failed: %s", gnutls_alert_get_name(alert));
-            _output_dnssim_conn_close(conn, true);
+            _output_dnssim_conn_close(conn);
             return;
         } else if (gnutls_error_is_fatal(err)) {
             mlwarning("gnutls_handshake failed: %s", gnutls_strerror_name(err));
-            _output_dnssim_conn_close(conn, true);
+            _output_dnssim_conn_close(conn);
             return;
         }
     }
@@ -109,7 +109,7 @@ void _output_dnssim_tls_process_input_data(_output_dnssim_connection_t* conn)
             continue; /* Ignore rehandshake request. */
         } else if (count < 0) {
             mlwarning("gnutls_record_recv failed: %s", gnutls_strerror_name(count));
-            _output_dnssim_conn_close(conn, true);
+            _output_dnssim_conn_close(conn);
             return;
         } else if (count == 0) {
             break;
@@ -149,7 +149,7 @@ static void _tls_on_write_complete(uv_write_t* req, int status)
     free(req->data);
 
     if (status < 0)
-        _output_dnssim_conn_close(conn, true);
+        _output_dnssim_conn_close(conn);
 }
 
 static ssize_t _tls_vec_push(gnutls_transport_ptr_t ptr, const giovec_t* iov, int iovcnt)
@@ -426,7 +426,7 @@ void _output_dnssim_tls_write_query(_output_dnssim_connection_t* conn, _output_d
     ssize_t count = 0;
     if ((count = gnutls_record_send(conn->tls->session, &len, sizeof(len)) < 0) || (count = gnutls_record_send(conn->tls->session, payload->payload, payload->len) < 0)) {
         mlwarning("gnutls_record_send failed: %s", gnutls_strerror_name(count));
-        _output_dnssim_conn_close(conn, true);
+        _output_dnssim_conn_close(conn);
         return;
     }
 
@@ -435,13 +435,13 @@ void _output_dnssim_tls_write_query(_output_dnssim_connection_t* conn, _output_d
     int ret = gnutls_record_uncork(conn->tls->session, GNUTLS_RECORD_WAIT);
     if (gnutls_error_is_fatal(ret)) {
         mlinfo("gnutls_record_uncorck failed: %s", gnutls_strerror_name(ret));
-        _output_dnssim_conn_close(conn, true);
+        _output_dnssim_conn_close(conn);
         return;
     }
 
     if (ret != submitted) {
         mlwarning("gnutls_record_uncork didn't send all data");
-        _output_dnssim_conn_close(conn, true);
+        _output_dnssim_conn_close(conn);
         return;
     }
 

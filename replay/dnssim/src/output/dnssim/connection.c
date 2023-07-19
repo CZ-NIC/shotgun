@@ -82,7 +82,7 @@ static void _on_nudge_timer_closed(uv_handle_t* handle)
     _output_dnssim_conn_maybe_free(conn);
 }
 
-void _output_dnssim_conn_close(_output_dnssim_connection_t* conn, bool force)
+void _output_dnssim_conn_close(_output_dnssim_connection_t* conn)
 {
     mlassert(conn, "conn can't be nil");
     mlassert(conn->stats, "conn must have stats");
@@ -116,34 +116,28 @@ void _output_dnssim_conn_close(_output_dnssim_connection_t* conn, bool force)
         conn->state = _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED;
         return;
     }
+    conn->state = _OUTPUT_DNSSIM_CONN_CLOSING;
 
-    if (force) {
-        conn->state =  _OUTPUT_DNSSIM_CONN_CLOSING;
-        if (conn->handshake_timer != NULL) {
-            uv_timer_stop(conn->handshake_timer);
-            uv_close((uv_handle_t*)conn->handshake_timer, _on_handshake_timer_closed);
-        }
-        if (conn->idle_timer != NULL) {
-            conn->is_idle = false;
-            uv_timer_stop(conn->idle_timer);
-            uv_close((uv_handle_t*)conn->idle_timer, _on_idle_timer_closed);
-        }
-        if (conn->nudge_timer != NULL) {
-            uv_timer_stop(conn->nudge_timer);
-            uv_close((uv_handle_t*)conn->nudge_timer, _on_nudge_timer_closed);
-        }
-    } else {
-        conn->state =  _OUTPUT_DNSSIM_CONN_GRACEFUL_CLOSING;
+    if (conn->handshake_timer != NULL) {
+        uv_timer_stop(conn->handshake_timer);
+        uv_close((uv_handle_t*)conn->handshake_timer, _on_handshake_timer_closed);
+    }
+    if (conn->nudge_timer != NULL) {
+        uv_timer_stop(conn->nudge_timer);
+        uv_close((uv_handle_t*)conn->nudge_timer, _on_nudge_timer_closed);
+    }
+    if (conn->idle_timer != NULL) {
+        conn->is_idle = false;
+        uv_timer_stop(conn->idle_timer);
+        uv_close((uv_handle_t*)conn->idle_timer, _on_idle_timer_closed);
     }
 
     switch (_self->transport) {
     case OUTPUT_DNSSIM_TRANSPORT_TCP:
-        conn->state = _OUTPUT_DNSSIM_CONN_CLOSING; // graceful close not applicable
         _output_dnssim_tcp_close(conn);
         break;
     case OUTPUT_DNSSIM_TRANSPORT_TLS:
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
-        conn->state = _OUTPUT_DNSSIM_CONN_CLOSING; // graceful close not applicable
         _output_dnssim_tls_close(conn);
 #else
         lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
@@ -151,7 +145,6 @@ void _output_dnssim_conn_close(_output_dnssim_connection_t* conn, bool force)
         break;
     case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
-        conn->state = _OUTPUT_DNSSIM_CONN_CLOSING; // graceful close not applicable
         _output_dnssim_https2_close(conn);
 #else
         lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
@@ -159,7 +152,60 @@ void _output_dnssim_conn_close(_output_dnssim_connection_t* conn, bool force)
         break;
     case OUTPUT_DNSSIM_TRANSPORT_QUIC:
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
-        _output_dnssim_quic_close(conn, force);
+        _output_dnssim_quic_close(conn);
+#else
+        lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
+#endif
+        break;
+    default:
+        lfatal("unsupported transport");
+        break;
+    }
+}
+
+void _output_dnssim_conn_bye(_output_dnssim_connection_t* conn)
+{
+    mlassert(conn, "conn can't be nil");
+    mlassert(conn->stats, "conn must have stats");
+    mlassert(conn->client, "conn must have client");
+    mlassert(conn->client->dnssim, "client must have dnssim");
+
+    output_dnssim_t* self = conn->client->dnssim;
+
+    switch (conn->state) {
+    case _OUTPUT_DNSSIM_CONN_INITIALIZED:
+    case _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE:
+    case _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE:
+        _output_dnssim_conn_close(conn);
+        return;
+
+    case _OUTPUT_DNSSIM_CONN_ACTIVE:
+    case _OUTPUT_DNSSIM_CONN_CONGESTED:
+    case _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED:
+        break;
+
+    case _OUTPUT_DNSSIM_CONN_CLOSING:
+    case _OUTPUT_DNSSIM_CONN_CLOSED:
+    case _OUTPUT_DNSSIM_CONN_GRACEFUL_CLOSING:
+        return;
+
+    default:
+        lfatal("unknown conn state: %d", conn->state);
+    }
+
+    conn->state = _OUTPUT_DNSSIM_CONN_GRACEFUL_CLOSING;
+
+    /* Only QUIC supports a graceful closure right now.
+     * TODO: TLS could (and maybe should) as well */
+    switch (_self->transport) {
+    case OUTPUT_DNSSIM_TRANSPORT_TCP:
+    case OUTPUT_DNSSIM_TRANSPORT_TLS:
+    case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
+        _output_dnssim_conn_close(conn);
+        break;
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+        _output_dnssim_quic_bye(conn);
 #else
         lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
 #endif
@@ -177,7 +223,7 @@ void _output_dnssim_conn_idle(_output_dnssim_connection_t* conn)
 
     if (conn->queued == NULL && conn->sent == NULL) {
         if (conn->idle_timer == NULL)
-            _output_dnssim_conn_close(conn, false);
+            _output_dnssim_conn_close(conn);
         else if (!conn->is_idle) {
             conn->is_idle = true;
             uv_timer_again(conn->idle_timer);
@@ -541,7 +587,7 @@ void _output_dnssim_read_dns_stream(_output_dnssim_connection_t* conn, size_t le
         chunk = _read_dns_stream_chunk(conn, len - pos, data + pos, stream_id);
         if (chunk < 0) {
             mlwarning("lost orientation in DNS stream, closing");
-            _output_dnssim_conn_close(conn, true);
+            _output_dnssim_conn_close(conn);
             break;
         } else {
             pos += chunk;

@@ -171,7 +171,6 @@ typedef struct _output_dnssim_quic_ctx {
     ngtcp2_conn* qconn;
     ngtcp2_crypto_conn_ref qconn_ref;
     ngtcp2_pkt_info pi;
-    bool close_sent;
 
     uint32_t max_concurrent_streams;
     uint32_t open_streams;
@@ -340,7 +339,8 @@ int  _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client);
 int  _output_dnssim_tcp_connect(output_dnssim_t* self, _output_dnssim_connection_t* conn);
 void _output_dnssim_tcp_close(_output_dnssim_connection_t* conn);
 void _output_dnssim_tcp_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry);
-void _output_dnssim_conn_close(_output_dnssim_connection_t* conn, bool force);
+void _output_dnssim_conn_close(_output_dnssim_connection_t* conn);
+void _output_dnssim_conn_bye(_output_dnssim_connection_t* conn);
 void _output_dnssim_conn_idle(_output_dnssim_connection_t* conn);
 void _output_dnssim_conn_move_queries_to_pending(_output_dnssim_query_stream_t* qry);
 int  _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client);
@@ -376,7 +376,8 @@ int  _output_dnssim_quic_setup(_output_dnssim_connection_t* conn);
 void _output_dnssim_quic_process_input_data(_output_dnssim_connection_t* conn,
                                             const struct sockaddr *remote_sa,
                                             size_t len, const char* data);
-void _output_dnssim_quic_close(_output_dnssim_connection_t* conn, bool force);
+void _output_dnssim_quic_close(_output_dnssim_connection_t* conn);
+void _output_dnssim_quic_bye(_output_dnssim_connection_t* conn);
 void _output_dnssim_quic_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry);
 #endif
 

@@ -117,7 +117,7 @@ static void nudge_timer_cb(uv_timer_t *timer)
 static void conn_timer_cb(uv_timer_t* handle)
 {
     _output_dnssim_connection_t* conn = (_output_dnssim_connection_t*)handle->data;
-    _output_dnssim_conn_close(conn, true);
+    _output_dnssim_conn_close(conn);
 }
 
 
@@ -282,31 +282,31 @@ static int quic_handle_write_ret(_output_dnssim_connection_t* conn,
 
     if (write_ret == NGTCP2_ERR_STREAM_SHUT_WR) {
         mldebug("%s shut write - force closing", func_name, ngtcp2_strerror(write_ret));
-        _output_dnssim_conn_close(conn, true);
+        _output_dnssim_conn_close(conn);
 
         free(pkt);
         return 0;
     } else if (write_ret == NGTCP2_ERR_CLOSING) {
         mldebug("%s closing - force closing", func_name, ngtcp2_strerror(write_ret));
-        _output_dnssim_conn_close(conn, true);
+        _output_dnssim_conn_close(conn);
 
         free(pkt);
         return 0;
     } else if (write_ret == NGTCP2_ERR_DRAINING) {
         mldebug("%s draining - force closing", func_name, ngtcp2_strerror(write_ret));
-        _output_dnssim_conn_close(conn, true);
+        _output_dnssim_conn_close(conn);
 
         free(pkt);
         return 0;
     } else if (write_ret < 0) {
         mlwarning("%s failed: %s", func_name, ngtcp2_strerror(write_ret));
-        _output_dnssim_conn_close(conn, true);
+        _output_dnssim_conn_close(conn);
 
         free(pkt);
         return -1;
     } else if (conn->state == _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED) {
         mlwarning("close requested");
-        _output_dnssim_conn_close(conn, false);
+        _output_dnssim_conn_bye(conn);
 
         free(pkt);
         return -1;
@@ -580,15 +580,15 @@ void _output_dnssim_quic_process_input_data(_output_dnssim_connection_t* conn,
     ret = ngtcp2_conn_read_pkt(conn->quic->qconn, &ps.path, &conn->quic->pi,
             (uint8_t*)data, len, quic_timestamp());
     if (ret == NGTCP2_ERR_CLOSING) {
-        _output_dnssim_conn_close(conn, true);
+        _output_dnssim_conn_close(conn);
         return;
     } else if (ret < 0) {
         lwarning("failed ngtcp2_conn_read_pkt: %s", ngtcp2_strerror(ret));
-        _output_dnssim_conn_close(conn, true);
+        _output_dnssim_conn_close(conn);
         return;
     } else if (conn->state == _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED) {
         ldebug("connection closure requested");
-        _output_dnssim_conn_close(conn, false);
+        _output_dnssim_conn_bye(conn);
         return;
     }
     mlassert(ret == 0, "ngtcp2_conn_read_pkt returned non-zero");
@@ -612,30 +612,40 @@ static void _output_dnssim_quic_handle_on_close(uv_handle_t* handle)
     _output_dnssim_conn_maybe_free(conn);
 }
 
-void _output_dnssim_quic_close(_output_dnssim_connection_t* conn, bool force)
+void _output_dnssim_quic_close(_output_dnssim_connection_t* conn)
 {
     mlassert(conn, "conn can't be nil");
     mlassert(conn->tls, "conn conn must have tls ctx");
     mlassert(conn->quic, "conn conn must have quic ctx");
     mlassert(conn->client, "conn conn must belong to a client");
 
-    if (force) {
-        if (conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_UDP) {
-            mldebug("stopping UDP reception");
-            int ret = uv_udp_connect(conn->transport.udp, NULL); /* disconnect */
-            if (ret)
-                mlwarning("disconnect failure: %s", uv_strerror(ret));
-            uv_udp_recv_stop(conn->transport.udp);
-            uv_close((uv_handle_t*)conn->transport.udp, _output_dnssim_quic_handle_on_close);
-        } else {
-            mlassert(conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_NULL,
-                    "transport type of QUIC must be UDP or NULL");
-        }
-    } else if (!conn->quic->close_sent) {
-        conn->quic->close_sent = true;
+    if (conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_UDP) {
+        if (uv_is_closing((uv_handle_t*)conn->transport.udp))
+            return;
+
+        mldebug("stopping UDP reception");
+        int ret = uv_udp_connect(conn->transport.udp, NULL); /* disconnect */
+        if (ret)
+            mlwarning("disconnect failure: %s", uv_strerror(ret));
+        uv_udp_recv_stop(conn->transport.udp);
+        uv_close((uv_handle_t*)conn->transport.udp, _output_dnssim_quic_handle_on_close);
+    } else {
+        mlassert(conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_NULL,
+                "transport type of QUIC must be UDP or NULL");
+    }
+}
+
+void _output_dnssim_quic_bye(_output_dnssim_connection_t* conn)
+{
+    mlassert(conn, "conn can't be nil");
+    mlassert(conn->tls, "conn conn must have tls ctx");
+    mlassert(conn->quic, "conn conn must have quic ctx");
+    mlassert(conn->client, "conn conn must belong to a client");
+
+    if (conn->state <= _OUTPUT_DNSSIM_CONN_GRACEFUL_CLOSING) {
         quic_send_conn_close(conn);
     } else {
-        mlwarning("Call to conn close, but close packet already sent");
+        mlwarning("Call to quic bye, but its state is already closing");
     }
 }
 
