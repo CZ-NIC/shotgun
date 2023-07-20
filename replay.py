@@ -2,6 +2,7 @@
 
 import argparse
 import copy
+import collections
 import datetime
 import ipaddress
 import logging
@@ -272,20 +273,15 @@ def get_log_level(verbosity: int) -> int:
     return logging.DEBUG
 
 
-def run_or_exit(args: List[str]) -> None:
+def run_or_exit(args: List[str], env: collections.abc.Mapping = None) -> None:
     try:
-        subprocess.run(args, check=True)
+        subprocess.run(args, check=True, env=env)
     except subprocess.CalledProcessError as ex:
         sys.exit(ex.returncode)
 
 
-def run_shotgun(luaconfig: str) -> None:
-    run_or_exit(
-        [
-            os.path.join(REPLAY_DIR, "shotgun.lua"),
-            luaconfig,
-        ]
-    )
+def run_shotgun(luaconfig: str, env: collections.abc.Mapping) -> None:
+    run_or_exit([SHOTGUN_PATH, luaconfig], env)
 
 
 def list_json_files(directory: str) -> List[str]:
@@ -387,12 +383,23 @@ def main():
     parser.add_argument(
         "--doh-port", type=int, default=443, help="port for DNS-over-HTTPS"
     )
+    parser.add_argument(
+        "--preload",
+        help="LD_PRELOAD shotgun with the specified libraries (for debugging)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
         format="%(asctime)s %(levelname)8s  %(message)s",
         level=get_log_level(args.verbosity),
     )
+
+    dnssim_env = os.environ.copy()
+    if args.preload:
+        if "LD_PRELOAD" in dnssim_env:
+            dnssim_env["LD_PRELOAD"] = args.preload + " " + dnssim_env["LD_PRELOAD"]
+        else:
+            dnssim_env["LD_PRELOAD"] = args.preload
 
     config = load_config(args.config)
     try:
@@ -410,7 +417,7 @@ def main():
 
     logging.info("Configuration sucessfully created")
     logging.info("Firing shotgun...")
-    run_shotgun(luaconfig)
+    run_shotgun(luaconfig, dnssim_env)
 
     datadir = os.path.join(args.outdir, "data")
     merge_data(datadir)
