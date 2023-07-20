@@ -216,6 +216,10 @@ static int stream_close_cb(ngtcp2_conn* qconn, uint32_t flags,
     _output_dnssim_connection_t* conn = user_data;
     mlassert(conn, "conn is nil");
 
+    // Free `quic_sent_payload` allocated in `_output_dnssim_quic_write_query`
+    _ll_try_remove(conn->quic->sent_payloads, (_output_dnssim_quic_sent_payload_t*)stream_user_data);
+    free(stream_user_data);
+
     _output_dnssim_query_stream_t* qry = _output_dnssim_get_stream_qry(conn, stream_id);
     mldebug("quic: stream closed, qconn=%p", qconn);
     if (!qry) {
@@ -623,6 +627,13 @@ void _output_dnssim_quic_close(_output_dnssim_connection_t* conn)
         if (uv_is_closing((uv_handle_t*)conn->transport.udp))
             return;
 
+        _output_dnssim_quic_sent_payload_t *pl = conn->quic->sent_payloads;
+        while (pl) {
+            _output_dnssim_quic_sent_payload_t *next = pl->next;
+            free(pl);
+            pl = next;
+        }
+
         mldebug("stopping UDP reception");
         int ret = uv_udp_connect(conn->transport.udp, NULL); /* disconnect */
         if (ret)
@@ -649,11 +660,6 @@ void _output_dnssim_quic_bye(_output_dnssim_connection_t* conn)
     }
 }
 
-struct quic_sent_payload {
-    uint16_t length;
-    char data[];
-};
-
 void _output_dnssim_quic_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry)
 {
     mlassert(qry, "qry can't be null");
@@ -676,14 +682,17 @@ void _output_dnssim_quic_write_query(_output_dnssim_connection_t* conn, _output_
     }
 
     core_object_payload_t* content = qry->qry.req->payload;
-    struct quic_sent_payload *pl;
+    _output_dnssim_quic_sent_payload_t *pl;
     mlfatal_oom(pl = malloc(sizeof(*pl) + content->len));
+    pl->next = NULL;
     pl->length = htons(content->len);
     memcpy(pl->data, content->payload, content->len);
     ngtcp2_vec vecs[2] = {
         { (uint8_t*)&pl->length, sizeof(pl->length) },
         { (uint8_t*)pl->data, content->len }
     };
+
+    _ll_append(conn->quic->sent_payloads, pl);
 
     ret = ngtcp2_conn_open_bidi_stream(conn->quic->qconn, &qry->stream_id, pl);
     if (ret == NGTCP2_ERR_STREAM_ID_BLOCKED) {

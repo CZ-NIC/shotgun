@@ -14,22 +14,30 @@
  * - every node has "next", which points to the next node (can be NULL)
  */
 
-/* Append a node to the list.
+/* Append a node to the list, casting the list to the specified type. The cast
+ * may be used when the list is implicitly of type `void*`.
  *
- * Only a single node can be appended - node->next must be NULL.
+ * Only a single node may be appended - node->next must be NULL.
  */
-#define _ll_append(list, node)                                                    \
-    {                                                                             \
+#define _ll_cast_append(list, type, node)                                         \
+    do {                                                                          \
         glassert((node)->next == NULL, "node->next must be null when appending"); \
         if ((list) == NULL)                                                       \
             (list) = (node);                                                      \
         else if ((node) != NULL) {                                                \
-            typeof(list) _current = (list);                                       \
+            type _current = (list);                                               \
             while (_current->next != NULL)                                        \
                 _current = _current->next;                                        \
             _current->next = node;                                                \
         }                                                                         \
-    }
+    } while (0)
+
+/* Append a node to the list.
+ *
+ * Only a single node may be appended - node->next must be NULL.
+ */
+#define _ll_append(list, node) _ll_cast_append(list, typeof(list), node)
+
 
 /* Remove a node from the list.
  *

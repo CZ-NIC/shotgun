@@ -166,6 +166,13 @@ typedef struct _output_dnssim_quic_packet {
     uint8_t buffer[];
 } _output_dnssim_quic_packet_t;
 
+typedef struct _output_dnssim_quic_sent_payload _output_dnssim_quic_sent_payload_t;
+struct _output_dnssim_quic_sent_payload {
+    _output_dnssim_quic_sent_payload_t* next;
+    uint16_t length;
+    char data[];
+};
+
 /* QUIC context for a single connection. */
 typedef struct _output_dnssim_quic_ctx {
     ngtcp2_conn* qconn;
@@ -177,7 +184,8 @@ typedef struct _output_dnssim_quic_ctx {
 
     uint8_t secret[32];
 
-    _output_dnssim_quic_packet_t *unsent_packet;
+    _output_dnssim_quic_packet_t* unsent_packet;
+    _output_dnssim_quic_sent_payload_t* sent_payloads;
 } _output_dnssim_quic_ctx_t;
 
 /* Linked list of stream buffers. */
