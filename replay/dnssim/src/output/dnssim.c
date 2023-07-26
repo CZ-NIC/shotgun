@@ -15,9 +15,16 @@
 #include <gnutls/gnutls.h>
 #include <string.h>
 
-#define QUIC_DEFAULT_VERSION "-VERS-ALL:+VERS-TLS1.3"
-#define QUIC_DEFAULT_GROUPS  "-GROUP-ALL:+GROUP-X25519:+GROUP-SECP256R1:+GROUP-SECP384R1:+GROUP-SECP521R1"
-#define QUIC_PRIORITY        "%DISABLE_TLS13_COMPAT_MODE:NORMAL:"QUIC_DEFAULT_VERSION":"QUIC_DEFAULT_GROUPS
+#define DEFAULT_PRIORITY_TOKEN "dnssim-default"
+
+#define DEFAULT_PRIORITY_GENERAL "NORMAL"
+
+#define DEFAULT_PRIORITY_QUIC_VERSION \
+    "-VERS-ALL:+VERS-TLS1.3"
+#define DEFAULT_PRIORITY_QUIC_GROUPS \
+    "-GROUP-ALL:+GROUP-X25519:+GROUP-SECP256R1:+GROUP-SECP384R1:+GROUP-SECP521R1"
+#define DEFAULT_PRIORITY_QUIC \
+    "%DISABLE_TLS13_COMPAT_MODE:NORMAL:"DEFAULT_PRIORITY_QUIC_VERSION":"DEFAULT_PRIORITY_QUIC_GROUPS
 
 static core_log_t      _log      = LOG_T_INIT("output.dnssim");
 static output_dnssim_t _defaults = { LOG_T_INIT_OBJ("output.dnssim") };
@@ -343,6 +350,49 @@ int output_dnssim_bind(output_dnssim_t* self, const char* ip)
     return 0;
 }
 
+static void handle_default_priority(const char** inout_priority,
+                                    bool* out_free_priority,
+                                    bool is_quic)
+{
+    const char* default_priority = (is_quic)
+        ? DEFAULT_PRIORITY_QUIC
+        : DEFAULT_PRIORITY_GENERAL;
+
+    size_t sep_ix = 0;
+    while ((*inout_priority)[sep_ix] && (*inout_priority)[sep_ix] != ':')
+        sep_ix++;
+
+    if (strncmp(*inout_priority, DEFAULT_PRIORITY_TOKEN, sep_ix) != 0) {
+        mldebug("non-default_priority");
+        *out_free_priority = false;
+        return;
+    }
+
+    if (!(*inout_priority)[sep_ix]) {
+        mldebug("default_priority - sep_ix: %zu - %s", sep_ix, *inout_priority);
+        *inout_priority = default_priority;
+        *out_free_priority = false;
+        return;
+    }
+
+    size_t prefix_len = strlen(default_priority);
+    const char *suffix = &(*inout_priority)[sep_ix];
+    size_t suffix_len = strlen(suffix);
+    size_t total_len = prefix_len + suffix_len + 1;
+
+    mldebug("priority concat:\nprefix: %.*s\nsuffix: %.*s",
+            (int)prefix_len, default_priority,
+            (int)suffix_len, suffix);
+
+    char *out_priority = malloc(total_len);
+    memcpy(out_priority, default_priority, prefix_len);
+    memcpy(&out_priority[prefix_len], suffix, suffix_len);
+    out_priority[prefix_len + suffix_len] = '\0';
+
+    *inout_priority = out_priority;
+    *out_free_priority = true;
+}
+
 int output_dnssim_tls_priority(output_dnssim_t* self, const char* priority, bool is_quic)
 {
     mlassert_self();
@@ -354,16 +404,18 @@ int output_dnssim_tls_priority(output_dnssim_t* self, const char* priority, bool
     }
     lfatal_oom(_self->tls_priority = malloc(sizeof(gnutls_priority_t)));
 
-    if (strcmp(priority, "dnssim-default") == 0) {
-        priority = (is_quic) ? QUIC_PRIORITY : "NORMAL";
-    }
+    bool free_priority = false;
+    handle_default_priority(&priority, &free_priority, is_quic);
 
     int ret = gnutls_priority_init(_self->tls_priority, priority, NULL);
     if (ret < 0) {
-        lfatal("failed to initialize TLS priority cache: %s", gnutls_strerror(ret));
+        lfatal("failed to initialize TLS priority cache (with string '%s'): %s", priority, gnutls_strerror(ret));
     } else {
         lnotice("GnuTLS priority set: %s", priority);
     }
+
+    if (free_priority)
+        free((char*)priority); /* Here it is effectively non-const after being malloc'd */
 
     return 0;
 }

@@ -39,7 +39,7 @@ weight = 10
 [traffic.DoT-no_tickets]
 protocol = "dot"
 weight = 5
-gnutls_priority = "NORMAL:%NO_TICKETS"
+gnutls_priority = "dnssim-default:%NO_TICKETS"
 
 # Well-behaved DNS-over-HTTPS clients using GET method.
 [traffic.DoH-GET]

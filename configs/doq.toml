@@ -20,7 +20,7 @@ protocol = "doq"
 # DoQ clients without TLS Session Resumption
 #[traffic.DoQ-no_tickets]
 #protocol = "doq"
-#gnutls_priority = "NORMAL:-VERS-TLS1.0:-VERS-TLS1.1:-VERS-TLS1.2:%NO_TICKETS"
+#gnutls_priority = "dnssim-default:%NO_TICKETS"
 
 # DoQ clients using only TLS1.3
 #
@@ -32,7 +32,7 @@ protocol = "doq"
 
 #[traffic.DoQ-tls1_3]
 #protocol = "doq"
-#gnutls_priority = "NORMAL:-VERS-ALL:+VERS-TLS1.3"
+#gnutls_priority = "dnssim-default:-VERS-ALL:+VERS-TLS1.3"
 
 
 [charts]
