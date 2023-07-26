@@ -15,6 +15,10 @@
 #include <gnutls/gnutls.h>
 #include <string.h>
 
+#define QUIC_DEFAULT_VERSION "-VERS-ALL:+VERS-TLS1.3"
+#define QUIC_DEFAULT_GROUPS  "-GROUP-ALL:+GROUP-X25519:+GROUP-SECP256R1:+GROUP-SECP384R1:+GROUP-SECP521R1"
+#define QUIC_PRIORITY        "%DISABLE_TLS13_COMPAT_MODE:NORMAL:"QUIC_DEFAULT_VERSION":"QUIC_DEFAULT_GROUPS
+
 static core_log_t      _log      = LOG_T_INIT("output.dnssim");
 static output_dnssim_t _defaults = { LOG_T_INIT_OBJ("output.dnssim") };
 
@@ -351,9 +355,7 @@ int output_dnssim_tls_priority(output_dnssim_t* self, const char* priority, bool
     lfatal_oom(_self->tls_priority = malloc(sizeof(gnutls_priority_t)));
 
     if (strcmp(priority, "dnssim-default") == 0) {
-        priority = (is_quic) /* only TLS1.3 and up for QUIC; otherwise GnuTLS defaults */
-            ? "NORMAL:-VERS-TLS1.0:-VERS-TLS1.1:-VERS-TLS1.2"
-            : "NORMAL";
+        priority = (is_quic) ? QUIC_PRIORITY : "NORMAL";
     }
 
     int ret = gnutls_priority_init(_self->tls_priority, priority, NULL);

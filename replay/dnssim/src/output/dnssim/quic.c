@@ -15,9 +15,6 @@
 
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
 
-#define OUTPUT_DNSSIM_QUIC_INITIAL_MAX_CONCURRENT_STREAMS 100
-#define OUTPUT_DNSSIM_QUIC_DEFAULT_MAX_CONCURRENT_STREAMS 0xffffffffu
-
 #define OUTPUT_DNSSIM_QUIC_ALPN "doq"
 
 static core_log_t _log = LOG_T_INIT("output.dnssim");
@@ -216,9 +213,14 @@ static int stream_close_cb(ngtcp2_conn* qconn, uint32_t flags,
     _output_dnssim_connection_t* conn = user_data;
     mlassert(conn, "conn is nil");
 
-    // Free `quic_sent_payload` allocated in `_output_dnssim_quic_write_query`
-    _ll_try_remove(conn->quic->sent_payloads, (_output_dnssim_quic_sent_payload_t*)stream_user_data);
-    free(stream_user_data);
+    /* This frees the `_output_dnssim_quic_sent_payload_t` allocated in
+     * `_output_dnssim_quic_write_query`. When the connection is `_CLOSING` (or
+     * later), this data has already been freed by `_output_dnssim_quic_close`,
+     * so we skip this. */
+    if (conn->state < _OUTPUT_DNSSIM_CONN_CLOSING) {
+        _ll_try_remove(conn->quic->sent_payloads, (_output_dnssim_quic_sent_payload_t*)stream_user_data);
+        free(stream_user_data);
+    }
 
     _output_dnssim_query_stream_t* qry = _output_dnssim_get_stream_qry(conn, stream_id);
     mldebug("quic: stream closed, qconn=%p", qconn);
@@ -227,10 +229,8 @@ static int stream_close_cb(ngtcp2_conn* qconn, uint32_t flags,
         return 0;
     }
 
-    if (qry->recv_buf_len) {
-        _output_dnssim_read_dnsmsg(conn, qry->recv_buf_len, (char*)qry->recv_buf);
-        qry->recv_buf_len = 0;
-    }
+    if (qry->recv_buf_len)
+        _output_dnssim_read_dns_stream(conn, qry->recv_buf_len, (char*)qry->recv_buf, stream_id);
 
     return 0;
 }
@@ -406,7 +406,6 @@ int  _output_dnssim_quic_init(_output_dnssim_connection_t* conn)
     }
 
     lfatal_oom(conn->quic = calloc(1, sizeof(_output_dnssim_quic_ctx_t)));
-    conn->quic->max_concurrent_streams = OUTPUT_DNSSIM_QUIC_INITIAL_MAX_CONCURRENT_STREAMS;
     ret = quic_generate_secret(conn->quic->secret, sizeof(conn->quic->secret));
     if (ret) {
         lwarning("failed to generate quic secret: %s", gnutls_strerror(ret));
@@ -452,7 +451,7 @@ int  _output_dnssim_quic_connect(output_dnssim_t* self, _output_dnssim_connectio
     ngtcp2_transport_params params;
     ngtcp2_transport_params_default(&params);
     params.initial_max_streams_uni = 0;
-    params.initial_max_streams_bidi = 1024;
+    params.initial_max_streams_bidi = 0;
     params.initial_max_stream_data_bidi_local = NGTCP2_MAX_VARINT;
     params.initial_max_data = NGTCP2_MAX_VARINT;
 
@@ -583,7 +582,10 @@ void _output_dnssim_quic_process_input_data(_output_dnssim_connection_t* conn,
 
     ret = ngtcp2_conn_read_pkt(conn->quic->qconn, &ps.path, &conn->quic->pi,
             (uint8_t*)data, len, quic_timestamp());
-    if (ret == NGTCP2_ERR_CLOSING) {
+    if (ret == NGTCP2_ERR_DRAINING) {
+        _output_dnssim_conn_close(conn);
+        return;
+    } else if (ret == NGTCP2_ERR_CLOSING) {
         _output_dnssim_conn_close(conn);
         return;
     } else if (ret < 0) {
@@ -677,7 +679,7 @@ void _output_dnssim_quic_write_query(_output_dnssim_connection_t* conn, _output_
 
     int ret = quic_send(conn, NGTCP2_WRITE_STREAM_FLAG_MORE, -1);
     if (ret) {
-        lwarning("failed to send pre-stream packet");
+        mlwarning("failed to send pre-stream packet");
         return;
     }
 
@@ -686,7 +688,11 @@ void _output_dnssim_quic_write_query(_output_dnssim_connection_t* conn, _output_
     mlfatal_oom(pl = malloc(sizeof(*pl) + content->len));
     pl->next = NULL;
     pl->length = htons(content->len);
-    memcpy(pl->data, content->payload, content->len);
+
+    /* Copy query but zero-out the msgid because DoQ mandates it to be zero */
+    memcpy(pl->data + 2, content->payload + 2, content->len - 2);
+    memset(pl->data, 0, 2);
+
     ngtcp2_vec vecs[2] = {
         { (uint8_t*)&pl->length, sizeof(pl->length) },
         { (uint8_t*)pl->data, content->len }
@@ -697,11 +703,15 @@ void _output_dnssim_quic_write_query(_output_dnssim_connection_t* conn, _output_
     ret = ngtcp2_conn_open_bidi_stream(conn->quic->qconn, &qry->stream_id, pl);
     if (ret == NGTCP2_ERR_STREAM_ID_BLOCKED) {
         /* We'll just retry later */
+        conn->state = _OUTPUT_DNSSIM_CONN_CONGESTED;
         return;
     } else if (ret) {
         lwarning("failed to open bidi stream: %s", ngtcp2_strerror(ret));
         return;
     }
+
+    mldebug("stream %" PRIi64 " send id: %04x",
+            qry->stream_id, qry->qry.req->dns_q->id);
 
     lassert(qry->stream_id >= 0, "stream_id not assigned");
     ret = quic_send_data(conn,

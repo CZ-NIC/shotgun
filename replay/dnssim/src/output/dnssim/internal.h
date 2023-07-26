@@ -179,8 +179,6 @@ typedef struct _output_dnssim_quic_ctx {
     ngtcp2_crypto_conn_ref qconn_ref;
     ngtcp2_pkt_info pi;
 
-    uint32_t max_concurrent_streams;
-    uint32_t open_streams;
 
     uint8_t secret[32];
 

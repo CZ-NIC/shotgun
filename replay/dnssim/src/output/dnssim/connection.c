@@ -481,7 +481,6 @@ static int _process_dnsmsg(_output_dnssim_connection_t* conn,
         if (qry) {
             ret = _output_dnssim_answers_request(qry->req, &dns_a);
             switch (ret) {
-            case _ERR_MSGID:
             case 0:
                 _output_dnssim_request_answered(qry->req, &dns_a);
                 break;
