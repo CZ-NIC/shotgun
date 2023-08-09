@@ -2,8 +2,6 @@
  *  SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "config.h"
-
 #include "output/dnssim.h"
 #include "output/dnssim/internal.h"
 #include "output/dnssim/ll.h"

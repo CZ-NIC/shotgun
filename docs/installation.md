@@ -39,11 +39,12 @@ development happens in master branch.
 ```
 $ git clone https://gitlab.nic.cz/knot/shotgun.git
 $ git checkout v20210714
+$ git submodule update --init --recursive
 $ cd shotgun/replay/dnssim
-$ ./autogen.sh
-$ ./configure
-$ make
-$ make install
+$ mkdir build && cd build
+$ cmake ..
+$ cmake --build .
+$ sudo cmake --install .
 ```
 
 ### Dependencies
