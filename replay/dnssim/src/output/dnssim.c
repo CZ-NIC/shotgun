@@ -2,8 +2,6 @@
  *  SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "config.h"
-
 #include "output/dnssim.h"
 #include "output/dnssim/internal.h"
 #include "output/dnssim/ll.h"
@@ -31,7 +29,6 @@ static output_dnssim_t _defaults = { LOG_T_INIT_OBJ("output.dnssim") };
 
 static uint64_t _now_ms()
 {
-#if HAVE_CLOCK_NANOSLEEP
     struct timespec ts;
     uint64_t        now_ms;
     if (clock_gettime(CLOCK_REALTIME, &ts)) {
@@ -40,9 +37,6 @@ static uint64_t _now_ms()
     now_ms = ts.tv_sec * 1000;
     now_ms += ts.tv_nsec / 1000000;
     return now_ms;
-#else
-#error "clock_gettime() is not available"
-#endif
 }
 
 core_log_t* output_dnssim_log()
