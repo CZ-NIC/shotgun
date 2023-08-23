@@ -16,6 +16,7 @@ import matplotlib.colors
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.ticker as plticker
 
 import mplhlpr.styles
 
@@ -54,6 +55,23 @@ def plot(ax, data, label, since, until, line_props):
         if until > 1:
             until = math.ceil(until)
     ax.set_xlim(xmax=until)
+
+    major_step = None
+    minor_step = None
+    if until > 300:
+        major_step = 300
+        minor_step = 60
+    elif until > 60:
+        major_step = 60
+        minor_step = 10
+
+    if major_step:
+        loc = plticker.MultipleLocator(base=major_step)
+        ax.xaxis.set_major_locator(loc)
+
+        loc = plticker.MultipleLocator(base=minor_step)
+        ax.xaxis.set_minor_locator(loc)
+
 
 
 def parse_csv(csv_f, since: float, until: float) -> Tuple[float, Dict[float, float]]:
