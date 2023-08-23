@@ -49,8 +49,11 @@ def plot(ax, data, label, since, until, line_props):
 
     ax.plot(xvalues, yvalues, label=label, linestyle="", **line_props)
     ax.set_xlim(xmin=since)
-    if math.isfinite(until):
-        ax.set_xlim(xmax=until)
+    if not math.isfinite(until):
+        until = xvalues[-1]
+        if until > 1:
+            until = math.ceil(until)
+    ax.set_xlim(xmax=until)
 
 
 def parse_csv(csv_f, since: float, until: float) -> Tuple[float, Dict[float, float]]:
