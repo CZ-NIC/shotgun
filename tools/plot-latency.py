@@ -50,9 +50,9 @@ def init_plot(title):
     _, ax = plt.subplots()
 
     ax.set_xscale("log")
-    ax.xaxis.set_major_formatter(mtick.FormatStrFormatter("%s"))
+    ax.xaxis.set_major_formatter(mtick.FormatStrFormatter("%g"))
     ax.set_yscale("log")
-    ax.yaxis.set_major_formatter(mtick.FormatStrFormatter("%s"))
+    ax.yaxis.set_major_formatter(mtick.FormatStrFormatter("%g"))
 
     ax.grid(True, which="major")
     ax.grid(True, which="minor")
