@@ -1,0 +1,14 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Tests
+.pytest_cache/
+.mypy_cache/
+
+# Data files
+*.pcap
+
+replay/dnssim/build*
+replay/dnssim/compile_commands.json

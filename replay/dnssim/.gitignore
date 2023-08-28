@@ -82,7 +82,7 @@ libtool
 .deps
 src/config.h
 src/stamp-h1
-build
+build*
 .dirstamp
 
 # Project specific files

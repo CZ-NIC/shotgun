@@ -16,8 +16,8 @@ RUN \
 		luajit \
 		libuv1-dev \
 		make \
-		automake \
-		libtool \
+		cmake \
+		ninja-build \
 		pkg-config \
 		git && \
 	rm -rf /var/lib/apt/lists/*
@@ -26,9 +26,10 @@ COPY . /shotgun
 WORKDIR /shotgun
 ENV PATH="${PATH}:/shotgun"
 RUN cd replay/dnssim && \
-  ./autogen.sh && \
-  ./configure && \
-  make && \
-  make install && \
-  cd ../..
+  mkdir build && \
+  cd build && \
+  cmake .. -DCMAKE_BUILD_TYPE=Release -G Ninja && \
+  cmake --build . && \
+  cmake --install . && \
+  cd /shotgun
 RUN pip3 install -r requirements.txt
