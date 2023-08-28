@@ -191,10 +191,13 @@ local function chunk_finalize()
 end
 
 local obj, obj_pcap_in, obj_ip, obj_udp, obj_pl, client, src_ip, ip_len, prev_ms
+local npacketsin = 0
 local npacketsout = 0
+local npacketsskip = 0
 while true do
 	obj = produce(pctx)
 	if obj == nil then break end
+	npacketsin = npacketsin + 1
 
 	ip_len = 4
 	obj_ip = obj:cast_to(object.IP)
@@ -254,7 +257,13 @@ while true do
 		end
 		write(writectx, obj_pcap_out:uncast())
 		npacketsout = npacketsout + 1
+	else
+		npacketsskip = npacketsskip + 1
 	end
+end
+if npacketsskip > 0 then
+	log:warning(string.format("skipped %d non-IP or non-UDP packets (%f %%)",
+				  npacketsskip, npacketsskip / npacketsin * 100))
 end
 
 if now_ms == nil then
