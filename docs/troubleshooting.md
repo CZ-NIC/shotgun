@@ -2,7 +2,9 @@
 
 ## failed to send udp packet: too many open files
 
-Increase the number of file descriptors.
+Increase the number of file descriptors. (See
+[`man limits.conf`](https://www.man7.org/linux/man-pages/man5/limits.conf.5.html)
+and/or `ulimit --help`)
 
 ## fatal: aborting, real time drifted ahead of simulated time
 
