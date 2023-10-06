@@ -9,3 +9,6 @@ __pycache__/
 
 # Data files
 *.pcap
+
+# Built docs
+site/
