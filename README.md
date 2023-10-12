@@ -37,7 +37,24 @@ The toolchain also provides scripts that can plot these into readable charts.
 
 ## Documentation
 
-[https://dns-shotgun.readthedocs.io](https://dns-shotgun.readthedocs.io)
+**The latest documentation can be found at <https://dns-shotgun.readthedocs.io/>.**
+
+To display the documentation with local changes, [install
+MkDocs](https://www.mkdocs.org/user-guide/installation/), then build:
+
+```
+$ mkdocs build
+```
+
+This will create a new `site` directory containing the Shotgun documentation in
+HTML format.
+
+For testing the locally built documentation with live-rebuild, you can use
+MkDocs' built-in development server:
+
+```
+$ mkdocs serve
+```
 
 ## Showcase
 
