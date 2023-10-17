@@ -62,3 +62,28 @@ and compiling the dnssim module isn't required.
 - Python 3.6 or later
 - Python dependencies from [requirements.txt](https://gitlab.nic.cz/knot/shotgun/-/blob/master/requirements.txt)
 - (optional) tshark/wireshark for some PCAP pre-processing
+
+## Documentation
+
+**The latest documentation can be found at
+<https://dns-shotgun.readthedocs.io/>** &mdash; chances are that is what you are
+looking at right now. The documentation is also available in human-readable
+Markdown files in the source tree's `docs` subdirectory.
+
+You may wish to edit the documentation locally and preview those local changes.
+To do that, [install MkDocs](https://www.mkdocs.org/user-guide/installation/),
+then, in the sources directory, run:
+
+```
+$ mkdocs build
+```
+
+This will create a new `site` directory containing the Shotgun documentation in
+HTML format.
+
+For testing the locally built documentation with live-rebuild, MkDocs' built-in
+development server may be used like so:
+
+```
+$ mkdocs serve
+```
