@@ -46,11 +46,11 @@ end
 
 local frame_start =
 	-- PCAP packet header
-	"\x41\x00\x00\x00" ..  -- snap length
-	"\x41\x00\x00\x00" ..  -- original length
+	"\x54\x00\x00\x00" ..  -- snap length
+	"\x54\x00\x00\x00" ..  -- original length
 	-- IP layer
 	"\x60\x00\x00\x00" ..  -- IP version 6 and no flags
-	"\x00\x19" ..  -- IP payload length
+	"\x00\x2c" ..  -- IP payload length
 	"\x11" ..  -- protocol payload = UDP
 	"\x00" ..  -- hop limit
 	"\xfd\x00\x00\x00\x00\x00\x00\x00\x02\x11\x66\x8e" -- source address WITHOUT last 4 octets
@@ -60,11 +60,14 @@ local header_end =
 	-- UDP
 	"\x00\x35" ..  -- source port
 	"\x00\x35" ..  -- dest port
-	"\x00\x19" ..  -- UDP length incl. UDP header (= payload + 8 bytes)
+	"\x00\x2c" ..  -- UDP length incl. UDP header (= payload + 8 bytes)
 	"\x00\x00"     -- checksum (disabled/ignored)
 
 -- DNS payload WITHOUT message ID, query . NS +RD
-local dns_payload = "\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01"
+--local dns_payload = "\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01"
+
+-- server.example.net
+local dns_payload = "\x01\x20\x00\x01\x00\x00\x00\x00\x00\x00\x06\x73\x65\x72\x76\x65\x72\x07\x65\x78\x61\x6d\x70\x6c\x65\x03\x6e\x65\x74\x00\x00\x01\x00\x01"
 
 local function write_frame(output, source_id)
 	output:write(frame_start)
