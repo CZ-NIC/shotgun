@@ -6,6 +6,7 @@ include(CheckFunctionExists)
 
 option(DNSJIT_PATH "Path to dnsjit prefix" "")
 option(ASAN "Use AddressSanitizer" OFF)
+option(UBSAN "Use UndefinedBehaviorSanitizer" OFF)
 
 
 ## Dependencies ################################################################
@@ -46,10 +47,18 @@ if (NOT HAS_CLOCK_GETTIME OR NOT HAS_CLOCK_NANOSLEEP)
 endif ()
 
 
-## ASAN ########################################################################
+## Sanitizers ##################################################################
 
 if (ASAN)
-	list(APPEND CMAKE_C_FLAGS -fsanitize=address)
+	list(APPEND DNSSIM_SANITIZERS address)
+endif ()
+if (UBSAN)
+	list(APPEND DNSSIM_SANITIZERS undefined)
+endif ()
+
+if (DNSSIM_SANITIZERS)
+	list(JOIN DNSSIM_SANITIZERS ',' DNSSIM_SANITIZERS_JOINED)
+	list(APPEND CMAKE_C_FLAGS -fsanitize=${DNSSIM_SANITIZERS_JOINED})
 endif ()
 
 
