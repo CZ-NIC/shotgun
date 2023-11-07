@@ -1,12 +1,43 @@
 variables:
   LC_ALL: C.UTF-8
+  GIT_SUBMODULE_STRATEGY: recursive
+  GIT_STRATEGY: clone # sometimes unclean submodule dirs otherwise
+  DNSJIT_IMAGE_NAME: knot/shotgun/ci/dnsjit
 
 stages:
+  - docker
+  - build
   - test
   - deploy
 
+dnsjit-image:
+  stage: docker
+  services:
+    - docker:23-dind
+  image: docker:23-dind
+  tags:
+    - amd64
+    - dind
+  only:
+    changes:
+      - ci/dnsjit/**/*
+      - .gitlab-ci.yml
+  script:
+    - docker build --build-arg CI_REGISTRY=$CI_REGISTRY --tag $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA ci/dnsjit
+    - test $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && docker tag $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA $CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest
+    - docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
+    #- docker push $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA
+    - test -n $CI_COMMIT_BRANCH
+      && docker tag $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH
+      && docker push $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH
+      || true
+    - test $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      && docker tag $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA $CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest
+      && docker push $CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest
+      || true
+
 .debian: &debian
-  image: $CI_REGISTRY/knot/knot-resolver/ci/debian-11:knot-3.0
+  image: $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH
   tags:
     - docker
     - linux
@@ -23,19 +54,43 @@ black:
 
 mypy:
   <<: *debian
+  stage: test
   script:
     - ./ci/mypy-run.sh
 
 pylint:
   <<: *debian
+  stage: test
   script:
     - pip3 install -r requirements.txt
     - ./ci/pylint-run.sh
 
 luacheck:
   <<: *debian
+  stage: test
   script:
     - ./ci/luacheck-run.sh
+
+.dnssim-build: &dnssim-build
+  <<: *debian
+  stage: build
+  script:
+    - mkdir replay/dnssim/build
+    - cd    replay/dnssim/build
+    - cmake .. -DASAN=${DNSSIM_ASAN} -DUBSAN=${DNSSIM_UBSAN}
+    - make
+
+dnssim-build:
+  <<: *dnssim-build
+  variables:
+    DNSSIM_ASAN: 0
+    DNSSIM_UBSAN: 0
+
+dnssim-build-sanitizers:
+  <<: *dnssim-build
+  variables:
+    DNSSIM_ASAN: 1
+    DNSSIM_UBSAN: 1
 
 docker:
   stage: deploy
