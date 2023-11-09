@@ -1,5 +1,7 @@
 # DNS Shotgun
 
+This is a dummy testing change.
+
 Realistic DNS benchmarking tool which supports multiple transport protocols:
 
   - **DNS-over-TLS (DoT)**
