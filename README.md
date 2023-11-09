@@ -1,6 +1,6 @@
 # DNS Shotgun
 
-This is a dummy testing change.
+This is a dummy testing change. 2
 
 Realistic DNS benchmarking tool which supports multiple transport protocols:
 
