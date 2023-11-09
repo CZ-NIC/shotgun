@@ -24,9 +24,10 @@ dnsjit-image:
       - ci/dnsjit/**/*
       - .gitlab-ci.yml
   script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
-    - docker pull $CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest || true # to use as many cached layers as possible (allowed to fail)
-    - docker build --build-arg CI_REGISTRY=$CI_REGISTRY --tag $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA ci/dnsjit
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
+    - docker pull "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest" || true # to use as many cached layers as possible (allowed to fail)
+    - docker pull "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH" || true # to use as many cached layers as possible (allowed to fail)
+    - docker build --build-arg "CI_REGISTRY=$CI_REGISTRY" --tag "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA" ci/dnsjit
     - test "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH"
       && docker tag "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest"
       && echo "Created 'latest' tag"
