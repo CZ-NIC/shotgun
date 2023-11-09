@@ -29,14 +29,18 @@ dnsjit-image:
     - docker build --build-arg CI_REGISTRY=$CI_REGISTRY --tag $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA ci/dnsjit
     - test "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH"
       && docker tag "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest"
+      && echo "Created 'latest' tag"
+      || echo "Not on '$CI_DEFAULT_BRANCH' branch - skipping"
     - test -n "$CI_COMMIT_BRANCH"
       && docker tag "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH"
       && docker push "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH"
-      || true
+      && echo "Pushed '$CI_COMMIT_BRANCH' tag"
+      || echo "Not on a branch"
     - test "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH"
       && docker tag "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest"
       && docker push "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest"
-      || true
+      && echo "Pushed 'latest' tag"
+      || echo "Not on '$CI_DEFAULT_BRANCH' branch - skipping"
 
 .debian: &debian
   image: $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH
@@ -79,6 +83,7 @@ luacheck:
   script:
     - mkdir replay/dnssim/build
     - cd    replay/dnssim/build
+    - echo "ASAN=$DNSSIM_ASAN  UBSAN=$DNSSIM_UBSAN"
     - cmake .. -DASAN=${DNSSIM_ASAN} -DUBSAN=${DNSSIM_UBSAN}
     - make
 
