@@ -18,22 +18,24 @@ dnsjit-image:
   tags:
     - amd64
     - dind
-  only:
-    changes:
+  rules:
+    - if: ($CI_PIPELINE_SOURCE == "merge_request_event") || ($CI_PIPELINE_SOURCE == "push")
+      changes:
       - ci/dnsjit/**/*
       - .gitlab-ci.yml
   script:
-    - docker build --build-arg CI_REGISTRY=$CI_REGISTRY --tag $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA ci/dnsjit
-    - test $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && docker tag $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA $CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest
     - docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
-    #- docker push $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA
-    - test -n $CI_COMMIT_BRANCH
-      && docker tag $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH
-      && docker push $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH
+    - docker pull $CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest || true # to use as many cached layers as possible (allowed to fail)
+    - docker build --build-arg CI_REGISTRY=$CI_REGISTRY --tag $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA ci/dnsjit
+    - test "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH"
+      && docker tag "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest"
+    - test -n "$CI_COMMIT_BRANCH"
+      && docker tag "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH"
+      && docker push "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH"
       || true
-    - test $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      && docker tag $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA $CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest
-      && docker push $CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest
+    - test "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH"
+      && docker tag "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest"
+      && docker push "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest"
       || true
 
 .debian: &debian
