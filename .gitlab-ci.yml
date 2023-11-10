@@ -1,12 +1,50 @@
 variables:
   LC_ALL: C.UTF-8
+  GIT_SUBMODULE_STRATEGY: recursive
+  GIT_STRATEGY: clone # sometimes unclean submodule dirs otherwise
+  DNSJIT_IMAGE_NAME: knot/shotgun/ci/dnsjit
 
 stages:
+  - docker
+  - build
   - test
   - deploy
 
+dnsjit-image:
+  stage: docker
+  services:
+    - docker:23-dind
+  image: docker:23-dind
+  tags:
+    - amd64
+    - dind
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+      changes:
+      - ci/dnsjit/**/*
+      - .gitlab-ci.yml
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
+    - docker pull "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest" || true # to use as many cached layers as possible (allowed to fail)
+    - docker pull "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH" || true # to use as many cached layers as possible (allowed to fail)
+    - docker build --build-arg "CI_REGISTRY=$CI_REGISTRY" --tag "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA" ci/dnsjit
+    - test "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH"
+      && docker tag "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest"
+      && echo "Created 'latest' tag"
+      || echo "Not on '$CI_DEFAULT_BRANCH' branch - skipping"
+    - test -n "$CI_COMMIT_BRANCH"
+      && docker tag "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH"
+      && docker push "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH"
+      && echo "Pushed '$CI_COMMIT_BRANCH' tag"
+      || echo "Not on a branch"
+    - test "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH"
+      && docker tag "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest"
+      && docker push "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest"
+      && echo "Pushed 'latest' tag"
+      || echo "Not on '$CI_DEFAULT_BRANCH' branch - skipping"
+
 .debian: &debian
-  image: $CI_REGISTRY/knot/knot-resolver/ci/debian-11:knot-3.0
+  image: $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH
   tags:
     - docker
     - linux
@@ -23,19 +61,44 @@ black:
 
 mypy:
   <<: *debian
+  stage: test
   script:
     - ./ci/mypy-run.sh
 
 pylint:
   <<: *debian
+  stage: test
   script:
     - pip3 install -r requirements.txt
     - ./ci/pylint-run.sh
 
 luacheck:
   <<: *debian
+  stage: test
   script:
     - ./ci/luacheck-run.sh
+
+.dnssim-build: &dnssim-build
+  <<: *debian
+  stage: build
+  script:
+    - mkdir replay/dnssim/build
+    - cd    replay/dnssim/build
+    - echo "ASAN=$DNSSIM_ASAN  UBSAN=$DNSSIM_UBSAN"
+    - cmake .. -DASAN=${DNSSIM_ASAN} -DUBSAN=${DNSSIM_UBSAN}
+    - make
+
+dnssim-build:
+  <<: *dnssim-build
+  variables:
+    DNSSIM_ASAN: 0
+    DNSSIM_UBSAN: 0
+
+dnssim-build-sanitizers:
+  <<: *dnssim-build
+  variables:
+    DNSSIM_ASAN: 1
+    DNSSIM_UBSAN: 1
 
 docker:
   stage: deploy
