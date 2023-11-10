@@ -13,6 +13,11 @@
 
 #include "../dnssim.h"
 
+#define DNSSIM_MIN_GNUTLS_VERSION 0x030700
+#define DNSSIM_MIN_GNUTLS_ERRORMSG "dnssim tls/https2/quic transport requires GnuTLS >= 3.7.0"
+#ifndef DNSSIM_HAS_GNUTLS
+#define DNSSIM_HAS_GNUTLS (GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION)
+#endif
 
 #define _self ((_output_dnssim_t*)self)
 #define _ERR_MALFORMED -2
@@ -315,7 +320,7 @@ void _output_dnssim_read_dns_stream(_output_dnssim_connection_t* conn, size_t le
 void _output_dnssim_read_dnsmsg(_output_dnssim_connection_t* conn, size_t len, const char* data);
 _output_dnssim_query_stream_t* _output_dnssim_get_stream_qry(_output_dnssim_connection_t* conn, int64_t stream_id);
 
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+#if DNSSIM_HAS_GNUTLS
 int  _output_dnssim_create_query_tls(output_dnssim_t* self, _output_dnssim_request_t* req);
 void _output_dnssim_close_query_tls(_output_dnssim_query_stream_t* qry);
 int  _output_dnssim_tls_init(_output_dnssim_connection_t* conn);

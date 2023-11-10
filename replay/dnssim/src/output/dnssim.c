@@ -57,7 +57,11 @@ output_dnssim_t* output_dnssim_new(size_t max_clients)
 
     ret = gnutls_certificate_allocate_credentials(&_self->tls_cred);
     if (ret < 0)
-        lfatal("failed to allocated TLS credentials (%s)", gnutls_strerror(ret));
+        lfatal("failed to allocate TLS credentials (%s)", gnutls_strerror(ret));
+
+    ret = gnutls_certificate_set_x509_system_trust(_self->tls_cred);
+    if (ret < 0)
+        lwarning("system trust not set (%s)", gnutls_strerror(ret));
 
     ret = uv_loop_init(&_self->loop);
     if (ret < 0)
@@ -235,14 +239,14 @@ void output_dnssim_set_transport(output_dnssim_t* self, output_dnssim_transport_
         lnotice("transport set to TCP");
         break;
     case OUTPUT_DNSSIM_TRANSPORT_TLS:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+#if DNSSIM_HAS_GNUTLS
         lnotice("transport set to TLS");
 #else
         lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
 #endif
         break;
     case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+#if DNSSIM_HAS_GNUTLS
         lnotice("transport set to HTTP/2 over TLS");
         if (&_self->h2_uri_authority[0])
             lnotice("set uri authority to: %s", _self->h2_uri_authority);

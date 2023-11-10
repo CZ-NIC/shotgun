@@ -6,12 +6,18 @@ include(CheckFunctionExists)
 
 option(DNSJIT_PATH "Path to dnsjit prefix" "")
 option(ASAN "Use AddressSanitizer" OFF)
+option(ENABLE_GNUTLS "Whether GnuTLS support is enabled" ON)
 
 
 ## Dependencies ################################################################
 
 # GnuTLS
-find_package(GnuTLS REQUIRED)
+if (ENABLE_GNUTLS)
+	find_package(GnuTLS REQUIRED)
+	list(APPEND DNSSIM_LIBS GnuTLS::GnuTLS)
+else ()
+	list(APPEND DNSSIM_OPTS -DDNSSIM_HAS_GNUTLS=0)
+endif ()
 
 # LibUV
 find_library(LIBUV_LIB libuv.so REQUIRED)
@@ -66,7 +72,7 @@ add_library(dnssim SHARED
 	src/output/dnssim/tls.c
 	src/output/dnssim/udp.c
 	)
-target_link_libraries(dnssim PUBLIC ${DNSSIM_LIBS} GnuTLS::GnuTLS)
+target_link_libraries(dnssim PUBLIC ${DNSSIM_LIBS})
 set_target_properties(dnssim PROPERTIES
 	PREFIX "")
 target_link_options(dnssim PUBLIC ${DNSSIM_OPTS})

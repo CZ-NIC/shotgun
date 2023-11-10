@@ -114,14 +114,14 @@ void _output_dnssim_conn_close(_output_dnssim_connection_t* conn)
         _output_dnssim_tcp_close(conn);
         break;
     case OUTPUT_DNSSIM_TRANSPORT_TLS:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+#if DNSSIM_HAS_GNUTLS
         _output_dnssim_tls_close(conn);
 #else
         lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
 #endif
         break;
     case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+#if DNSSIM_HAS_GNUTLS
         _output_dnssim_https2_close(conn);
 #else
         lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
@@ -185,14 +185,14 @@ static void _send_pending_queries(_output_dnssim_connection_t* conn)
                 _output_dnssim_tcp_write_query(conn, qry);
                 break;
             case OUTPUT_DNSSIM_TRANSPORT_TLS:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+#if DNSSIM_HAS_GNUTLS
                 _output_dnssim_tls_write_query(conn, qry);
 #else
                 mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
 #endif
                 break;
             case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+#if DNSSIM_HAS_GNUTLS
                 _output_dnssim_https2_write_query(conn, qry);
 #else
                 mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
@@ -237,7 +237,7 @@ int _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client)
         conn->client = client;
         conn->stats  = self->stats_current;
         if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_TLS) {
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+#if DNSSIM_HAS_GNUTLS
             ret = _output_dnssim_tls_init(conn);
             if (ret < 0) {
                 free(conn);
@@ -247,7 +247,7 @@ int _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client)
             lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
 #endif
         } else if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_HTTPS2) {
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+#if DNSSIM_HAS_GNUTLS
             ret = _output_dnssim_https2_init(conn);
             if (ret < 0) {
                 free(conn);

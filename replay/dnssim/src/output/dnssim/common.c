@@ -110,14 +110,14 @@ void _output_dnssim_create_request(output_dnssim_t* self, _output_dnssim_client_
         ret = _output_dnssim_create_query_tcp(self, req);
         break;
     case OUTPUT_DNSSIM_TRANSPORT_TLS:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+#if DNSSIM_HAS_GNUTLS
         ret = _output_dnssim_create_query_tls(self, req);
 #else
         lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
 #endif
         break;
     case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+#if DNSSIM_HAS_GNUTLS
         ret = _output_dnssim_create_query_https2(self, req);
 #else
         lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
@@ -205,14 +205,14 @@ static void _close_query(_output_dnssim_query_t* qry)
         _output_dnssim_close_query_tcp((_output_dnssim_query_stream_t*)qry);
         break;
     case OUTPUT_DNSSIM_TRANSPORT_TLS:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+#if DNSSIM_HAS_GNUTLS
 #else
         mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
 #endif
         _output_dnssim_close_query_tls((_output_dnssim_query_stream_t*)qry);
         break;
     case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+#if DNSSIM_HAS_GNUTLS
         _output_dnssim_close_query_https2((_output_dnssim_query_stream_t*)qry);
 #else
         mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);

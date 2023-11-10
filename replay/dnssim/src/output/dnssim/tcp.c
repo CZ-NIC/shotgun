@@ -126,7 +126,7 @@ static void _on_tcp_read(uv_stream_t* handle, ssize_t nread, const uv_buf_t* buf
             break;
         case OUTPUT_DNSSIM_TRANSPORT_TLS:
         case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+#if DNSSIM_HAS_GNUTLS
             mlassert(conn->tls, "con must have tls ctx");
             conn->tls->buf     = (uint8_t*)buf->base;
             conn->tls->buf_pos = 0;
@@ -181,7 +181,7 @@ static void _on_tcp_connected(uv_connect_t* conn_req, int status)
         break;
     case OUTPUT_DNSSIM_TRANSPORT_TLS:
     case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+#if DNSSIM_HAS_GNUTLS
         mldebug("init tls handshake");
         _output_dnssim_tls_process_input_data(conn); /* Initiate TLS handshake. */
 #else

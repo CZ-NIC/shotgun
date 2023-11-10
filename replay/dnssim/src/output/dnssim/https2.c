@@ -10,7 +10,7 @@
 
 #include <string.h>
 
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+#if DNSSIM_HAS_GNUTLS
 
 #define OUTPUT_DNSSIM_MAKE_NV(NAME, VALUE, VALUELEN)                 \
     {                                                                \
