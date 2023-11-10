@@ -16,7 +16,7 @@ protocol = "dot"
 # DoT clients without TLS Session Resumption
 #[traffic.DoT-no_tickets]
 #protocol = "dot"
-#gnutls_priority = "NORMAL:%NO_TICKETS"
+#gnutls_priority = "dnssim-default:%NO_TICKETS"
 
 # Aggressive DoT clients with TLS Session Resumption
 #[traffic.DoT-no_idle]
@@ -27,12 +27,12 @@ protocol = "dot"
 #[traffic.DoT-no_idle-no_tickets]
 #protocol = "dot"
 #idle_timeout_s = 0
-#gnutls_priority = "NORMAL:%NO_TICKETS"
+#gnutls_priority = "dnssim-default:%NO_TICKETS"
 
 # DoT clients with TLS 1.3
 #[traffic.DoT-tls1_3]
 #protocol = "dot"
-#gnutls_priority = "NORMAL:-VERS-ALL:+VERS-TLS1.3"
+#gnutls_priority = "dnssim-default:-VERS-ALL:+VERS-TLS1.3"
 
 
 [charts]

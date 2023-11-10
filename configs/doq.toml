@@ -1,0 +1,49 @@
+# DNS-over-QUIC traffic senders.
+#
+# Below is a configuration example for DoQ clients. You may use this as
+# inspiration to craft your own client-types.
+#
+# GnuTLS priority string (with the key `gnutls_priority`) may be used to control
+# TLS protocol version, used ciphers suites etc. For more GnuTLS priority
+# options, refer to: https://gnutls.org/manual/html_node/Priority-Strings.html
+[traffic]
+
+# Default DoQ clients
+[traffic.DoQ]
+protocol = "doq"
+
+# Aggressive DNS-over-QUIC clients that terminate connection as soon as queries are answered.
+#[traffic.DoQ-no_idle]
+#protocol = "doq"
+#idle_timeout_s = 0
+
+# DoQ clients without TLS Session Resumption
+#[traffic.DoQ-no_tickets]
+#protocol = "doq"
+#gnutls_priority = "dnssim-default:%NO_TICKETS"
+
+[charts]
+
+[charts.latency]
+type = "latency"
+
+[charts.response-rate]
+type = "response-rate"
+
+[charts.response-rate-rcodes]
+type = "response-rate"
+rcodes-above-pct = 0
+
+[charts.connections]
+type = "connections"
+kind = "active"
+
+[charts.handshakes]
+type = "connections"
+kind = ["quic_hs", "failed_hs"]
+title = "Handshakes over Time"
+
+[charts.resumptions]
+type = "connections"
+kind = ["quic_hs", "tls_resumed"]
+title = "TLS Session Resumption for New Connections"
