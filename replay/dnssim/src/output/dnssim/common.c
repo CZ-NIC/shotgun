@@ -363,3 +363,25 @@ void _output_dnssim_on_uv_alloc(uv_handle_t* handle, size_t suggested_size, uv_b
     mlfatal_oom(buf->base = malloc(suggested_size));
     buf->len = suggested_size;
 }
+
+int _output_dnssim_append_to_query_buf(_output_dnssim_query_stream_t* qry, const uint8_t* data, size_t datalen)
+{
+    if (datalen == 0)
+        return 0;
+    mlassert(data, "non-zero datalen with NULL data");
+
+    mlassert(qry->recv_buf_len || !qry->recv_buf,
+            "recv_buf was assigned while recv_buf_len was zero");
+    size_t total_len = qry->recv_buf_len + datalen;
+    if (total_len > MAX_DNSMSG_SIZE) {
+        mlwarning("response exceeded maximum size of dns message");
+        return -1;
+    }
+    if (qry->recv_buf_len < total_len)
+        mlfatal_oom(qry->recv_buf = realloc(qry->recv_buf, total_len));
+
+    memcpy(&qry->recv_buf[qry->recv_buf_len], data, datalen);
+    qry->recv_buf_len = total_len;
+
+    return 0;
+}

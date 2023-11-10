@@ -91,7 +91,7 @@ void _output_dnssim_tls_process_input_data(_output_dnssim_connection_t* conn)
         if (count > 0) {
             switch (_self->transport) {
             case OUTPUT_DNSSIM_TRANSPORT_TLS:
-                _output_dnssim_read_dns_stream(conn, count, _self->wire_buf);
+                _output_dnssim_read_dns_stream(conn, count, _self->wire_buf, -1);
                 break;
             case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
                 _output_dnssim_https2_process_input_data(conn, count, _self->wire_buf);
@@ -284,6 +284,7 @@ int _tls_pull_timeout(gnutls_transport_ptr_t ptr, unsigned int ms)
 int _output_dnssim_tls_init(_output_dnssim_connection_t* conn)
 {
     mlassert(conn, "conn is nil");
+    mlassert(conn->client, "conn does not have client");
     mlassert(conn->tls == NULL, "conn already has tls context");
 
     int ret;
