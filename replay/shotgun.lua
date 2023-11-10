@@ -66,6 +66,8 @@ local function send_thread_main(thr)
 		cmd = cmd .. "('" .. gnutls_priority .. "')"
 	elseif protocol_func == "https2" then
 		cmd = cmd .. "({ method = '" .. http_method .. "' }, '" .. gnutls_priority .. "')"
+	elseif protocol_func == "quic" then
+		cmd = cmd .. "('" .. gnutls_priority .. "')"
 	else
 		log:fatal("unknown protocol_func: " .. protocol_func)
 	end

@@ -6,7 +6,10 @@
 #define __dnsjit_output_dnssim_internal_h
 
 #include <gnutls/gnutls.h>
+#include <gnutls/crypto.h>
 #include <nghttp2/nghttp2.h>
+#include <ngtcp2/ngtcp2.h>
+#include <ngtcp2/ngtcp2_crypto.h>
 #include <uv.h>
 #include <dnsjit/core/object/dns.h>
 #include <dnsjit/core/object/payload.h>
@@ -17,6 +20,12 @@
 #define DNSSIM_MIN_GNUTLS_ERRORMSG "dnssim tls/https2/quic transport requires GnuTLS >= 3.7.0"
 #ifndef DNSSIM_HAS_GNUTLS
 #define DNSSIM_HAS_GNUTLS (GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION)
+#endif
+
+#ifdef __GNUC__
+#define DNSSIM_MAYBE_UNUSED __attribute__((unused))
+#else
+#define DNSSIM_MAYBE_UNUSED
 #endif
 
 #define _self ((_output_dnssim_t*)self)
@@ -160,6 +169,31 @@ typedef struct _output_dnssim_http2_ctx {
     bool remote_settings_received;
 } _output_dnssim_http2_ctx_t;
 
+typedef struct _output_dnssim_quic_packet {
+    uv_udp_send_t req;
+    size_t buffer_len;
+    uint8_t buffer[];
+} _output_dnssim_quic_packet_t;
+
+typedef struct _output_dnssim_quic_sent_payload _output_dnssim_quic_sent_payload_t;
+struct _output_dnssim_quic_sent_payload {
+    _output_dnssim_quic_sent_payload_t* next;
+    uint16_t length;
+    char data[];
+};
+
+/* QUIC context for a single connection. */
+typedef struct _output_dnssim_quic_ctx {
+    ngtcp2_conn* qconn;
+    ngtcp2_crypto_conn_ref qconn_ref;
+    ngtcp2_pkt_info pi;
+    bool has_pending;
+
+    _output_dnssim_quic_packet_t* unsent_packet;
+    _output_dnssim_quic_sent_payload_t* sent_payloads;
+
+    uint8_t secret[32];
+} _output_dnssim_quic_ctx_t;
 
 /* Linked list of stream buffers. */
 typedef struct _output_dnssim_stream _output_dnssim_stream_t;
@@ -177,7 +211,16 @@ struct _output_dnssim_stream {
 struct _output_dnssim_connection {
     _output_dnssim_connection_t* next;
 
-    uv_tcp_t* handle;
+    enum {
+        _OUTPUT_DNSSIM_CONN_TRANSPORT_NULL = 0,
+        _OUTPUT_DNSSIM_CONN_TRANSPORT_TCP,
+        _OUTPUT_DNSSIM_CONN_TRANSPORT_UDP,
+    } transport_type;
+
+    union {
+        uv_tcp_t* tcp;
+        uv_udp_t* udp; /* (for QUIC) */
+    } transport;
 
     /* Timeout timer for establishing the connection. */
     uv_timer_t* handshake_timer;
@@ -185,6 +228,9 @@ struct _output_dnssim_connection {
     /* Idle timer for connection reuse. rfc7766#section-6.2.3 */
     uv_timer_t* idle_timer;
     bool        is_idle;
+
+    /* Timer that nudges the connection logic on expiry - e.g. ngtcp2. */
+    uv_timer_t *expiry_timer;
 
     /* List of queries that have been queued (pending write callback). */
     _output_dnssim_query_t* queued;
@@ -205,6 +251,7 @@ struct _output_dnssim_connection {
         _OUTPUT_DNSSIM_CONN_ACTIVE                = 30,
         _OUTPUT_DNSSIM_CONN_CONGESTED             = 35,
         _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED       = 38,
+        _OUTPUT_DNSSIM_CONN_GRACEFUL_CLOSING      = 39,
         _OUTPUT_DNSSIM_CONN_CLOSING               = 40,
         _OUTPUT_DNSSIM_CONN_CLOSED                = 50
     } state;
@@ -224,6 +271,9 @@ struct _output_dnssim_connection {
 
     /* HTTP/2-related data. */
     _output_dnssim_http2_ctx_t* http2;
+
+    /* QUIC-related data. */
+    _output_dnssim_quic_ctx_t* quic;
 
     /* Prevents immediate closure of connection. Instead, connection is moved
      * to CLOSE_REQUESTED state and setter of this flag is responsible for
@@ -311,6 +361,7 @@ int  _output_dnssim_tcp_connect(output_dnssim_t* self, _output_dnssim_connection
 void _output_dnssim_tcp_close(_output_dnssim_connection_t* conn);
 void _output_dnssim_tcp_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry);
 void _output_dnssim_conn_close(_output_dnssim_connection_t* conn);
+void _output_dnssim_conn_bye(_output_dnssim_connection_t* conn);
 void _output_dnssim_conn_idle(_output_dnssim_connection_t* conn);
 void _output_dnssim_conn_move_queries_to_pending(_output_dnssim_query_stream_t* qry);
 int  _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client);
@@ -321,6 +372,8 @@ void _output_dnssim_read_dnsmsg(_output_dnssim_connection_t* conn, size_t len, c
 _output_dnssim_query_stream_t* _output_dnssim_get_stream_qry(_output_dnssim_connection_t* conn, int64_t stream_id);
 
 #if DNSSIM_HAS_GNUTLS
+void _output_dnssim_rand(void *data, size_t len);
+
 int  _output_dnssim_create_query_tls(output_dnssim_t* self, _output_dnssim_request_t* req);
 void _output_dnssim_close_query_tls(_output_dnssim_query_stream_t* qry);
 int  _output_dnssim_tls_init(_output_dnssim_connection_t* conn);
@@ -335,6 +388,18 @@ int  _output_dnssim_https2_setup(_output_dnssim_connection_t* conn);
 void _output_dnssim_https2_process_input_data(_output_dnssim_connection_t* conn, size_t len, const char* data);
 void _output_dnssim_https2_close(_output_dnssim_connection_t* conn);
 void _output_dnssim_https2_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry);
+
+int  _output_dnssim_create_query_quic(output_dnssim_t* self, _output_dnssim_request_t* req);
+void _output_dnssim_close_query_quic(_output_dnssim_query_stream_t* qry);
+int  _output_dnssim_quic_connect(output_dnssim_t* self, _output_dnssim_connection_t* conn);
+int  _output_dnssim_quic_init(_output_dnssim_connection_t* conn);
+int  _output_dnssim_quic_setup(_output_dnssim_connection_t* conn);
+void _output_dnssim_quic_process_input_data(_output_dnssim_connection_t* conn,
+                                            const struct sockaddr *remote_sa,
+                                            size_t len, const char* data);
+void _output_dnssim_quic_close(_output_dnssim_connection_t* conn);
+void _output_dnssim_quic_bye(_output_dnssim_connection_t* conn);
+void _output_dnssim_quic_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry);
 #endif
 
 #endif

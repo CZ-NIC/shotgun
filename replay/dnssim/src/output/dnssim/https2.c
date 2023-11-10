@@ -292,7 +292,7 @@ void _output_dnssim_https2_process_input_data(_output_dnssim_connection_t* conn,
         _output_dnssim_conn_close(conn);
         return;
     } else if (conn->state == _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED) {
-        _output_dnssim_conn_close(conn);
+        _output_dnssim_conn_bye(conn);
         return;
     }
     mlassert(ret == len, "nghttp2_session_mem_recv didn't process all data");
