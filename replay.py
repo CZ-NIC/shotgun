@@ -9,6 +9,7 @@ import logging
 import math
 import os
 import shutil
+import signal
 import subprocess
 import sys
 from typing import Any, Dict, List, Optional, Set
@@ -277,6 +278,10 @@ def run_or_exit(args: List[str], env: collections.abc.Mapping = None) -> None:
     try:
         subprocess.run(args, check=True, env=env)
     except subprocess.CalledProcessError as ex:
+        if ex.returncode < 0:
+            signum = -ex.returncode
+            signal_desc = signal.strsignal(signum)
+            logging.error("%s (signum %d)", signal_desc, signum)
         sys.exit(ex.returncode)
 
 
