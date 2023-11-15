@@ -87,7 +87,12 @@ def main():
         description="Plot connections over time from shotgun experiment"
     )
 
-    parser.add_argument("json_file", nargs="+", help="Shotgun results JSON file(s)")
+    parser.add_argument(
+        "json_file",
+        nargs="+",
+        help="Shotgun results JSON file(s) - specify "
+        "in a '<path>#<alias>' format to set an alternative name for the JSON",
+    )
     parser.add_argument(
         "-t", "--title", default="Connections over Time", help="Graph title"
     )
@@ -107,9 +112,17 @@ def main():
     # initialize graph
     ax = init_plot(args.title)
 
-    for json_path in args.json_file:
+    for path_arg in args.json_file:
         try:
-            with open(json_path) as f:
+            hash_ix = path_arg.index("#")
+            path = path_arg[:hash_ix]
+            name = path_arg[(hash_ix + 1) :]
+        except ValueError:
+            path = path_arg
+            name = os.path.splitext(os.path.basename(os.path.normpath(path_arg)))[0]
+
+        try:
+            with open(path) as f:
                 data = json.load(f)
         except FileNotFoundError as exc:
             logging.critical("%s", exc)
@@ -126,8 +139,6 @@ def main():
 
         if data["discarded"] != 0:
             logging.warning("%d discarded packets may skew results!", data["discarded"])
-
-        name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
 
         if "active" in args.kind:
             plot(

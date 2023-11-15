@@ -202,7 +202,12 @@ def main():
         description="Plot response rate from shotgun experiment"
     )
 
-    parser.add_argument("json_file", nargs="+", help="Shotgun results JSON file(s)")
+    parser.add_argument(
+        "json_file",
+        nargs="+",
+        help="Shotgun results JSON file(s) - specify "
+        "in a '<path>#<alias>' format to set an alternative name for the JSON",
+    )
     parser.add_argument(
         "-t", "--title", default="Response Rate over Time", help="Graph title"
     )
@@ -248,13 +253,20 @@ def main():
 
     colors = list(mcolors.TABLEAU_COLORS.keys()) + list(mcolors.BASE_COLORS.keys())
     colors.remove("w")  # avoid white line on white background
-    for json_path, color in itertools.zip_longest(
+    for path_arg, color in itertools.zip_longest(
         args.json_file, colors[: len(args.json_file)]
     ):
         try:
-            process_file(json_path, color, args, ax)
+            hash_ix = path_arg.index("#")
+            path = path_arg[:hash_ix]
+            name = path_arg[(hash_ix + 1) :]
+        except ValueError:
+            path = path_arg
+            name = os.path.splitext(os.path.basename(os.path.normpath(path_arg)))[0]
+        try:
+            process_file(path, name, color, args, ax)
         except (FileNotFoundError, NotImplementedError) as exc:
-            logging.critical("%s: %s", json_path, exc)
+            logging.critical("%s: %s", path_arg, exc)
             sys.exit(1)
 
     set_axes_limits(ax)
@@ -263,8 +275,8 @@ def main():
     plt.savefig(args.output)
 
 
-def process_file(json_path, json_color, args, ax):
-    with open(json_path) as f:
+def process_file(path, name, json_color, args, ax):
+    with open(path) as f:
         data = json.load(f)
     try:
         assert data["version"] == JSON_VERSION
@@ -293,7 +305,6 @@ def process_file(json_path, json_color, args, ax):
 
     timespan = (data["stats_sum"]["until_ms"] - data["stats_sum"]["since_ms"]) / 1000
     qps = data["stats_sum"]["requests"] / timespan
-    name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
     label = "{} ({} QPS)".format(name, siname(qps))
     min_timespan = data["stats_interval_ms"] / 2
 
