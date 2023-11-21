@@ -278,7 +278,7 @@ def process_file(json_path, json_color, args, ax):
         proportion_all_perc = data["discarded"] / data["stats_sum"]["requests"] * 100
         proportion_one_sec_perc = (
             data["discarded"]
-            / min(sample["requests"] for sample in data["stats_periodic"])
+            / min(sample["requests"] for sample in data["stats_periodic"] if sample["requests"] > 0)
             * 100
         )
         logging.warning(
