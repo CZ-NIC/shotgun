@@ -49,10 +49,18 @@ def siname(n):
 def init_plot(title):
     _, ax = plt.subplots()
 
+    fmt = mtick.FormatStrFormatter("%g")
+    maj_loc = mtick.LogLocator(subs=(0.1, 0.2, 0.3, 0.5, 0.8))
+    min_loc = mtick.LogLocator(subs=[(x / 10) for x in range(0, 10)])
+
     ax.set_xscale("log")
-    ax.xaxis.set_major_formatter(mtick.FormatStrFormatter("%g"))
+    ax.xaxis.set_major_formatter(fmt)
+    ax.xaxis.set_major_locator(maj_loc)
+    ax.xaxis.set_minor_locator(min_loc)
     ax.set_yscale("log")
-    ax.yaxis.set_major_formatter(mtick.FormatStrFormatter("%g"))
+    ax.yaxis.set_major_formatter(fmt)
+    ax.yaxis.set_major_locator(maj_loc)
+    ax.yaxis.set_minor_locator(min_loc)
 
     ax.grid(True, which="major")
     ax.grid(True, which="minor")
