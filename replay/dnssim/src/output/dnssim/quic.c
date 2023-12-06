@@ -584,6 +584,7 @@ int  _output_dnssim_quic_connect(output_dnssim_t* self, _output_dnssim_connectio
     params.initial_max_streams_bidi = 0;
     params.initial_max_stream_data_bidi_local = NGTCP2_MAX_VARINT;
     params.initial_max_data = NGTCP2_MAX_VARINT;
+    params.max_idle_timeout = self->idle_timeout_ms * NGTCP2_MILLISECONDS;
 
     /* CIDs */
     ngtcp2_cid dcid;
