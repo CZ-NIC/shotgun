@@ -83,8 +83,7 @@ static void udp_recv_cb(uv_udp_t* udp, ssize_t nread, const uv_buf_t* buf,
     }
 
     mldebug("quic udp_recv %zd bytes from %s", nread, ntop);
-    if (nread)
-        _output_dnssim_quic_process_input_data(conn, addr, nread, buf->base);
+    _output_dnssim_quic_process_input_data(conn, addr, nread, buf->base);
     free(buf->base);
 
     quic_check_max_streams(conn);
@@ -691,24 +690,37 @@ void _output_dnssim_quic_process_input_data(_output_dnssim_connection_t* conn,
 
     ret = ngtcp2_conn_read_pkt(conn->quic->qconn, &ps.path, &pi,
             (uint8_t*)data, len, quic_timestamp());
-    if (ret == NGTCP2_ERR_DROP_CONN) {
+    switch (ret) {
+    case NGTCP2_ERR_DRAINING:
+    case NGTCP2_ERR_CLOSING:
+    case NGTCP2_ERR_DROP_CONN:
         _output_dnssim_conn_close(conn);
         return;
-    } else if (ret == NGTCP2_ERR_DRAINING) {
-        _output_dnssim_conn_close(conn);
-        return;
-    } else if (ret == NGTCP2_ERR_CLOSING) {
-        _output_dnssim_conn_close(conn);
-        return;
-    } else if (ret < 0) {
-        lwarning("failed ngtcp2_conn_read_pkt: %s", ngtcp2_strerror(ret));
-        _output_dnssim_conn_close(conn);
-        return;
-    } else if (conn->state == _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED) {
-        ldebug("connection closure requested");
-        ngtcp2_ccerr_set_application_error(&conn->quic->ccerr, 0, NULL, 0);
+
+    case NGTCP2_ERR_CRYPTO:;
+        uint8_t alert = ngtcp2_conn_get_tls_alert(conn->quic->qconn);
+        if (alert) {
+            lwarning("ngtcp2_conn_read_pkt TLS alert: %s",
+                    gnutls_alert_get_name(alert));
+        } else {
+            lwarning("ngtcp2_conn_read_pkt crypto error without TLS alert");
+        }
+        ngtcp2_ccerr_set_tls_alert(&conn->quic->ccerr, alert, NULL, 0);
         _output_dnssim_conn_bye(conn);
         return;
+
+    default:
+        if (ret < 0) {
+            lwarning("failed ngtcp2_conn_read_pkt: %s", ngtcp2_strerror(ret));
+            ngtcp2_ccerr_set_liberr(&conn->quic->ccerr, ret, NULL, 0);
+            _output_dnssim_conn_bye(conn);
+            return;
+        } else if (conn->state == _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED) {
+            ldebug("connection closure requested");
+            ngtcp2_ccerr_set_application_error(&conn->quic->ccerr, 0, NULL, 0);
+            _output_dnssim_conn_bye(conn);
+            return;
+        }
     }
     mlassert(ret == 0, "ngtcp2_conn_read_pkt returned non-zero");
 
