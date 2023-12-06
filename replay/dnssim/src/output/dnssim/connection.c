@@ -12,7 +12,7 @@ static core_log_t _log = LOG_T_INIT("output.dnssim");
 
 static bool _conn_is_connecting(_output_dnssim_connection_t* conn)
 {
-    return (conn->state >= _OUTPUT_DNSSIM_CONN_TCP_HANDSHAKE && conn->state <= _OUTPUT_DNSSIM_CONN_ACTIVE);
+    return (conn->state >= _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE && conn->state <= _OUTPUT_DNSSIM_CONN_ACTIVE);
 }
 
 void _output_dnssim_conn_maybe_free(_output_dnssim_connection_t* conn)
@@ -67,7 +67,7 @@ void _output_dnssim_conn_close(_output_dnssim_connection_t* conn)
     case _OUTPUT_DNSSIM_CONN_CLOSING:
     case _OUTPUT_DNSSIM_CONN_CLOSED:
         return;
-    case _OUTPUT_DNSSIM_CONN_TCP_HANDSHAKE:
+    case _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE:
     case _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE:
         conn->stats->conn_handshakes_failed++;
         self->stats_sum->conn_handshakes_failed++;
@@ -140,13 +140,13 @@ void _output_dnssim_conn_idle(_output_dnssim_connection_t* conn)
 
 static void _send_pending_queries(_output_dnssim_connection_t* conn)
 {
-    _output_dnssim_query_tcp_t* qry;
+    _output_dnssim_query_stream_t* qry;
     mlassert(conn, "conn is nil");
     mlassert(conn->client, "conn->client is nil");
-    qry = (_output_dnssim_query_tcp_t*)conn->client->pending;
+    qry = (_output_dnssim_query_stream_t*)conn->client->pending;
 
     while (qry != NULL && conn->state == _OUTPUT_DNSSIM_CONN_ACTIVE) {
-        _output_dnssim_query_tcp_t* next = (_output_dnssim_query_tcp_t*)qry->qry.next;
+        _output_dnssim_query_stream_t* next = (_output_dnssim_query_stream_t*)qry->qry.next;
         if (qry->qry.state == _OUTPUT_DNSSIM_QUERY_PENDING_WRITE) {
             switch (qry->qry.transport) {
             case OUTPUT_DNSSIM_TRANSPORT_TCP:
@@ -240,8 +240,11 @@ void _output_dnssim_conn_activate(_output_dnssim_connection_t* conn)
     mlassert(conn->client, "conn must be associated with a client");
     mlassert(conn->client->dnssim, "client must be associated with dnssim");
 
-    uv_timer_stop(conn->handshake_timer);
+    if (conn->state >= _OUTPUT_DNSSIM_CONN_ACTIVE)
+        return;
 
+    if (conn->handshake_timer)
+        uv_timer_stop(conn->handshake_timer);
     conn->state = _OUTPUT_DNSSIM_CONN_ACTIVE;
     conn->client->dnssim->stats_current->conn_active++;
     conn->read_state            = _OUTPUT_DNSSIM_READ_STATE_DNSLEN;
@@ -270,10 +273,10 @@ int _process_dnsmsg(_output_dnssim_connection_t* conn)
     dns_a.obj_prev = (core_object_t*)&payload;
     int ret        = core_object_dns_parse_header(&dns_a);
     if (ret != 0) {
-        lwarning("tcp response malformed");
+        lwarning("stream response malformed");
         return _ERR_MALFORMED;
     }
-    ldebug("tcp recv dnsmsg id: %04x", dns_a.id);
+    ldebug("stream recv dnsmsg id: %04x", dns_a.id);
 
     _output_dnssim_query_t* qry;
 

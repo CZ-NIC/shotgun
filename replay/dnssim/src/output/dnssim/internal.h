@@ -66,8 +66,8 @@ struct _output_dnssim_query_udp {
     uv_buf_t  buf;
 };
 
-typedef struct _output_dnssim_query_tcp _output_dnssim_query_tcp_t;
-struct _output_dnssim_query_tcp {
+typedef struct _output_dnssim_query_stream _output_dnssim_query_stream_t;
+struct _output_dnssim_query_stream {
     _output_dnssim_query_t qry;
 
     /* Connection this query is assigned to. */
@@ -78,11 +78,8 @@ struct _output_dnssim_query_tcp {
     /* Send buffers for libuv; 0 is for dnslen, 1 is for dnsmsg. */
     uv_buf_t bufs[2];
 
-    /* HTTP/2 stream id that was used to send this query. */
-    int32_t stream_id;
-
-    /* HTTP/2 expected content length. */
-    int32_t content_len;
+    /* HTTP/2 or QUIC stream id that was used to send this query. */
+    int64_t stream_id;
 
     /* Receive buffer (currently used only by HTTP/2). */
     uint8_t* recv_buf;
@@ -148,7 +145,7 @@ typedef struct _output_dnssim_http2_ctx {
     nghttp2_session* session;
 
     /* Query to which the dnsbuf currently being processed belongs to. */
-    _output_dnssim_query_tcp_t* current_qry;
+    _output_dnssim_query_stream_t* current_qry;
 
     /* Maximum number of concurrent and currently open streams. */
     uint32_t max_concurrent_streams;
@@ -183,14 +180,14 @@ struct _output_dnssim_connection {
      * Numeric ordering of constants is significant and follows the typical connection lifecycle.
      * Ensure new states are added to a proper place. */
     enum {
-        _OUTPUT_DNSSIM_CONN_INITIALIZED     = 0,
-        _OUTPUT_DNSSIM_CONN_TCP_HANDSHAKE   = 10,
-        _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE   = 20,
-        _OUTPUT_DNSSIM_CONN_ACTIVE          = 30,
-        _OUTPUT_DNSSIM_CONN_CONGESTED       = 35,
-        _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED = 38,
-        _OUTPUT_DNSSIM_CONN_CLOSING         = 40,
-        _OUTPUT_DNSSIM_CONN_CLOSED          = 50
+        _OUTPUT_DNSSIM_CONN_INITIALIZED           = 0,
+        _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE   = 10,
+        _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE         = 20,
+        _OUTPUT_DNSSIM_CONN_ACTIVE                = 30,
+        _OUTPUT_DNSSIM_CONN_CONGESTED             = 35,
+        _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED       = 38,
+        _OUTPUT_DNSSIM_CONN_CLOSING               = 40,
+        _OUTPUT_DNSSIM_CONN_CLOSED                = 50
     } state;
 
     /* State of the data stream read. */
@@ -289,7 +286,7 @@ int  _output_dnssim_bind_before_connect(output_dnssim_t* self, uv_handle_t* hand
 int  _output_dnssim_create_query_udp(output_dnssim_t* self, _output_dnssim_request_t* req);
 int  _output_dnssim_create_query_tcp(output_dnssim_t* self, _output_dnssim_request_t* req);
 void _output_dnssim_close_query_udp(_output_dnssim_query_udp_t* qry);
-void _output_dnssim_close_query_tcp(_output_dnssim_query_tcp_t* qry);
+void _output_dnssim_close_query_tcp(_output_dnssim_query_stream_t* qry);
 int  _output_dnssim_answers_request(_output_dnssim_request_t* req, core_object_dns_t* response);
 void _output_dnssim_request_answered(_output_dnssim_request_t* req, core_object_dns_t* msg);
 void _output_dnssim_maybe_free_request(_output_dnssim_request_t* req);
@@ -298,7 +295,7 @@ void _output_dnssim_create_request(output_dnssim_t* self, _output_dnssim_client_
 int  _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client);
 int  _output_dnssim_tcp_connect(output_dnssim_t* self, _output_dnssim_connection_t* conn);
 void _output_dnssim_tcp_close(_output_dnssim_connection_t* conn);
-void _output_dnssim_tcp_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_tcp_t* qry);
+void _output_dnssim_tcp_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry);
 void _output_dnssim_conn_close(_output_dnssim_connection_t* conn);
 void _output_dnssim_conn_idle(_output_dnssim_connection_t* conn);
 int  _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client);
@@ -309,19 +306,19 @@ void _output_dnssim_read_dnsmsg(_output_dnssim_connection_t* conn, size_t len, c
 
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
 int  _output_dnssim_create_query_tls(output_dnssim_t* self, _output_dnssim_request_t* req);
-void _output_dnssim_close_query_tls(_output_dnssim_query_tcp_t* qry);
+void _output_dnssim_close_query_tls(_output_dnssim_query_stream_t* qry);
 int  _output_dnssim_tls_init(_output_dnssim_connection_t* conn);
 void _output_dnssim_tls_process_input_data(_output_dnssim_connection_t* conn);
 void _output_dnssim_tls_close(_output_dnssim_connection_t* conn);
-void _output_dnssim_tls_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_tcp_t* qry);
+void _output_dnssim_tls_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry);
 
 int  _output_dnssim_create_query_https2(output_dnssim_t* self, _output_dnssim_request_t* req);
-void _output_dnssim_close_query_https2(_output_dnssim_query_tcp_t* qry);
+void _output_dnssim_close_query_https2(_output_dnssim_query_stream_t* qry);
 int  _output_dnssim_https2_init(_output_dnssim_connection_t* conn);
 int  _output_dnssim_https2_setup(_output_dnssim_connection_t* conn);
 void _output_dnssim_https2_process_input_data(_output_dnssim_connection_t* conn, size_t len, const char* data);
 void _output_dnssim_https2_close(_output_dnssim_connection_t* conn);
-void _output_dnssim_https2_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_tcp_t* qry);
+void _output_dnssim_https2_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry);
 #endif
 
 #endif
