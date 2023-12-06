@@ -28,6 +28,7 @@ DEFAULT_TRAFFIC_FIELDS = [
     "dns_port",
     "dot_port",
     "doh_port",
+    "doq_port",
     "server",
     "channel_size",
     "max_clients",
@@ -40,8 +41,10 @@ PROTOCOL_FUNCS = {
     "tcp": "tcp",
     "dot": "tls",
     "doh": "https2",
+    "doq": "quic",
     "tls": "tls",
     "https2": "https2",
+    "quic": "quic",
 }
 
 
@@ -52,6 +55,7 @@ CPU_FACTORS = {
     "tcp": 2,
     "tls": 3,
     "https2": 3,
+    "quic": 3,
 }
 
 # Maps protocol functions to keywords selecting the port number.
@@ -60,6 +64,7 @@ PROTOCOL_FUNC_PORTS = {
     "tcp": "dns_port",
     "tls": "dot_port",
     "https2": "doh_port",
+    "quic": "doq_port",
 }
 
 DIR = os.path.dirname(os.path.realpath(__file__))
@@ -172,6 +177,7 @@ def create_luaconfig(config: Dict[str, Any], threads: Dict[str, int], args: Any)
         thrconf.setdefault("dns_port", args.dns_port)
         thrconf.setdefault("dot_port", args.dot_port)
         thrconf.setdefault("doh_port", args.doh_port)
+        thrconf.setdefault("doq_port", args.doq_port)
 
         thrconf["target_ip"] = thrconf["server"]
         thrconf["target_port"] = thrconf[PROTOCOL_FUNC_PORTS[thrconf["protocol_func"]]]
@@ -387,6 +393,9 @@ def main():
     )
     parser.add_argument(
         "--doh-port", type=int, default=443, help="port for DNS-over-HTTPS"
+    )
+    parser.add_argument(
+        "--doq-port", type=int, default=853, help="port for DNS-over-QUIC"
     )
     parser.add_argument(
         "--preload",

@@ -1,4 +1,4 @@
-/*  Copyright (C) 2019-2021 CZ.NIC, z.s.p.o. <knot-resolver@labs.nic.cz>
+/*  Copyright (C) CZ.NIC, z.s.p.o. <knot-resolver@labs.nic.cz>
  *  SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -15,7 +15,8 @@ typedef enum output_dnssim_transport {
     OUTPUT_DNSSIM_TRANSPORT_UDP,
     OUTPUT_DNSSIM_TRANSPORT_TCP,
     OUTPUT_DNSSIM_TRANSPORT_TLS,
-    OUTPUT_DNSSIM_TRANSPORT_HTTPS2
+    OUTPUT_DNSSIM_TRANSPORT_HTTPS2,
+    OUTPUT_DNSSIM_TRANSPORT_QUIC,
 } output_dnssim_transport_t;
 
 typedef enum output_dnssim_h2_method {
@@ -40,8 +41,11 @@ struct output_dnssim_stats {
     /* Number of connections that are open at the end of the stats interval. */
     uint64_t conn_active;
 
-    /* Number of connection handshake attempts during the stats interval. */
-    uint64_t conn_handshakes;
+    /* Number of TCP connection handshake attempts during the stats interval. */
+    uint64_t conn_tcp_handshakes;
+
+    /* Number of QUIC connection handshake attempts during the stats interval. */
+    uint64_t conn_quic_handshakes;
 
     /* Number of connection that have been resumed with TLS session resumption. */
     uint64_t conn_resumed;
@@ -100,7 +104,7 @@ void output_dnssim_log_name(output_dnssim_t* self, const char* name);
 void output_dnssim_set_transport(output_dnssim_t* self, output_dnssim_transport_t tr);
 int  output_dnssim_target(output_dnssim_t* self, const char* ip, uint16_t port);
 int  output_dnssim_bind(output_dnssim_t* self, const char* ip);
-int  output_dnssim_tls_priority(output_dnssim_t* self, const char* priority);
+int  output_dnssim_tls_priority(output_dnssim_t* self, const char* priority, bool is_quic);
 int  output_dnssim_run_nowait(output_dnssim_t* self);
 void output_dnssim_timeout_ms(output_dnssim_t* self, uint64_t timeout_ms);
 void output_dnssim_h2_uri_path(output_dnssim_t* self, const char* uri_path);

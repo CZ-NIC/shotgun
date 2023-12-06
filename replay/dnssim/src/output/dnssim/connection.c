@@ -10,16 +10,28 @@
 
 static core_log_t _log = LOG_T_INIT("output.dnssim");
 
-static bool _conn_is_connecting(_output_dnssim_connection_t* conn)
+static bool _conn_is_connecting(const _output_dnssim_connection_t* conn)
 {
     return (conn->state >= _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE && conn->state <= _OUTPUT_DNSSIM_CONN_ACTIVE);
+}
+
+static bool _conn_has_transport(const _output_dnssim_connection_t* conn)
+{
+    switch (conn->transport_type) {
+    case _OUTPUT_DNSSIM_CONN_TRANSPORT_TCP:
+        return conn->transport.tcp != NULL;
+    case _OUTPUT_DNSSIM_CONN_TRANSPORT_UDP:
+        return conn->transport.udp != NULL;
+    default:
+        return false;
+    }
 }
 
 void _output_dnssim_conn_maybe_free(_output_dnssim_connection_t* conn)
 {
     mlassert(conn, "conn can't be nil");
     mlassert(conn->client, "conn must belong to a client");
-    if (conn->handle == NULL && conn->handshake_timer == NULL && conn->idle_timer == NULL) {
+    if (!_conn_has_transport(conn) && conn->handshake_timer == NULL && conn->idle_timer == NULL && conn->expiry_timer == NULL) {
         _ll_try_remove(conn->client->conn, conn);
         if (conn->tls != NULL) {
             free(conn->tls);
@@ -28,6 +40,10 @@ void _output_dnssim_conn_maybe_free(_output_dnssim_connection_t* conn)
         if (conn->http2 != NULL) {
             free(conn->http2);
             conn->http2 = NULL;
+        }
+        if (conn->quic != NULL) {
+            free(conn->quic);
+            conn->quic = NULL;
         }
 
         _output_dnssim_stream_t* stream = conn->streams;
@@ -64,6 +80,16 @@ static void _on_idle_timer_closed(uv_handle_t* handle)
     _output_dnssim_conn_maybe_free(conn);
 }
 
+static void _on_expiry_timer_closed(uv_handle_t* handle)
+{
+    _output_dnssim_connection_t* conn = (_output_dnssim_connection_t*)handle->data;
+    mlassert(conn, "conn is nil");
+    mlassert(conn->expiry_timer, "conn must have expiry timer when closing it");
+    free(conn->expiry_timer);
+    conn->expiry_timer = NULL;
+    _output_dnssim_conn_maybe_free(conn);
+}
+
 void _output_dnssim_conn_close(_output_dnssim_connection_t* conn)
 {
     mlassert(conn, "conn can't be nil");
@@ -88,6 +114,7 @@ void _output_dnssim_conn_close(_output_dnssim_connection_t* conn)
         break;
     case _OUTPUT_DNSSIM_CONN_INITIALIZED:
     case _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED:
+    case _OUTPUT_DNSSIM_CONN_GRACEFUL_CLOSING:
         break;
     default:
         lfatal("unknown conn state: %d", conn->state);
@@ -103,6 +130,10 @@ void _output_dnssim_conn_close(_output_dnssim_connection_t* conn)
         uv_timer_stop(conn->handshake_timer);
         uv_close((uv_handle_t*)conn->handshake_timer, _on_handshake_timer_closed);
     }
+    if (conn->expiry_timer != NULL) {
+        uv_timer_stop(conn->expiry_timer);
+        uv_close((uv_handle_t*)conn->expiry_timer, _on_expiry_timer_closed);
+    }
     if (conn->idle_timer != NULL) {
         conn->is_idle = false;
         uv_timer_stop(conn->idle_timer);
@@ -113,16 +144,72 @@ void _output_dnssim_conn_close(_output_dnssim_connection_t* conn)
     case OUTPUT_DNSSIM_TRANSPORT_TCP:
         _output_dnssim_tcp_close(conn);
         break;
-    case OUTPUT_DNSSIM_TRANSPORT_TLS:
 #if DNSSIM_HAS_GNUTLS
+    case OUTPUT_DNSSIM_TRANSPORT_TLS:
         _output_dnssim_tls_close(conn);
-#else
-        lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
-#endif
         break;
     case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
-#if DNSSIM_HAS_GNUTLS
         _output_dnssim_https2_close(conn);
+        break;
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+        _output_dnssim_quic_close(conn);
+        break;
+#else
+    case OUTPUT_DNSSIM_TRANSPORT_TLS:
+    case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+        lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
+        break;
+#endif
+    default:
+        lfatal("unsupported transport");
+        break;
+    }
+}
+
+void _output_dnssim_conn_bye(_output_dnssim_connection_t* conn)
+{
+    mlassert(conn, "conn can't be nil");
+    mlassert(conn->stats, "conn must have stats");
+    mlassert(conn->client, "conn must have client");
+    mlassert(conn->client->dnssim, "client must have dnssim");
+
+    output_dnssim_t* self = conn->client->dnssim;
+
+    switch (conn->state) {
+    case _OUTPUT_DNSSIM_CONN_INITIALIZED:
+    case _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE:
+    case _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE:
+        _output_dnssim_conn_close(conn);
+        return;
+
+    case _OUTPUT_DNSSIM_CONN_ACTIVE:
+    case _OUTPUT_DNSSIM_CONN_CONGESTED:
+    case _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED:
+        break;
+
+    case _OUTPUT_DNSSIM_CONN_CLOSING:
+    case _OUTPUT_DNSSIM_CONN_CLOSED:
+    case _OUTPUT_DNSSIM_CONN_GRACEFUL_CLOSING:
+        return;
+
+    default:
+        lfatal("unknown conn state: %d", conn->state);
+    }
+
+    conn->state = _OUTPUT_DNSSIM_CONN_GRACEFUL_CLOSING;
+
+    /* Only QUIC supports a graceful closure right now.
+     * TODO: TLS could (and maybe should) as well */
+    switch (_self->transport) {
+    case OUTPUT_DNSSIM_TRANSPORT_TCP:
+    case OUTPUT_DNSSIM_TRANSPORT_TLS:
+    case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
+        _output_dnssim_conn_close(conn);
+        break;
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+#if DNSSIM_HAS_GNUTLS
+        _output_dnssim_quic_bye(conn);
 #else
         lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
 #endif
@@ -184,20 +271,23 @@ static void _send_pending_queries(_output_dnssim_connection_t* conn)
             case OUTPUT_DNSSIM_TRANSPORT_TCP:
                 _output_dnssim_tcp_write_query(conn, qry);
                 break;
-            case OUTPUT_DNSSIM_TRANSPORT_TLS:
 #if DNSSIM_HAS_GNUTLS
+            case OUTPUT_DNSSIM_TRANSPORT_TLS:
                 _output_dnssim_tls_write_query(conn, qry);
-#else
-                mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
-#endif
                 break;
             case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
-#if DNSSIM_HAS_GNUTLS
                 _output_dnssim_https2_write_query(conn, qry);
-#else
-                mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
-#endif
                 break;
+            case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+                _output_dnssim_quic_write_query(conn, qry);
+                break;
+#else
+            case OUTPUT_DNSSIM_TRANSPORT_TLS:
+            case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
+            case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+                mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
+                break;
+#endif
             default:
                 mlfatal("unsupported protocol");
                 break;
@@ -236,28 +326,43 @@ int _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client)
         conn->state  = _OUTPUT_DNSSIM_CONN_INITIALIZED;
         conn->client = client;
         conn->stats  = self->stats_current;
-        if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_TLS) {
 #if DNSSIM_HAS_GNUTLS
+        if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_TLS) {
             ret = _output_dnssim_tls_init(conn);
             if (ret < 0) {
                 free(conn);
                 return ret;
             }
-#else
-            lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
-#endif
         } else if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_HTTPS2) {
-#if DNSSIM_HAS_GNUTLS
             ret = _output_dnssim_https2_init(conn);
             if (ret < 0) {
                 free(conn);
                 return ret;
             }
-#else
-            lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
-#endif
+        } else if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_QUIC) {
+            ret = _output_dnssim_quic_init(conn);
+            if (ret < 0) {
+                free(conn);
+                return ret;
+            }
         }
-        ret = _output_dnssim_tcp_connect(self, conn);
+#else
+        if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_TLS
+            || _self->transport == OUTPUT_DNSSIM_TRANSPORT_HTTPS2
+            || _self->transport == OUTPUT_DNSSIM_TRANSPORT_QUIC)
+        {
+            lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
+        }
+#endif
+
+        if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_QUIC) {
+#if DNSSIM_HAS_GNUTLS
+            ret = _output_dnssim_quic_connect(self, conn);
+#endif
+        } else {
+            ret = _output_dnssim_tcp_connect(self, conn);
+        }
+
         if (ret < 0)
             return ret;
         _ll_append(client->conn, conn);
@@ -357,6 +462,25 @@ static int _process_dnsmsg(_output_dnssim_connection_t* conn,
         default:
             lwarning("https2 response question mismatch");
             break;
+        }
+    } else if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_QUIC) {
+        lassert(conn->quic, "conn must have quic ctx");
+        lassert(stream->stream_id >= 0, "quic stream must have a non-negative id");
+
+        /* TODO - maybe assign the query pointer to the stream? */
+        qry = &_output_dnssim_get_stream_qry(conn, stream->stream_id)->qry;
+        if (qry) {
+            ret = _output_dnssim_answers_request(qry->req, &dns_a);
+            switch (ret) {
+            case 0:
+                _output_dnssim_request_answered(qry->req, &dns_a);
+                break;
+
+            default:
+                    lwarning("response question mismatch");
+            }
+        } else {
+            lwarning("could not find qry for stream_id");
         }
     } else {
         qry = conn->sent;

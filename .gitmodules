@@ -1,0 +1,3 @@
+[submodule "replay/dnssim/vendor/ngtcp2"]
+	path = replay/dnssim/vendor/ngtcp2
+	url = https://github.com/ngtcp2/ngtcp2.git

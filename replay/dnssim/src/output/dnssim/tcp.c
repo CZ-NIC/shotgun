@@ -14,6 +14,7 @@ static void _on_tcp_closed(uv_handle_t* handle)
 {
     _output_dnssim_connection_t* conn = (_output_dnssim_connection_t*)handle->data;
     mlassert(conn, "conn is nil");
+    mlassert(conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_TCP, "conn must have tcp transport type");
     conn->state = _OUTPUT_DNSSIM_CONN_CLOSED;
 
     /* Orphan any queries that are still unresolved. */
@@ -32,9 +33,9 @@ static void _on_tcp_closed(uv_handle_t* handle)
     //if (_output_dnssim_handle_pending_queries(conn->client) != 0)
     //    mlinfo("tcp: orphaned queries failed to be re-sent");
 
-    mlassert(conn->handle, "conn must have tcp handle when closing it");
-    free(conn->handle);
-    conn->handle = NULL;
+    mlassert(conn->transport.tcp, "conn must have tcp handle when closing it");
+    free(conn->transport.tcp);
+    conn->transport.tcp = NULL;
     _output_dnssim_conn_maybe_free(conn);
 }
 
@@ -85,6 +86,7 @@ void _output_dnssim_tcp_write_query(_output_dnssim_connection_t* conn, _output_d
     mlassert(qry->qry.req->dns_q, "dns_q can't be null");
     mlassert(qry->qry.req->dns_q->obj_prev, "payload can't be null");
     mlassert(conn, "conn can't be null");
+    mlassert(conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_TCP, "conn transport type must be tcp");
     mlassert(conn->state == _OUTPUT_DNSSIM_CONN_ACTIVE, "connection state != ACTIVE");
     mlassert(conn->client, "conn must be associated with client");
     mlassert(conn->client->pending, "conn has no pending queries");
@@ -109,7 +111,7 @@ void _output_dnssim_tcp_write_query(_output_dnssim_connection_t* conn, _output_d
     }
 
     qry->write_req.data = (void*)qry;
-    uv_write(&qry->write_req, (uv_stream_t*)conn->handle, qry->bufs, 2, _on_tcp_query_written);
+    uv_write(&qry->write_req, (uv_stream_t*)conn->transport.tcp, qry->bufs, 2, _on_tcp_query_written);
     qry->qry.state = _OUTPUT_DNSSIM_QUERY_PENDING_WRITE_CB;
 }
 
@@ -141,9 +143,12 @@ static void _on_tcp_read(uv_stream_t* handle, ssize_t nread, const uv_buf_t* buf
             break;
         }
     } else if (nread < 0) {
-        if (nread != UV_EOF)
+        if (nread != UV_EOF) {
             mlinfo("tcp conn unexpected close: %s", uv_strerror(nread));
-        _output_dnssim_conn_close(conn);
+            _output_dnssim_conn_close(conn);
+        } else {
+            _output_dnssim_conn_bye(conn);
+        }
     }
 
     if (buf->base != NULL)
@@ -154,6 +159,7 @@ static void _on_tcp_connected(uv_connect_t* conn_req, int status)
 {
     _output_dnssim_connection_t* conn = (_output_dnssim_connection_t*)conn_req->handle->data;
     mlassert(conn, "conn is nil");
+    mlassert(conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_TCP, "conn transport type must be tcp");
 
     free(conn_req);
 
@@ -163,8 +169,8 @@ static void _on_tcp_connected(uv_connect_t* conn_req, int status)
         return;
     }
 
-    mlassert(conn->state == _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE, "connection state != TRANSPORT_HANDSHAKE");
-    int ret = uv_read_start((uv_stream_t*)conn->handle, _output_dnssim_on_uv_alloc, _on_tcp_read);
+    mlassert(conn->state == _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE, "connection state != TCP_HANDSHAKE");
+    int ret = uv_read_start((uv_stream_t*)conn->transport.tcp, _output_dnssim_on_uv_alloc, _on_tcp_read);
     if (ret < 0) {
         mlwarning("tcp uv_read_start() failed: %s", uv_strerror(ret));
         _output_dnssim_conn_close(conn);
@@ -204,25 +210,26 @@ int _output_dnssim_tcp_connect(output_dnssim_t* self, _output_dnssim_connection_
 {
     mlassert_self();
     lassert(conn, "connection can't be null");
-    lassert(conn->handle == NULL, "connection already has a handle");
+    lassert(conn->transport.tcp == NULL, "connection already has a handle");
     lassert(conn->handshake_timer == NULL, "connection already has a handshake timer");
     lassert(conn->idle_timer == NULL, "connection already has idle timer");
     lassert(conn->state == _OUTPUT_DNSSIM_CONN_INITIALIZED, "connection state != INITIALIZED");
 
-    lfatal_oom(conn->handle = malloc(sizeof(uv_tcp_t)));
-    conn->handle->data = (void*)conn;
-    int ret            = uv_tcp_init(&_self->loop, conn->handle);
+    conn->transport_type = _OUTPUT_DNSSIM_CONN_TRANSPORT_TCP;
+    lfatal_oom(conn->transport.tcp = malloc(sizeof(uv_tcp_t)));
+    conn->transport.tcp->data = (void*)conn;
+    int ret            = uv_tcp_init(&_self->loop, conn->transport.tcp);
     if (ret < 0) {
         lwarning("failed to init uv_tcp_t");
         goto failure;
     }
 
-    ret = _output_dnssim_bind_before_connect(self, (uv_handle_t*)conn->handle);
+    ret = _output_dnssim_bind_before_connect(self, (uv_handle_t*)conn->transport.tcp);
     if (ret < 0)
         goto failure;
 
     /* Set connection parameters. */
-    ret = uv_tcp_nodelay(conn->handle, 1);
+    ret = uv_tcp_nodelay(conn->transport.tcp, 1);
     if (ret < 0)
         lwarning("tcp: failed to set TCP_NODELAY: %s", uv_strerror(ret));
 
@@ -246,12 +253,12 @@ int _output_dnssim_tcp_connect(output_dnssim_t* self, _output_dnssim_connection_
     mldebug("tcp connecting");
     uv_connect_t* conn_req;
     lfatal_oom(conn_req = malloc(sizeof(uv_connect_t)));
-    ret = uv_tcp_connect(conn_req, conn->handle, (struct sockaddr*)&_self->target, _on_tcp_connected);
+    ret = uv_tcp_connect(conn_req, conn->transport.tcp, (struct sockaddr*)&_self->target, _on_tcp_connected);
     if (ret < 0)
         goto failure;
 
-    conn->stats->conn_handshakes++;
-    conn->client->dnssim->stats_sum->conn_handshakes++;
+    conn->stats->conn_tcp_handshakes++;
+    conn->client->dnssim->stats_sum->conn_tcp_handshakes++;
     conn->state = _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE;
     return 0;
 failure:
@@ -262,10 +269,11 @@ failure:
 void _output_dnssim_tcp_close(_output_dnssim_connection_t* conn)
 {
     mlassert(conn, "conn can't be nil");
+    mlassert(conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_TCP, "conn transport type must be tcp");
 
-    if (conn->handle != NULL) {
-        uv_read_stop((uv_stream_t*)conn->handle);
-        uv_close((uv_handle_t*)conn->handle, _on_tcp_closed);
+    if (conn->transport.tcp != NULL) {
+        uv_read_stop((uv_stream_t*)conn->transport.tcp);
+        uv_close((uv_handle_t*)conn->transport.tcp, _on_tcp_closed);
     }
 }
 

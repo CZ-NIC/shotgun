@@ -109,20 +109,23 @@ void _output_dnssim_create_request(output_dnssim_t* self, _output_dnssim_client_
     case OUTPUT_DNSSIM_TRANSPORT_TCP:
         ret = _output_dnssim_create_query_tcp(self, req);
         break;
-    case OUTPUT_DNSSIM_TRANSPORT_TLS:
 #if DNSSIM_HAS_GNUTLS
+    case OUTPUT_DNSSIM_TRANSPORT_TLS:
         ret = _output_dnssim_create_query_tls(self, req);
-#else
-        lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
-#endif
         break;
     case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
-#if DNSSIM_HAS_GNUTLS
         ret = _output_dnssim_create_query_https2(self, req);
-#else
-        lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
-#endif
         break;
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+        ret = _output_dnssim_create_query_quic(self, req);
+        break;
+#else
+    case OUTPUT_DNSSIM_TRANSPORT_TLS:
+    case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+        lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
+        break;
+#endif
     default:
         lfatal("unsupported dnssim transport");
         break;
@@ -204,20 +207,23 @@ static void _close_query(_output_dnssim_query_t* qry)
     case OUTPUT_DNSSIM_TRANSPORT_TCP:
         _output_dnssim_close_query_tcp((_output_dnssim_query_stream_t*)qry);
         break;
-    case OUTPUT_DNSSIM_TRANSPORT_TLS:
 #if DNSSIM_HAS_GNUTLS
-#else
-        mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
-#endif
+    case OUTPUT_DNSSIM_TRANSPORT_TLS:
         _output_dnssim_close_query_tls((_output_dnssim_query_stream_t*)qry);
         break;
     case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
-#if DNSSIM_HAS_GNUTLS
         _output_dnssim_close_query_https2((_output_dnssim_query_stream_t*)qry);
-#else
-        mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
-#endif
         break;
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+        _output_dnssim_close_query_quic((_output_dnssim_query_stream_t*)qry);
+        break;
+#else
+    case OUTPUT_DNSSIM_TRANSPORT_TLS:
+    case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+        mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
+        break;
+#endif
     default:
         mlfatal("invalid query transport");
         break;
@@ -385,3 +391,13 @@ int _output_dnssim_append_to_query_buf(_output_dnssim_query_stream_t* qry, const
 
     return 0;
 }
+
+#if DNSSIM_HAS_GNUTLS
+void _output_dnssim_rand(void *data, size_t len)
+{
+    mlassert(data, "data must not be nil");
+
+    int ret = gnutls_rnd(GNUTLS_RND_RANDOM, data, len);
+    mlassert(!ret, "random number generation failed: %d %s", ret, gnutls_strerror(ret));
+}
+#endif

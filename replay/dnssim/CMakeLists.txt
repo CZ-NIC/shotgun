@@ -2,11 +2,13 @@ cmake_minimum_required(VERSION 3.5)
 project(dnssim C)
 
 include(CheckIncludeFile)
+include(CheckIncludeFiles)
 include(CheckFunctionExists)
 
 option(DNSJIT_PATH "Path to dnsjit prefix" "")
 option(ASAN "Use AddressSanitizer" OFF)
 option(UBSAN "Use UndefinedBehaviorSanitizer" OFF)
+option(USE_SYSTEM_NGTCP2 "Use ngtcp2 from the system" OFF)
 option(ENABLE_GNUTLS "Whether GnuTLS support is enabled" ON)
 
 
@@ -34,6 +36,32 @@ list(APPEND DNSSIM_LIBS ${NGHTTP2_LIB})
 check_include_file(nghttp2/nghttp2.h HAS_NGHTTP2_H)
 if (NOT HAS_NGHTTP2_H)
 	message(FATAL_ERROR "nghttp2 is required")
+endif ()
+
+# ngtcp2
+if (USE_SYSTEM_NGTCP2)
+	find_library(NGTCP2_LIB libngtcp2.so REQUIRED)
+	list(APPEND DNSSIM_LIBS ${NGTCP2_LIB})
+	find_library(NGTCP2_GTLS_LIB libngtcp2_crypto_gnutls.so REQUIRED)
+	list(APPEND DNSSIM_LIBS ${NGTCP2_GTLS_LIB})
+	check_include_files("ngtcp2/ngtcp2.h;ngtcp2/ngtcp2_crypto.h;ngtcp2/ngtcp2_crypto_gnutls.h"
+		HAS_NGTCP2_H)
+
+	if (NOT HAS_NGTCP2_H)
+		message(FATAL_ERROR "ngtcp2 is required (and set to use system)")
+	endif ()
+else ()
+	function (add_ngtcp2) # wrapped in a function to ensure scope
+		list(APPEND CMAKE_C_FLAGS -fPIC)
+		set(ENABLE_STATIC_LIB ON)
+		set(ENABLE_GNUTLS ON)
+		set(ENABLE_QUICTLS OFF)
+		set(ENABLE_OPENSSL OFF)
+		add_subdirectory(vendor/ngtcp2 EXCLUDE_FROM_ALL SYSTEM)
+	endfunction ()
+	add_ngtcp2()
+	list(APPEND DNSSIM_LIBS ngtcp2_static)
+	list(APPEND DNSSIM_LIBS ngtcp2_crypto_gnutls_static)
 endif ()
 
 # dnsjit
@@ -77,6 +105,7 @@ add_library(dnssim SHARED
 	src/output/dnssim/common.c
 	src/output/dnssim/connection.c
 	src/output/dnssim/https2.c
+	src/output/dnssim/quic.c
 	src/output/dnssim/tcp.c
 	src/output/dnssim/tls.c
 	src/output/dnssim/udp.c

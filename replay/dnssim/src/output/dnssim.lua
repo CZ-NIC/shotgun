@@ -11,7 +11,7 @@
 --   -- pass in objects using recv(rctx, obj)
 --   -- repeatedly call output:run_nowait() until it returns 0
 -- .SS DNS-over-TLS example configuration
---   output:tls("NORMAL:-VERS-ALL:+VERS-TLS1.3")  -- enforce TLS 1.3
+--   output:tls("dnssim-default:-VERS-ALL:+VERS-TLS1.3")  -- enforce TLS 1.3
 -- .SS DNS-over-HTTPS/2 example configuration
 --   output:https2({ method = "POST", uri_path = "/doh" })
 --
@@ -47,7 +47,8 @@ typedef enum output_dnssim_transport {
     OUTPUT_DNSSIM_TRANSPORT_UDP,
     OUTPUT_DNSSIM_TRANSPORT_TCP,
     OUTPUT_DNSSIM_TRANSPORT_TLS,
-    OUTPUT_DNSSIM_TRANSPORT_HTTPS2
+    OUTPUT_DNSSIM_TRANSPORT_HTTPS2,
+    OUTPUT_DNSSIM_TRANSPORT_QUIC,
 } output_dnssim_transport_t;
 
 typedef enum output_dnssim_h2_method {
@@ -72,8 +73,11 @@ struct output_dnssim_stats {
     /* Number of connections that are open at the end of the stats interval. */
     uint64_t conn_active;
 
-    /* Number of connection handshake attempts during the stats interval. */
-    uint64_t conn_handshakes;
+    /* Number of TCP connection handshake attempts during the stats interval. */
+    uint64_t conn_tcp_handshakes;
+
+    /* Number of QUIC connection handshake attempts during the stats interval. */
+    uint64_t conn_quic_handshakes;
 
     /* Number of connection that have been resumed with TLS session resumption. */
     uint64_t conn_resumed;
@@ -132,7 +136,7 @@ void output_dnssim_log_name(output_dnssim_t* self, const char* name);
 void output_dnssim_set_transport(output_dnssim_t* self, output_dnssim_transport_t tr);
 int  output_dnssim_target(output_dnssim_t* self, const char* ip, uint16_t port);
 int  output_dnssim_bind(output_dnssim_t* self, const char* ip);
-int  output_dnssim_tls_priority(output_dnssim_t* self, const char* priority);
+int  output_dnssim_tls_priority(output_dnssim_t* self, const char* priority, bool is_quic);
 int  output_dnssim_run_nowait(output_dnssim_t* self);
 void output_dnssim_timeout_ms(output_dnssim_t* self, uint64_t timeout_ms);
 void output_dnssim_h2_uri_path(output_dnssim_t* self, const char* uri_path);
@@ -263,7 +267,7 @@ end
 -- is a GnuTLS priority string, which can be used to select TLS versions, cipher suites etc.
 -- For example:
 --
--- .RB "- """ NORMAL:%NO_TICKETS """"
+-- .RB "- """ dnssim-default:%NO_TICKETS """"
 -- will use defaults without TLS session resumption.
 --
 -- .RB "- """ SECURE128:-VERS-ALL:+VERS-TLS1.3 """"
@@ -273,7 +277,7 @@ end
 -- .I https://gnutls.org/manual/html_node/Priority-Strings.html
 function DnsSim:tls(tls_priority)
     if tls_priority ~= nil then
-        C.output_dnssim_tls_priority(self.obj, tls_priority)
+        C.output_dnssim_tls_priority(self.obj, tls_priority, false)
     end
     C.output_dnssim_set_transport(self.obj, C.OUTPUT_DNSSIM_TRANSPORT_TLS)
 end
@@ -304,7 +308,7 @@ end
 -- documentation.
 function DnsSim:https2(http2_options, tls_priority)
     if tls_priority ~= nil then
-        C.output_dnssim_tls_priority(self.obj, tls_priority)
+        C.output_dnssim_tls_priority(self.obj, tls_priority, false)
     end
 
     local uri_path = "/dns-query"
@@ -331,6 +335,18 @@ function DnsSim:https2(http2_options, tls_priority)
     C.output_dnssim_h2_uri_path(self.obj, uri_path)
     C.output_dnssim_h2_method(self.obj, method)
     C.output_dnssim_h2_zero_out_msgid(self.obj, zero_out_msgid)
+end
+
+-- Set the transport to QUIC.
+--
+-- See tls() method for
+-- .B tls_priority
+-- documentation.
+function DnsSim:quic(tls_priority)
+    if tls_priority ~= nil then
+        C.output_dnssim_tls_priority(self.obj, tls_priority, true)
+    end
+    C.output_dnssim_set_transport(self.obj, C.OUTPUT_DNSSIM_TRANSPORT_QUIC)
 end
 
 -- Set timeout for the individual requests in seconds (default 2s).
@@ -436,7 +452,8 @@ function DnsSim:export(filename)
                 '"ongoing":', tonumber(stats.ongoing), ',',
                 '"answers":', tonumber(stats.answers), ',',
                 '"conn_active":', tonumber(stats.conn_active), ',',
-                '"conn_handshakes":', tonumber(stats.conn_handshakes), ',',
+                '"conn_tcp_handshakes":', tonumber(stats.conn_tcp_handshakes), ',',
+                '"conn_quic_handshakes":', tonumber(stats.conn_quic_handshakes), ',',
                 '"conn_resumed":', tonumber(stats.conn_resumed), ',',
                 '"conn_handshakes_failed":', tonumber(stats.conn_handshakes_failed), ',',
                 '"rcode_noerror":', tonumber(stats.rcode_noerror), ',',
