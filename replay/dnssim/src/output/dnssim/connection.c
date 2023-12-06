@@ -182,11 +182,11 @@ void _output_dnssim_conn_bye(_output_dnssim_connection_t* conn)
     case _OUTPUT_DNSSIM_CONN_INITIALIZED:
     case _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE:
     case _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE:
-    case _OUTPUT_DNSSIM_CONN_EARLY_DATA:
-    case _OUTPUT_DNSSIM_CONN_EARLY_DATA_CONGESTED:
         _output_dnssim_conn_close(conn);
         return;
 
+    case _OUTPUT_DNSSIM_CONN_EARLY_DATA:
+    case _OUTPUT_DNSSIM_CONN_EARLY_DATA_CONGESTED:
     case _OUTPUT_DNSSIM_CONN_ACTIVE:
     case _OUTPUT_DNSSIM_CONN_CONGESTED:
     case _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED:
