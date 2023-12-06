@@ -92,7 +92,7 @@ def siname(n):
         0,
         min(len(sinames) - 1, int(math.floor(0 if n == 0 else math.log10(abs(n)) / 3))),
     )
-    return "{:.0f}{}".format(n / 10 ** (3 * siidx), sinames[siidx])
+    return f"{(n / 10 ** (3 * siidx)):.0f}{sinames[siidx]}"
 
 
 def stat_field_rate(field):
@@ -264,7 +264,7 @@ def main():
 
 
 def process_file(json_path, json_color, args, ax):
-    with open(json_path) as f:
+    with open(json_path, encoding="utf-8") as f:
         data = json.load(f)
     try:
         assert data["version"] == JSON_VERSION
@@ -298,7 +298,7 @@ def process_file(json_path, json_color, args, ax):
     timespan = (data["stats_sum"]["until_ms"] - data["stats_sum"]["since_ms"]) / 1000
     qps = data["stats_sum"]["requests"] / timespan
     name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
-    label = "{} ({} QPS)".format(name, siname(qps))
+    label = f"{name} ({siname(qps)} QPS)"
     min_timespan = data["stats_interval_ms"] / 2
 
     if not args.skip_total:
@@ -331,7 +331,7 @@ def process_file(json_path, json_color, args, ax):
                 continue
 
             eval_func = stat_field_rate(stat_rcode.field)
-            rcode_label = "{} {}".format(label, stat_rcode.label)
+            rcode_label = f"{label} {stat_rcode.label}"
 
             plot_response_rate(
                 ax,

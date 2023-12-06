@@ -24,12 +24,8 @@ COLOR_QUIC_HS = cycle(["darkmagenta", "darkorchid", "orchid", "magenta"])
 COLOR_QUIC_0RTT = cycle(
     ["darkolivegreen", "darkseagreen", "darkslategray", "greenyellow"]
 )
-COLOR_QUIC_0RTT_SENT = cycle(
-    ["crimson", "brown", "firebrick", "indianred"]
-)
-COLOR_QUIC_0RTT_ANSWERED = cycle(
-    ["khaki", "moccasin", "peru", "wheat"]
-)
+COLOR_QUIC_0RTT_SENT = cycle(["crimson", "brown", "firebrick", "indianred"])
+COLOR_QUIC_0RTT_ANSWERED = cycle(["khaki", "moccasin", "peru", "wheat"])
 COLOR_TLS_RESUMED = cycle(["orange", "moccasin", "darkorange", "antiquewhite"])
 COLOR_FAILED_HS = cycle(["gray", "silver", "black", "gainsboro"])
 
@@ -47,7 +43,7 @@ def siname(n):
         0,
         min(len(sinames) - 1, int(math.floor(0 if n == 0 else math.log10(abs(n)) / 3))),
     )
-    return "{:.0f}{}".format(n / 10 ** (3 * siidx), sinames[siidx])
+    return f"{(n / 10 ** (3 * siidx)):.0f}{sinames[siidx]}"
 
 
 def init_plot(title):
@@ -128,7 +124,7 @@ def main():
 
     for json_path in args.json_file:
         try:
-            with open(json_path) as f:
+            with open(json_path, encoding="utf-8") as f:
                 data = json.load(f)
         except FileNotFoundError as exc:
             logging.critical("%s", exc)

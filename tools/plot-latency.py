@@ -43,7 +43,7 @@ def siname(n):
         0,
         min(len(sinames) - 1, int(math.floor(0 if n == 0 else math.log10(abs(n)) / 3))),
     )
-    return "{:.0f}{}".format(n / 10 ** (3 * siidx), sinames[siidx])
+    return f"{(n / 10 ** (3 * siidx)):.0f}{sinames[siidx]}"
 
 
 def init_plot(title):
@@ -275,7 +275,7 @@ def main():
         group_ysum = []
         for run_data in group_data:
             latency, qps = merge_latency(run_data, args.since, args.until)
-            label = "{} ({} QPS)".format(name, siname(qps))
+            label = f"{name} ({siname(qps)} QPS)"
             group_x, run_y = get_xy_from_histogram(latency)
             if len(group_data) == 1:  # no reason to compute aggregate values
                 group_ysum = run_y

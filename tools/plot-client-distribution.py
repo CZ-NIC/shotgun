@@ -50,7 +50,7 @@ def init_plot(title):
 def count_client_queries(
     filename: str,
 ) -> Dict[str, int]:
-    with open(filename, newline="") as csvfile:
+    with open(filename, newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(
             csvfile, delimiter=",", quotechar='"', quoting=csv.QUOTE_NONNUMERIC
         )
@@ -70,24 +70,25 @@ def plot_client_query_scatter(ax, clients: Dict[str, int], plot_props):
     while lmin <= max(data):
         samples = list(n for n in data if lmin <= n < lmax)
         if len(samples) == 0:  # an empty interval
-            logging.info(
-                "  [{:d}-{:d}) queries per client: 0 clients".format(lmin, lmax)
-            )
+            logging.info("  [%d-%d) queries per client: 0 clients", lmin, lmax)
         else:
             sanity_nsamples += len(samples)
             x.append(statistics.mean(samples))
             y.append(len(samples) / len(data) * 100)
             s.append(sum(samples))
             logging.info(
-                "  [{:d}-{:d}) queries per client: {:d} ({:.2f} %) clients; {:d} queries total".format(
-                    lmin, lmax, len(samples), y[-1], int(s[-1])
-                )
+                "  [%d-%d) queries per client: %d (%.2f %%) clients; %d queries total",
+                lmin,
+                lmax,
+                len(samples),
+                y[-1],
+                int(s[-1]),
             )
         lmin = lmax
         lmax *= step_multiplier
 
     assert sanity_nsamples == len(data)
-    logging.info("  total: {:d} clients; {:d} queries".format(len(data), int(sum(s))))
+    logging.info("  total: %d clients; %d queries", len(data), int(sum(s)))
 
     # normalize size
     s_tot = sum(s)
