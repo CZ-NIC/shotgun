@@ -275,7 +275,11 @@ static void _send_pending_queries(_output_dnssim_connection_t* conn)
         _output_dnssim_query_stream_t* next = (_output_dnssim_query_stream_t*)qry->qry.next;
         qry->qry.is_0rtt = conn->is_0rtt;
         if (qry->qry.is_0rtt) {
-            conn->had_0rtt_success = true;
+            if (!conn->had_0rtt_success) {
+                conn->had_0rtt_success = true;
+                conn->stats->conn_quic_0rtt_loaded++;
+                self->stats_sum->conn_quic_0rtt_loaded++;
+            }
             conn->stats->quic_0rtt_sent++;
             self->stats_sum->quic_0rtt_sent++;
         }

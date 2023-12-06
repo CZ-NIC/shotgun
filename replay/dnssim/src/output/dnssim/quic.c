@@ -209,9 +209,10 @@ static void debug_log_printf(void* user_data, const char* fmt, ...)
 static int handshake_completed_cb(ngtcp2_conn *qconn, void *user_data)
 {
     _output_dnssim_connection_t* conn = user_data;
-    // Activate for 0-RTT or 1-RTT
-    if (conn->tls->has_ticket)
+    if (conn->tls->has_ticket) {
+        // Send 1-RTT data (if 0-RTT was not already active)
         _output_dnssim_conn_early_data(conn);
+    }
     quic_check_max_streams(conn);
     return 0;
 }
@@ -223,11 +224,6 @@ static int handshake_confirmed_cb(ngtcp2_conn *qconn, void *user_data)
     if (gnutls_session_is_resumed(conn->tls->session)) {
         conn->stats->conn_resumed++;
         self->stats_sum->conn_resumed++;
-    }
-
-    if (conn->is_0rtt) {
-        conn->stats->conn_quic_0rtt_loaded++;
-        self->stats_sum->conn_quic_0rtt_loaded++;
     }
 
     conn->is_0rtt = false;
