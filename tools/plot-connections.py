@@ -24,6 +24,12 @@ COLOR_QUIC_HS = cycle(["darkmagenta", "darkorchid", "orchid", "magenta"])
 COLOR_QUIC_0RTT = cycle(
     ["darkolivegreen", "darkseagreen", "darkslategray", "greenyellow"]
 )
+COLOR_QUIC_0RTT_SENT = cycle(
+    ["crimson", "brown", "firebrick", "indianred"]
+)
+COLOR_QUIC_0RTT_ANSWERED = cycle(
+    ["khaki", "moccasin", "peru", "wheat"]
+)
 COLOR_TLS_RESUMED = cycle(["orange", "moccasin", "darkorange", "antiquewhite"])
 COLOR_FAILED_HS = cycle(["gray", "silver", "black", "gainsboro"])
 
@@ -107,6 +113,8 @@ def main():
             "tcp_hs",
             "quic_hs",
             "quic_0rtt",
+            "quic_0rtt_sent",
+            "quic_0rtt_answered",
             "tls_resumed",
             "failed_hs",
         ],
@@ -171,6 +179,22 @@ def main():
                 label=f"QUIC 0RTT ({name})",
                 color=next(COLOR_QUIC_0RTT),
                 eval_func=lambda stats: stats["conn_quic_0rtt_loaded"],
+            )
+        if "quic_0rtt_sent" in args.kind:
+            plot(
+                ax,
+                data,
+                label=f"QUIC 0RTT sent ({name})",
+                color=next(COLOR_QUIC_0RTT_SENT),
+                eval_func=lambda stats: stats["quic_0rtt_sent"],
+            )
+        if "quic_0rtt_answered" in args.kind:
+            plot(
+                ax,
+                data,
+                label=f"QUIC 0RTT answered ({name})",
+                color=next(COLOR_QUIC_0RTT_ANSWERED),
+                eval_func=lambda stats: stats["quic_0rtt_answered"],
             )
         if "tls_resumed" in args.kind:
             plot(

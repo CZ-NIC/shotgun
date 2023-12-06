@@ -52,8 +52,10 @@ void _output_dnssim_tls_process_input_data(_output_dnssim_connection_t* conn)
         int err = _tls_handshake(conn);
         mldebug("tls handshake returned: %s", gnutls_strerror(err));
         if (err == GNUTLS_E_SUCCESS) {
-            if (gnutls_session_is_resumed(conn->tls->session))
+            if (gnutls_session_is_resumed(conn->tls->session)) {
                 conn->stats->conn_resumed++;
+                self->stats_sum->conn_resumed++;
+            }
             if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_HTTPS2) {
                 if (_output_dnssim_https2_setup(conn) < 0) {
                     _output_dnssim_conn_bye(conn);
@@ -277,7 +279,7 @@ int _tls_pull_timeout(gnutls_transport_ptr_t ptr, unsigned int ms)
     return avail;
 }
 
-int _output_dnssim_tls_init(_output_dnssim_connection_t* conn)
+int  _output_dnssim_tls_init(_output_dnssim_connection_t* conn, bool has_0rtt)
 {
     mlassert(conn, "conn is nil");
     mlassert(conn->client, "conn does not have client");
@@ -290,7 +292,15 @@ int _output_dnssim_tls_init(_output_dnssim_connection_t* conn)
     conn->tls->buf_pos          = 0;
     conn->tls->write_queue_size = 0;
 
-    ret = gnutls_init(&conn->tls->session, GNUTLS_CLIENT | GNUTLS_NONBLOCK);
+    unsigned int flags = GNUTLS_CLIENT | GNUTLS_NONBLOCK;
+
+    if (has_0rtt) {
+        flags |= GNUTLS_ENABLE_EARLY_DATA
+            | GNUTLS_ENABLE_FALSE_START
+            | GNUTLS_NO_END_OF_EARLY_DATA;
+    }
+
+    ret = gnutls_init(&conn->tls->session, flags);
     if (ret < 0) {
         mldebug("failed gnutls_init() (%s)", gnutls_strerror(ret));
         free(conn->tls);
@@ -391,9 +401,6 @@ void _output_dnssim_tls_close(_output_dnssim_connection_t* conn)
     /* Try and get a TLS session ticket for potential resumption. */
     int ret;
     if (gnutls_session_get_flags(conn->tls->session) & GNUTLS_SFLAGS_SESSION_TICKET) {
-        if (conn->client->tls_ticket.size != 0) {
-            gnutls_free(conn->client->tls_ticket.data);
-        }
         ret = gnutls_session_get_data2(conn->tls->session, &conn->client->tls_ticket);
         if (ret < 0) {
             mldebug("gnutls_session_get_data2 failed: %s", gnutls_strerror(ret));

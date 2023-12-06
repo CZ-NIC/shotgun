@@ -41,7 +41,7 @@ static int _process_udp_response(uv_udp_t* handle, ssize_t nread, const uv_buf_t
         return _ERR_QUESTION;
     }
 
-    _output_dnssim_request_answered(req, &dns_a);
+    _output_dnssim_request_answered(req, &dns_a, false);
     return 0;
 }
 

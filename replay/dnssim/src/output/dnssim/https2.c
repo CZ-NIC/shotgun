@@ -198,7 +198,7 @@ int _output_dnssim_https2_init(_output_dnssim_connection_t* conn)
     output_dnssim_t*           self = conn->client->dnssim;
 
     /* Initialize TLS session. */
-    ret = _output_dnssim_tls_init(conn);
+    ret = _output_dnssim_tls_init(conn, false);
     if (ret < 0)
         return ret;
 

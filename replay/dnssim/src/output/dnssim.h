@@ -53,6 +53,8 @@ struct output_dnssim_stats {
     /* Number of QUIC connections that have used 0-RTT transport parameters to
      * initiate a new connection. */
     uint64_t conn_quic_0rtt_loaded;
+    uint64_t quic_0rtt_sent;
+    uint64_t quic_0rtt_answered;
 
     /* Number of timed out connection handshakes during the stats interval. */
     uint64_t conn_handshakes_failed;

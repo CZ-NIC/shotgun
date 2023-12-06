@@ -85,6 +85,8 @@ struct output_dnssim_stats {
     /* Number of QUIC connections that have used 0-RTT transport parameters to
      * initiate a new connection. */
     uint64_t conn_quic_0rtt_loaded;
+    uint64_t quic_0rtt_sent;
+    uint64_t quic_0rtt_answered;
 
     /* Number of timed out connection handshakes during the stats interval. */
     uint64_t conn_handshakes_failed;
@@ -468,6 +470,8 @@ function DnsSim:export(filename)
                 '"conn_quic_handshakes":', tonumber(stats.conn_quic_handshakes), ',',
                 '"conn_resumed":', tonumber(stats.conn_resumed), ',',
                 '"conn_quic_0rtt_loaded":', tonumber(stats.conn_quic_0rtt_loaded), ',',
+                '"quic_0rtt_sent":', tonumber(stats.quic_0rtt_sent), ',',
+                '"quic_0rtt_answered":', tonumber(stats.quic_0rtt_answered), ',',
                 '"conn_handshakes_failed":', tonumber(stats.conn_handshakes_failed), ',',
                 '"rcode_noerror":', tonumber(stats.rcode_noerror), ',',
                 '"rcode_formerr":', tonumber(stats.rcode_formerr), ',',

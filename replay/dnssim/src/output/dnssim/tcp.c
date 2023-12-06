@@ -18,10 +18,8 @@ static void _on_tcp_closed(uv_handle_t* handle)
     conn->state = _OUTPUT_DNSSIM_CONN_CLOSED;
 
     /* Orphan any queries that are still unresolved. */
-    _output_dnssim_conn_move_queries_to_pending((_output_dnssim_query_stream_t*)conn->queued);
-    conn->queued = NULL;
-    _output_dnssim_conn_move_queries_to_pending((_output_dnssim_query_stream_t*)conn->sent);
-    conn->sent = NULL;
+    _output_dnssim_conn_move_queries_to_pending((_output_dnssim_query_stream_t**)&conn->queued);
+    _output_dnssim_conn_move_queries_to_pending((_output_dnssim_query_stream_t**)&conn->sent);
 
     /* TODO Improve client re-connect behavior in case the connection fails to
      * establish. Currently, queries are orphaned and attempted to be re-sent
@@ -258,7 +256,7 @@ int _output_dnssim_tcp_connect(output_dnssim_t* self, _output_dnssim_connection_
         goto failure;
 
     conn->stats->conn_tcp_handshakes++;
-    conn->client->dnssim->stats_sum->conn_tcp_handshakes++;
+    self->stats_sum->conn_tcp_handshakes++;
     conn->state = _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE;
     return 0;
 failure:

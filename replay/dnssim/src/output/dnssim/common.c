@@ -271,13 +271,17 @@ static void _close_request(_output_dnssim_request_t* req)
     _output_dnssim_maybe_free_request(req);
 }
 
-void _output_dnssim_request_answered(_output_dnssim_request_t* req, core_object_dns_t* msg)
+void _output_dnssim_request_answered(_output_dnssim_request_t* req, core_object_dns_t* msg, bool is_early)
 {
     mlassert(req, "req is nil");
     mlassert(msg, "msg is nil");
 
     req->dnssim->stats_sum->answers++;
     req->stats->answers++;
+    if (is_early) {
+        req->dnssim->stats_sum->quic_0rtt_answered++;
+        req->stats->quic_0rtt_answered++;
+    }
 
     switch (msg->rcode) {
     case CORE_OBJECT_DNS_RCODE_NOERROR:

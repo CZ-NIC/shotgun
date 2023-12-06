@@ -61,7 +61,9 @@ struct _output_dnssim_query {
     output_dnssim_transport_t transport;
     _output_dnssim_request_t* req;
 
-    /* Query state, currently used only for TCP. */
+    bool is_0rtt;
+
+    /* Query state, currently used for TCP and QUIC. */
     enum {
         _OUTPUT_DNSSIM_QUERY_PENDING_WRITE,
         _OUTPUT_DNSSIM_QUERY_PENDING_WRITE_CB,
@@ -201,7 +203,7 @@ struct _output_dnssim_stream {
     _output_dnssim_stream_t* prev;
     _output_dnssim_stream_t* next;
     _output_dnssim_read_state_t read_state;
-    bool  data_free_after_use;
+    bool data_free_after_use;
     int64_t stream_id;
     size_t data_len;
     size_t data_pos;
@@ -229,6 +231,9 @@ struct _output_dnssim_connection {
     uv_timer_t* idle_timer;
     bool        is_idle;
 
+    /* Whether the connection is in an early data state. */
+    bool is_0rtt;
+
     /* Timer that nudges the connection logic on expiry - e.g. ngtcp2. */
     uv_timer_t *expiry_timer;
 
@@ -248,6 +253,8 @@ struct _output_dnssim_connection {
         _OUTPUT_DNSSIM_CONN_INITIALIZED           = 0,
         _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE   = 10,
         _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE         = 20,
+        _OUTPUT_DNSSIM_CONN_EARLY_DATA            = 25,
+        _OUTPUT_DNSSIM_CONN_EARLY_DATA_SENT       = 26,
         _OUTPUT_DNSSIM_CONN_ACTIVE                = 30,
         _OUTPUT_DNSSIM_CONN_CONGESTED             = 35,
         _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED       = 38,
@@ -364,7 +371,7 @@ int  _output_dnssim_create_query_tcp(output_dnssim_t* self, _output_dnssim_reque
 void _output_dnssim_close_query_udp(_output_dnssim_query_udp_t* qry);
 void _output_dnssim_close_query_tcp(_output_dnssim_query_stream_t* qry);
 int  _output_dnssim_answers_request(_output_dnssim_request_t* req, core_object_dns_t* response);
-void _output_dnssim_request_answered(_output_dnssim_request_t* req, core_object_dns_t* msg);
+void _output_dnssim_request_answered(_output_dnssim_request_t* req, core_object_dns_t* msg, bool is_early);
 void _output_dnssim_maybe_free_request(_output_dnssim_request_t* req);
 void _output_dnssim_on_uv_alloc(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
 int  _output_dnssim_append_to_query_buf(_output_dnssim_query_stream_t* qry, const uint8_t* data, size_t datalen);
@@ -376,8 +383,10 @@ void _output_dnssim_tcp_write_query(_output_dnssim_connection_t* conn, _output_d
 void _output_dnssim_conn_close(_output_dnssim_connection_t* conn);
 void _output_dnssim_conn_bye(_output_dnssim_connection_t* conn);
 void _output_dnssim_conn_idle(_output_dnssim_connection_t* conn);
-void _output_dnssim_conn_move_queries_to_pending(_output_dnssim_query_stream_t* qry);
+void _output_dnssim_conn_move_query_to_pending(_output_dnssim_query_stream_t* qry);
+void _output_dnssim_conn_move_queries_to_pending(_output_dnssim_query_stream_t** qry_list);
 int  _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client);
+void _output_dnssim_conn_early_data(_output_dnssim_connection_t* conn);
 void _output_dnssim_conn_activate(_output_dnssim_connection_t* conn);
 void _output_dnssim_conn_maybe_free(_output_dnssim_connection_t* conn);
 void _output_dnssim_read_dns_stream(_output_dnssim_connection_t* conn, size_t len, const char* data, int64_t stream_id);
@@ -393,7 +402,7 @@ void _output_dnssim_rand(void *data, size_t len);
 
 int  _output_dnssim_create_query_tls(output_dnssim_t* self, _output_dnssim_request_t* req);
 void _output_dnssim_close_query_tls(_output_dnssim_query_stream_t* qry);
-int  _output_dnssim_tls_init(_output_dnssim_connection_t* conn);
+int  _output_dnssim_tls_init(_output_dnssim_connection_t* conn, bool has_0rtt);
 void _output_dnssim_tls_process_input_data(_output_dnssim_connection_t* conn);
 void _output_dnssim_tls_close(_output_dnssim_connection_t* conn);
 void _output_dnssim_tls_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry);

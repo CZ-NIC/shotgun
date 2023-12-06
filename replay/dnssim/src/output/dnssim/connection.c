@@ -105,6 +105,8 @@ void _output_dnssim_conn_close(_output_dnssim_connection_t* conn)
         return;
     case _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE:
     case _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE:
+    case _OUTPUT_DNSSIM_CONN_EARLY_DATA:
+    case _OUTPUT_DNSSIM_CONN_EARLY_DATA_SENT:
         conn->stats->conn_handshakes_failed++;
         self->stats_sum->conn_handshakes_failed++;
         break;
@@ -180,6 +182,8 @@ void _output_dnssim_conn_bye(_output_dnssim_connection_t* conn)
     case _OUTPUT_DNSSIM_CONN_INITIALIZED:
     case _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE:
     case _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE:
+    case _OUTPUT_DNSSIM_CONN_EARLY_DATA:
+    case _OUTPUT_DNSSIM_CONN_EARLY_DATA_SENT:
         _output_dnssim_conn_close(conn);
         return;
 
@@ -235,37 +239,62 @@ void _output_dnssim_conn_idle(_output_dnssim_connection_t* conn)
     }
 }
 
-void _output_dnssim_conn_move_queries_to_pending(_output_dnssim_query_stream_t* qry)
+static void reset_query_state(_output_dnssim_query_stream_t* qry)
 {
+    qry->conn         = NULL;
+    qry->qry.state    = _OUTPUT_DNSSIM_QUERY_ORPHANED;
+    qry->stream_id    = -1;
+    qry->recv_buf_len = 0;
+    if (qry->recv_buf != NULL) {
+        free(qry->recv_buf);
+        qry->recv_buf = NULL;
+    }
+}
+
+void _output_dnssim_conn_move_query_to_pending(_output_dnssim_query_stream_t* qry)
+{
+    mlassert(qry->conn, "query must be associated with conn");
+    mlassert(qry->conn->client, "conn must be associated with client");
+
+    _output_dnssim_connection_t* conn = qry->conn;
+    _ll_try_remove(conn->queued, &qry->qry);
+    _ll_try_remove(conn->sent, &qry->qry);
+    reset_query_state(qry);
+    _ll_append(conn->client->pending, &qry->qry);
+}
+
+void _output_dnssim_conn_move_queries_to_pending(_output_dnssim_query_stream_t** qry_list)
+{
+    _output_dnssim_query_stream_t* qry = *qry_list;
     _output_dnssim_query_stream_t* qry_tmp;
     while (qry != NULL) {
         mlassert(qry->conn, "query must be associated with conn");
-        mlassert(qry->conn->state == _OUTPUT_DNSSIM_CONN_CLOSED, "conn must be closed");
+        //mlassert(qry->conn->state == _OUTPUT_DNSSIM_CONN_CLOSED, "conn must be closed");
         mlassert(qry->conn->client, "conn must be associated with client");
         qry_tmp       = (_output_dnssim_query_stream_t*)qry->qry.next;
         qry->qry.next = NULL;
         _ll_append(qry->conn->client->pending, &qry->qry);
-        qry->conn         = NULL;
-        qry->qry.state    = _OUTPUT_DNSSIM_QUERY_ORPHANED;
-        qry->stream_id    = -1;
-        qry->recv_buf_len = 0;
-        if (qry->recv_buf != NULL) {
-            free(qry->recv_buf);
-            qry->recv_buf = NULL;
-        }
+        reset_query_state(qry);
         qry = qry_tmp;
     }
+    *qry_list = NULL;
 }
 
 static void _send_pending_queries(_output_dnssim_connection_t* conn)
 {
+    output_dnssim_t* self = conn->client->dnssim;
     _output_dnssim_query_stream_t* qry;
     mlassert(conn, "conn is nil");
     mlassert(conn->client, "conn->client is nil");
     qry = (_output_dnssim_query_stream_t*)conn->client->pending;
 
-    while (qry != NULL && conn->state == _OUTPUT_DNSSIM_CONN_ACTIVE) {
+    while (qry != NULL && (conn->state == _OUTPUT_DNSSIM_CONN_ACTIVE || conn->state == _OUTPUT_DNSSIM_CONN_EARLY_DATA)) {
         _output_dnssim_query_stream_t* next = (_output_dnssim_query_stream_t*)qry->qry.next;
+        qry->qry.is_0rtt = conn->is_0rtt;
+        if (qry->qry.is_0rtt) {
+            conn->stats->quic_0rtt_sent++;
+            self->stats_sum->quic_0rtt_sent++;
+        }
         if (qry->qry.state == _OUTPUT_DNSSIM_QUERY_PENDING_WRITE) {
             switch (qry->qry.transport) {
             case OUTPUT_DNSSIM_TRANSPORT_TCP:
@@ -293,6 +322,8 @@ static void _send_pending_queries(_output_dnssim_connection_t* conn)
                 break;
             }
         }
+        if (conn->state == _OUTPUT_DNSSIM_CONN_EARLY_DATA)
+            conn->state = _OUTPUT_DNSSIM_CONN_EARLY_DATA_SENT;
         qry = next;
     }
 }
@@ -312,14 +343,14 @@ int _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client)
     bool                         is_connecting = false;
     _output_dnssim_connection_t* conn          = client->conn;
     while (conn != NULL) {
-        if (conn->state == _OUTPUT_DNSSIM_CONN_ACTIVE)
+        if (conn->state == _OUTPUT_DNSSIM_CONN_ACTIVE || conn->state == _OUTPUT_DNSSIM_CONN_EARLY_DATA)
             break;
         else if (_conn_is_connecting(conn))
             is_connecting = true;
         conn = conn->next;
     }
 
-    if (conn != NULL) { /* Send data right away over active connection. */
+    if (conn != NULL) { /* Send data right away over active/early-data connection. */
         _send_pending_queries(conn);
     } else if (!is_connecting) { /* No active or connecting connection -> open a new one. */
         lfatal_oom(conn = calloc(1, sizeof(_output_dnssim_connection_t)));
@@ -328,7 +359,7 @@ int _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client)
         conn->stats  = self->stats_current;
 #if DNSSIM_HAS_GNUTLS
         if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_TLS) {
-            ret = _output_dnssim_tls_init(conn);
+            ret = _output_dnssim_tls_init(conn, false);
             if (ret < 0) {
                 free(conn);
                 return ret;
@@ -416,6 +447,20 @@ _output_dnssim_conn_find_stream(_output_dnssim_connection_t* conn,
     return *target;
 }
 
+void _output_dnssim_conn_early_data(_output_dnssim_connection_t* conn)
+{
+    mlassert(conn, "conn is nil");
+    mlassert(conn->client, "conn must be associated with a client");
+    mlassert(conn->client->dnssim, "client must be associated with dnssim");
+
+    if (conn->state >= _OUTPUT_DNSSIM_CONN_EARLY_DATA)
+        return;
+
+    conn->state = _OUTPUT_DNSSIM_CONN_EARLY_DATA;
+
+    _send_pending_queries(conn);
+}
+
 void _output_dnssim_conn_activate(_output_dnssim_connection_t* conn)
 {
     mlassert(conn, "conn is nil");
@@ -469,7 +514,7 @@ static int _process_dnsmsg(_output_dnssim_connection_t* conn,
         ret = _output_dnssim_answers_request(conn->http2->current_qry->qry.req, &dns_a);
         switch (ret) {
         case 0:
-            _output_dnssim_request_answered(conn->http2->current_qry->qry.req, &dns_a);
+            _output_dnssim_request_answered(conn->http2->current_qry->qry.req, &dns_a, false);
             break;
         case _ERR_MSGID:
             lwarning("https2 QID mismatch: request=0x%04x, response=0x%04x",
@@ -490,7 +535,7 @@ static int _process_dnsmsg(_output_dnssim_connection_t* conn,
             ret = _output_dnssim_answers_request(qry->req, &dns_a);
             switch (ret) {
             case 0:
-                _output_dnssim_request_answered(qry->req, &dns_a);
+                _output_dnssim_request_answered(qry->req, &dns_a, qry->is_0rtt);
                 break;
 
             default:
@@ -507,7 +552,7 @@ static int _process_dnsmsg(_output_dnssim_connection_t* conn,
                 if (ret != 0) {
                     lwarning("response question mismatch");
                 } else {
-                    _output_dnssim_request_answered(qry->req, &dns_a);
+                    _output_dnssim_request_answered(qry->req, &dns_a, false);
                 }
                 break;
             }
