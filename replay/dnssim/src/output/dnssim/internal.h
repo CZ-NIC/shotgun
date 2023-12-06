@@ -38,9 +38,9 @@
 #define MAX_DNSMSG_SIZE 65535
 #define WIRE_BUF_SIZE (MAX_DNSMSG_SIZE + 2 + 16384) /** max tcplen + 2b tcplen + 16kb tls record */
 
-typedef struct _output_dnssim_request    _output_dnssim_request_t;
-typedef struct _output_dnssim_connection _output_dnssim_connection_t;
-typedef struct _output_dnssim_client     _output_dnssim_client_t;
+typedef struct _output_dnssim_request     _output_dnssim_request_t;
+typedef struct _output_dnssim_connection  _output_dnssim_connection_t;
+typedef struct _output_dnssim_client      _output_dnssim_client_t;
 
 /*
  * Query-related structures.
@@ -171,12 +171,6 @@ typedef struct _output_dnssim_http2_ctx {
     bool remote_settings_received;
 } _output_dnssim_http2_ctx_t;
 
-typedef struct _output_dnssim_quic_packet {
-    uv_udp_send_t req;
-    size_t buffer_len;
-    uint8_t buffer[];
-} _output_dnssim_quic_packet_t;
-
 typedef struct _output_dnssim_quic_sent_payload _output_dnssim_quic_sent_payload_t;
 struct _output_dnssim_quic_sent_payload {
     _output_dnssim_quic_sent_payload_t* next;
@@ -189,9 +183,8 @@ typedef struct _output_dnssim_quic_ctx {
     ngtcp2_conn* qconn;
     ngtcp2_crypto_conn_ref qconn_ref;
     ngtcp2_pkt_info pi;
-    bool has_pending;
+    ngtcp2_ccerr ccerr;
 
-    _output_dnssim_quic_packet_t* unsent_packet;
     _output_dnssim_quic_sent_payload_t* sent_payloads;
 
     uint8_t secret[32];
