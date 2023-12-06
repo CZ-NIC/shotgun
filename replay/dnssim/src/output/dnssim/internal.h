@@ -11,8 +11,8 @@
 #include <dnsjit/core/object/dns.h>
 #include <dnsjit/core/object/payload.h>
 
-#define DNSSIM_MIN_GNUTLS_VERSION 0x030603
-#define DNSSIM_MIN_GNUTLS_ERRORMSG "dnssim tls/https2 transport requires GnuTLS >= 3.6.3"
+#include "../dnssim.h"
+
 
 #define _self ((_output_dnssim_t*)self)
 #define _ERR_MALFORMED -2
@@ -155,6 +155,20 @@ typedef struct _output_dnssim_http2_ctx {
     bool remote_settings_received;
 } _output_dnssim_http2_ctx_t;
 
+
+/* Linked list of stream buffers. */
+typedef struct _output_dnssim_stream _output_dnssim_stream_t;
+struct _output_dnssim_stream {
+    _output_dnssim_stream_t* prev;
+    _output_dnssim_stream_t* next;
+    _output_dnssim_read_state_t read_state;
+    bool  data_free_after_use;
+    int64_t stream_id;
+    size_t data_len;
+    size_t data_pos;
+    char* data;
+};
+
 struct _output_dnssim_connection {
     _output_dnssim_connection_t* next;
 
@@ -190,18 +204,12 @@ struct _output_dnssim_connection {
         _OUTPUT_DNSSIM_CONN_CLOSED                = 50
     } state;
 
-    /* State of the data stream read. */
-    _output_dnssim_read_state_t read_state;
-
-    /* Total length of the expected dns data (either 2 for dnslen, or dnslen itself). */
-    size_t dnsbuf_len;
-
-    /* Current position in the receive dns buffer. */
-    size_t dnsbuf_pos;
-
-    /* Receive buffer used for incomplete messages or dnslen. */
-    char* dnsbuf_data;
-    bool  dnsbuf_free_after_use;
+    /* Linked list of receive buffers for incomplete messages or dnslen. For
+     * most transport protocols, this will only contain a single entry since
+     * they only support a single stream of data per connection. There will be
+     * multiple of these for e.g. QUIC, which supports multiple streams per
+     * connection. */
+    _output_dnssim_stream_t *streams;
 
     /* Statistics interval in which the handshake is tracked. */
     output_dnssim_stats_t* stats;
@@ -291,6 +299,7 @@ int  _output_dnssim_answers_request(_output_dnssim_request_t* req, core_object_d
 void _output_dnssim_request_answered(_output_dnssim_request_t* req, core_object_dns_t* msg);
 void _output_dnssim_maybe_free_request(_output_dnssim_request_t* req);
 void _output_dnssim_on_uv_alloc(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
+int  _output_dnssim_append_to_query_buf(_output_dnssim_query_stream_t* qry, const uint8_t* data, size_t datalen);
 void _output_dnssim_create_request(output_dnssim_t* self, _output_dnssim_client_t* client, core_object_payload_t* payload);
 int  _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client);
 int  _output_dnssim_tcp_connect(output_dnssim_t* self, _output_dnssim_connection_t* conn);
@@ -298,11 +307,13 @@ void _output_dnssim_tcp_close(_output_dnssim_connection_t* conn);
 void _output_dnssim_tcp_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry);
 void _output_dnssim_conn_close(_output_dnssim_connection_t* conn);
 void _output_dnssim_conn_idle(_output_dnssim_connection_t* conn);
+void _output_dnssim_conn_move_queries_to_pending(_output_dnssim_query_stream_t* qry);
 int  _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client);
 void _output_dnssim_conn_activate(_output_dnssim_connection_t* conn);
 void _output_dnssim_conn_maybe_free(_output_dnssim_connection_t* conn);
-void _output_dnssim_read_dns_stream(_output_dnssim_connection_t* conn, size_t len, const char* data);
+void _output_dnssim_read_dns_stream(_output_dnssim_connection_t* conn, size_t len, const char* data, int64_t stream_id);
 void _output_dnssim_read_dnsmsg(_output_dnssim_connection_t* conn, size_t len, const char* data);
+_output_dnssim_query_stream_t* _output_dnssim_get_stream_qry(_output_dnssim_connection_t* conn, int64_t stream_id);
 
 #if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
 int  _output_dnssim_create_query_tls(output_dnssim_t* self, _output_dnssim_request_t* req);

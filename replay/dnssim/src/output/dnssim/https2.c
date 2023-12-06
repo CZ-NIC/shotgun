@@ -67,19 +67,6 @@ static ssize_t _http2_on_data_provider_read(nghttp2_session* session, int32_t st
     return sent;
 }
 
-static _output_dnssim_query_stream_t* _http2_get_stream_qry(_output_dnssim_connection_t* conn, int32_t stream_id)
-{
-    mlassert(conn, "conn is nil");
-    mlassert(stream_id >= 0, "invalid stream_id");
-
-    _output_dnssim_query_stream_t* qry = (_output_dnssim_query_stream_t*)conn->sent;
-    while (qry != NULL && qry->stream_id != stream_id) {
-        qry = (_output_dnssim_query_stream_t*)qry->qry.next;
-    }
-
-    return qry;
-}
-
 static int _http2_on_header(nghttp2_session* session, const nghttp2_frame* frame, const uint8_t* name, size_t namelen, const uint8_t* value, size_t valuelen, uint8_t flags, void* user_data)
 {
     if (frame->hd.type == NGHTTP2_HEADERS && frame->headers.cat == NGHTTP2_HCAT_RESPONSE) {
@@ -90,7 +77,7 @@ static int _http2_on_header(nghttp2_session* session, const nghttp2_frame* frame
                  * slightly better than mocking SERVFAIL for statistics. */
                 _output_dnssim_connection_t* conn = (_output_dnssim_connection_t*)user_data;
                 mlassert(conn, "conn is nil");
-                _output_dnssim_query_stream_t* qry = _http2_get_stream_qry(conn, frame->hd.stream_id);
+                _output_dnssim_query_stream_t* qry = _output_dnssim_get_stream_qry(conn, frame->hd.stream_id);
 
                 if (qry != NULL) {
                     _output_dnssim_close_query_https2(qry);
@@ -107,34 +94,14 @@ static int _http2_on_data_recv(nghttp2_session* session, uint8_t flags, int32_t 
     _output_dnssim_connection_t* conn = (_output_dnssim_connection_t*)user_data;
     mlassert(conn, "conn is nil");
 
-    _output_dnssim_query_stream_t* qry = _http2_get_stream_qry(conn, stream_id);
-
+    _output_dnssim_query_stream_t* qry = _output_dnssim_get_stream_qry(conn, stream_id);
     mldebug("http2: data chunk recv, session=%p, len=%d", session, len);
-
-    if (qry) {
-        if (qry->recv_buf_len == 0) {
-            if (len > MAX_DNSMSG_SIZE) {
-                mlwarning("http response exceeded maximum size of dns message");
-                return -1;
-            }
-            mlfatal_oom(qry->recv_buf = malloc(len));
-            memcpy(qry->recv_buf, data, len);
-            qry->recv_buf_len = len;
-        } else {
-            size_t total_len = qry->recv_buf_len + len;
-            if (total_len > MAX_DNSMSG_SIZE) {
-                mlwarning("http response exceeded maximum size of dns message");
-                return -1;
-            }
-            mlfatal_oom(qry->recv_buf = realloc(qry->recv_buf, total_len));
-            memcpy(qry->recv_buf + qry->recv_buf_len, data, len);
-            qry->recv_buf_len = total_len;
-        }
-    } else {
+    if (!qry) {
         mldebug("no query associated with this stream id, ignoring");
+        return 0;
     }
 
-    return 0;
+    return _output_dnssim_append_to_query_buf(qry, data, len);
 }
 
 static void _http2_check_max_streams(_output_dnssim_connection_t* conn)
@@ -183,7 +150,7 @@ static int _http2_on_frame_recv(nghttp2_session* session, const nghttp2_frame* f
     case NGHTTP2_DATA:
         if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
             mldebug("http2 (%p): final DATA frame recv", session);
-            _output_dnssim_query_stream_t* qry = _http2_get_stream_qry(conn, frame->hd.stream_id);
+            _output_dnssim_query_stream_t* qry = _output_dnssim_get_stream_qry(conn, frame->hd.stream_id);
 
             if (qry != NULL) {
                 conn->http2->current_qry = qry;
