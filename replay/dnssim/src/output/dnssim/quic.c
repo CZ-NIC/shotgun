@@ -22,7 +22,7 @@ typedef void (*_output_dnssim_quic_send_cb)(_output_dnssim_connection_t* conn,
 
 /* Forward decls **************************************************************/
 
-static int quic_send(_output_dnssim_connection_t *conn, uint32_t flags);
+static int quic_send(_output_dnssim_connection_t *conn);
 static int quic_send_data(_output_dnssim_connection_t *conn,
                           ngtcp2_vec *vecs, ngtcp2_ssize vecs_len,
                           _output_dnssim_query_stream_t* qry);
@@ -59,7 +59,7 @@ static void udp_recv_cb(uv_udp_t* udp, ssize_t nread, const uv_buf_t* buf,
         _output_dnssim_quic_process_input_data(conn, addr, nread, buf->base);
     free(buf->base);
 
-    quic_update_expiry_timer(conn);
+    quic_send(conn);
 }
 
 typedef struct _output_dnssim_quic_packet {
@@ -79,10 +79,9 @@ static void expiry_timer_cb(uv_timer_t *timer)
 {
     _output_dnssim_connection_t* conn = timer->data;
     ngtcp2_conn_handle_expiry(conn->quic->qconn, quic_timestamp());
-    int ret = quic_send(conn, NGTCP2_WRITE_STREAM_FLAG_NONE);
+    int ret = quic_send(conn);
     if (ret)
-        mlwarning("could not send quic data in nudge timer");
-    quic_update_expiry_timer(conn);
+        mlwarning("could not send quic data in expiry timer");
 }
 
 static void conn_timer_cb(uv_timer_t* handle)
@@ -140,6 +139,7 @@ static ngtcp2_conn* get_conn_cb(ngtcp2_crypto_conn_ref* qconn_ref)
 DNSSIM_MAYBE_UNUSED
 static void debug_log_printf(void* user_data, const char* fmt, ...)
 {
+    printf("NGTCP2: ");
     va_list vl;
     va_start(vl, fmt);
     vprintf(fmt, vl);
@@ -151,7 +151,8 @@ static int handshake_completed_cb(ngtcp2_conn *qconn, void *user_data)
 {
     _output_dnssim_connection_t* conn = user_data;
     // Activate for 0-RTT or 1-RTT
-    _output_dnssim_conn_early_data(conn);
+    if (conn->tls->has_ticket)
+        _output_dnssim_conn_early_data(conn);
     return 0;
 }
 
@@ -361,6 +362,7 @@ static int quic_send_data(_output_dnssim_connection_t *conn,
     if (uv_is_closing((uv_handle_t *)conn->transport.udp))
         return -1;
 
+    int ret = 0;
     const size_t destlen = ngtcp2_conn_get_max_tx_udp_payload_size(conn->quic->qconn);
     uint64_t ts = quic_timestamp();
     int64_t stream_id = (qry) ? qry->stream_id : -1;
@@ -382,17 +384,18 @@ static int quic_send_data(_output_dnssim_connection_t *conn,
         if (write_ret <= 0) {
             switch (write_ret) {
             case 0:
-                ngtcp2_conn_update_pkt_tx_time(conn->quic->qconn, ts);
-                return 0;
+                goto end;
             case NGTCP2_ERR_WRITE_MORE:
                 mlfatal("WRITE_MORE unsupported");
-                return 1;
+                ret = 1;
+                goto end;
             default:
                 ngtcp2_ccerr_set_transport_error(&conn->quic->ccerr,
                         ngtcp2_err_infer_quic_transport_error_code(write_ret),
                         NULL, 0);
                 quic_send_conn_close(conn);
-                return 1;
+                ret = 1;
+                goto end;
             }
         }
         if (send_datalen > 0)
@@ -408,11 +411,13 @@ static int quic_send_data(_output_dnssim_connection_t *conn,
             break;
     }
 
-    return 0;
-    //return quic_handle_write_ret(conn, write_ret, "ngtcp2_conn_writev_stream", pkt);
+end:
+    ngtcp2_conn_update_pkt_tx_time(conn->quic->qconn, ts);
+    quic_update_expiry_timer(conn);
+    return ret;
 }
 
-static int quic_send(_output_dnssim_connection_t *conn, uint32_t flags)
+static int quic_send(_output_dnssim_connection_t *conn)
 {
     return quic_send_data(conn, NULL, 0, NULL);
 }
@@ -479,7 +484,7 @@ int  _output_dnssim_quic_init(_output_dnssim_connection_t* conn)
     lfatal_oom(conn->expiry_timer = calloc(1, sizeof(uv_timer_t)));
     ret = uv_timer_init(&_self->loop, conn->expiry_timer);
     if (ret) {
-        lwarning("failed initialize quic nudge timer: %s", uv_strerror(ret));
+        lwarning("failed initialize quic expiry timer: %s", uv_strerror(ret));
         return ret;
     }
     conn->expiry_timer->data = conn;
@@ -592,8 +597,6 @@ int  _output_dnssim_quic_connect(output_dnssim_t* self, _output_dnssim_connectio
     gnutls_session_set_ptr(conn->tls->session, &conn->quic->qconn_ref);
     ngtcp2_conn_set_tls_native_handle(conn->quic->qconn, conn->tls->session);
 
-    quic_update_expiry_timer(conn);
-
     /* Set connection handshake timeout. */
     lfatal_oom(conn->handshake_timer = malloc(sizeof(uv_timer_t)));
     uv_timer_init(&_self->loop, conn->handshake_timer);
@@ -617,7 +620,7 @@ int  _output_dnssim_quic_connect(output_dnssim_t* self, _output_dnssim_connectio
         return ret;
     }
 
-    ret = quic_send(conn, NGTCP2_WRITE_STREAM_FLAG_NONE);
+    ret = quic_send(conn);
     if (ret) {
         lwarning("failed to send quic connection req");
         return ret;
