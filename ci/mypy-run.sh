@@ -5,6 +5,7 @@ set -e
 FILES=$(find . \
 	-path './ci' -prune -o \
 	-path './.git' -prune -o \
+	-path './replay/dnssim/vendor' -prune -o \
 	-name '*.py' -print)
 
 python3 -m mypy --ignore-missing-imports ${FILES}

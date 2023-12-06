@@ -57,7 +57,7 @@ black:
     - linux
     - amd64
   script:
-    - black --check .
+    - black --check . --extend-exclude 'replay/dnssim/vendor'
 
 mypy:
   <<: *debian

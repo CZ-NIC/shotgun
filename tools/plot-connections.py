@@ -21,7 +21,9 @@ JSON_VERSION = 20200527
 COLOR_ACTIVE = cycle(["royalblue", "cornflowerblue", "darkblue", "lightsteelblue"])
 COLOR_TCP_HS = cycle(["forestgreen", "limegreen", "darkgreen", "lightgreen"])
 COLOR_QUIC_HS = cycle(["darkmagenta", "darkorchid", "orchid", "magenta"])
-COLOR_QUIC_0RTT = cycle(["darkolivegreen", "darkseagreen", "darkslategray", "greenyellow"])
+COLOR_QUIC_0RTT = cycle(
+    ["darkolivegreen", "darkseagreen", "darkslategray", "greenyellow"]
+)
 COLOR_TLS_RESUMED = cycle(["orange", "moccasin", "darkorange", "antiquewhite"])
 COLOR_FAILED_HS = cycle(["gray", "silver", "black", "gainsboro"])
 
@@ -100,7 +102,14 @@ def main():
         "-k",
         "--kind",
         nargs="+",
-        choices=["active", "tcp_hs", "quic_hs", "quic_0rtt", "tls_resumed", "failed_hs"],
+        choices=[
+            "active",
+            "tcp_hs",
+            "quic_hs",
+            "quic_0rtt",
+            "tls_resumed",
+            "failed_hs",
+        ],
         default=["active", "tcp_hs", "tls_resumed", "failed_hs"],
         help="Which data should be rendered",
     )
