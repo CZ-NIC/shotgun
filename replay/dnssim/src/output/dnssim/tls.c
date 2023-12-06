@@ -332,6 +332,8 @@ int _output_dnssim_tls_init(_output_dnssim_connection_t* conn)
     if (conn->client->tls_ticket.size != 0) {
         gnutls_datum_t* ticket = &conn->client->tls_ticket;
         gnutls_session_set_data(conn->tls->session, ticket->data, ticket->size);
+        gnutls_free(conn->client->tls_ticket.data);
+        conn->client->tls_ticket.size = 0;
     }
 
     gnutls_transport_set_pull_function(conn->tls->session, _tls_pull);
