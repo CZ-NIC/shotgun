@@ -18,6 +18,8 @@ filepath to `-c/--config` option of `replay.py` utility.
 - `doh`
     - 50 % well-behaved DNS-over-HTTPS GET clients using TLS Session Resumption
     - 50 % well-behaved DNS-over-HTTPS POST clients using TLS Session Resumption
+- `doq`
+    - 100 % well-behaved DNS-over-QUIC clients
 - `mixed`
     - 60 % DNS-over-UDP clients
     - 5 % well-behaved DNS-over-TCP clients

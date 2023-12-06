@@ -32,6 +32,7 @@ The following configuration parameters for traffic senders are supported.
 - `tcp`: DNS over TCP
 - `dot`: DNS over TLS over TCP
 - `doh`: DNS over HTTP/2 over TLS over TCP
+- `doq`: DNS over QUIC
 
 ### weight
 
@@ -56,11 +57,21 @@ Integer. Defaults to 10 seconds.
 which can be used to select TLS protocol version and features, for example:
 
 ```
-gnutls_priority = "NORMAL:%NO_TICKETS"  # don't use TLS Session Resumption
-gnutls_priority = "NORMAL:-VERS-ALL:+VERS-TLS1.3"  # only use TLS 1.3
+gnutls_priority = "dnssim-default:%NO_TICKETS"  # don't use TLS Session Resumption
+gnutls_priority = "dnssim-default:-VERS-ALL:+VERS-TLS1.3"  # only use TLS 1.3
 ```
 
-String. Defaults to `NORMAL` which is determined by the system's GnuTLS library.
+String.
+
+A non-standard `dnssim-default` (case-sensitive) keyword is allowed to be at the
+beginning of the priority string, optionally with additional keywords separated
+by colons (`:`). For conventional TLS over TCP connections, this gets replaced
+by `NORMAL`, which lets the system's GnuTLS library determine the default
+settings. For QUIC, this always sets the minimum TLS version to 1.3 as dictated
+by [section 4.2 of RFC 9001](https://www.rfc-editor.org/rfc/rfc9001.html#section-4.2)
+and disables some of the less secure ciphers (settings taken from
+[Knot DNS](https://gitlab.nic.cz/knot/knot-dns/-/blob/v3.3.2/src/libknot/quic/quic.c#L50)).
+
 
 ### http_method
 
@@ -155,7 +166,7 @@ behavior to not use TLS Session Resumption, you can use:
 ```
 [defaults]
 [defaults.traffic]
-gnutls_priority = "NORMAL:%NO_TICKETS"
+gnutls_priority = "dnssim-default:%NO_TICKETS"
 ```
 
 ## [input] section
