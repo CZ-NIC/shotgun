@@ -66,10 +66,15 @@ static void udp_recv_cb(uv_udp_t* udp, ssize_t nread, const uv_buf_t* buf,
 {
     if (nread < 0) {
         mlwarning("quic nread error: %s (%s)", uv_strerror((int)nread), uv_err_name((int)nread));
+        if (buf)
+            free(buf->base);
         return;
     }
-    if (nread == 0)
+    if (nread == 0) {
+        if (buf)
+            free(buf->base);
         return;
+    }
 
     _output_dnssim_connection_t* conn = udp->data;
     char ntop_buf[INET6_ADDRSTRLEN];
@@ -430,22 +435,27 @@ static int quic_send_data(_output_dnssim_connection_t *conn,
                     quic_defer(conn, vecs, vecs_len, qry);
                     ret = 1;
                 }
+                free(pkt);
                 goto end;
             case NGTCP2_ERR_STREAM_SHUT_WR:
+                free(pkt);
                 goto end;
             case NGTCP2_ERR_WRITE_MORE:
                 mlfatal("WRITE_MORE unsupported");
                 ret = write_ret;
+                free(pkt);
                 goto end;
             case NGTCP2_ERR_DRAINING:
             case NGTCP2_ERR_CLOSING:
             case NGTCP2_ERR_DROP_CONN:
                 _output_dnssim_conn_close(conn);
+                free(pkt);
                 return 0;
             default:
                 ngtcp2_ccerr_set_liberr(&conn->quic->ccerr, write_ret, NULL, 0);
                 bye = true;
                 ret = write_ret;
+                free(pkt);
                 goto end;
             }
         }
