@@ -70,7 +70,6 @@ struct _output_dnssim_query {
         _OUTPUT_DNSSIM_QUERY_PENDING_CLOSE,
         _OUTPUT_DNSSIM_QUERY_WRITE_FAILED,
         _OUTPUT_DNSSIM_QUERY_SENT,
-        _OUTPUT_DNSSIM_QUERY_ORPHANED
     } state;
 };
 
@@ -183,7 +182,6 @@ struct _output_dnssim_quic_sent_payload {
 typedef struct _output_dnssim_quic_ctx {
     ngtcp2_conn* qconn;
     ngtcp2_crypto_conn_ref qconn_ref;
-    ngtcp2_pkt_info pi;
     ngtcp2_ccerr ccerr;
 
     _output_dnssim_quic_sent_payload_t* sent_payloads;
@@ -248,7 +246,7 @@ struct _output_dnssim_connection {
         _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE   = 10,
         _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE         = 20,
         _OUTPUT_DNSSIM_CONN_EARLY_DATA            = 25,
-        _OUTPUT_DNSSIM_CONN_EARLY_DATA_SENT       = 26,
+        _OUTPUT_DNSSIM_CONN_EARLY_DATA_CONGESTED  = 26,
         _OUTPUT_DNSSIM_CONN_ACTIVE                = 30,
         _OUTPUT_DNSSIM_CONN_CONGESTED             = 35,
         _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED       = 38,

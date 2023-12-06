@@ -12,7 +12,7 @@ static core_log_t _log = LOG_T_INIT("output.dnssim");
 
 static bool _conn_is_connecting(const _output_dnssim_connection_t* conn)
 {
-    return (conn->state >= _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE && conn->state <= _OUTPUT_DNSSIM_CONN_ACTIVE);
+    return (conn->state >= _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE && conn->state <= _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE);
 }
 
 static bool _conn_has_transport(const _output_dnssim_connection_t* conn)
@@ -106,7 +106,7 @@ void _output_dnssim_conn_close(_output_dnssim_connection_t* conn)
     case _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE:
     case _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE:
     case _OUTPUT_DNSSIM_CONN_EARLY_DATA:
-    case _OUTPUT_DNSSIM_CONN_EARLY_DATA_SENT:
+    case _OUTPUT_DNSSIM_CONN_EARLY_DATA_CONGESTED:
         conn->stats->conn_handshakes_failed++;
         self->stats_sum->conn_handshakes_failed++;
         break;
@@ -183,7 +183,7 @@ void _output_dnssim_conn_bye(_output_dnssim_connection_t* conn)
     case _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE:
     case _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE:
     case _OUTPUT_DNSSIM_CONN_EARLY_DATA:
-    case _OUTPUT_DNSSIM_CONN_EARLY_DATA_SENT:
+    case _OUTPUT_DNSSIM_CONN_EARLY_DATA_CONGESTED:
         _output_dnssim_conn_close(conn);
         return;
 
@@ -239,42 +239,25 @@ void _output_dnssim_conn_idle(_output_dnssim_connection_t* conn)
     }
 }
 
-static void reset_query_state(_output_dnssim_query_stream_t* qry)
-{
-    qry->conn         = NULL;
-    qry->qry.state    = _OUTPUT_DNSSIM_QUERY_ORPHANED;
-    qry->stream_id    = -1;
-    qry->recv_buf_len = 0;
-    if (qry->recv_buf != NULL) {
-        free(qry->recv_buf);
-        qry->recv_buf = NULL;
-    }
-}
-
-void _output_dnssim_conn_move_query_to_pending(_output_dnssim_query_stream_t* qry)
-{
-    mlassert(qry->conn, "query must be associated with conn");
-    mlassert(qry->conn->client, "conn must be associated with client");
-
-    _output_dnssim_connection_t* conn = qry->conn;
-    _ll_try_remove(conn->queued, &qry->qry);
-    _ll_try_remove(conn->sent, &qry->qry);
-    reset_query_state(qry);
-    _ll_append(conn->client->pending, &qry->qry);
-}
-
 void _output_dnssim_conn_move_queries_to_pending(_output_dnssim_query_stream_t** qry_list)
 {
     _output_dnssim_query_stream_t* qry = *qry_list;
     _output_dnssim_query_stream_t* qry_tmp;
     while (qry != NULL) {
         mlassert(qry->conn, "query must be associated with conn");
-        //mlassert(qry->conn->state == _OUTPUT_DNSSIM_CONN_CLOSED, "conn must be closed");
+        mlassert(qry->conn->state == _OUTPUT_DNSSIM_CONN_CLOSED, "conn must be closed");
         mlassert(qry->conn->client, "conn must be associated with client");
         qry_tmp       = (_output_dnssim_query_stream_t*)qry->qry.next;
         qry->qry.next = NULL;
         _ll_append(qry->conn->client->pending, &qry->qry);
-        reset_query_state(qry);
+        qry->conn         = NULL;
+        qry->qry.state    = _OUTPUT_DNSSIM_QUERY_PENDING_WRITE;
+        qry->stream_id    = -1;
+        qry->recv_buf_len = 0;
+        if (qry->recv_buf != NULL) {
+            free(qry->recv_buf);
+            qry->recv_buf = NULL;
+        }
         qry = qry_tmp;
     }
     *qry_list = NULL;
@@ -322,8 +305,6 @@ static void _send_pending_queries(_output_dnssim_connection_t* conn)
                 break;
             }
         }
-        if (conn->state == _OUTPUT_DNSSIM_CONN_EARLY_DATA)
-            conn->state = _OUTPUT_DNSSIM_CONN_EARLY_DATA_SENT;
         qry = next;
     }
 }

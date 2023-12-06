@@ -114,8 +114,16 @@ void output_dnssim_free(output_dnssim_t* self)
     }
 
     for (i = 0; i < self->max_clients; ++i) {
-        if (_self->client_arr[i].tls_ticket.size != 0) {
+        _output_dnssim_client_t* client = &_self->client_arr[i];
+        if (client->tls_ticket.size != 0) {
             gnutls_free(_self->client_arr[i].tls_ticket.data);
+        }
+
+        _output_dnssim_0rtt_data_t* zrttd = client->zero_rtt_data;
+        while (zrttd) {
+            _output_dnssim_0rtt_data_t* next = zrttd->next;
+            free(zrttd);
+            zrttd = next;
         }
     }
     free(_self->client_arr);
