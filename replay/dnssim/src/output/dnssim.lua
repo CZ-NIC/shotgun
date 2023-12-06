@@ -37,7 +37,8 @@ require("dnsjit.core.log")
 require("dnsjit.core.receiver_h")
 
 local loader = require("dnsjit.core.loader")
-loader.load("shotgun-output-dnssim/dnssim")
+local dnssim = loader.load("shotgun-output-dnssim/dnssim")
+assert(dnssim ~= nil, "dnssim could not be loaded")
 
 local ffi = require("ffi")
 -- below is content of dnssim.h
