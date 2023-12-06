@@ -43,19 +43,30 @@ local function send_thread_main(thr)
 	local channel = thr:pop()
 	local running
 
-	-- output must be global (per thread) to be accesible in loadstring()
-	-- luacheck: globals output, ignore log
-	output = require("shotgun.output.dnssim").new(thr:pop())
-	local log = output:log(thr:pop())
-
-	output:target(thr:pop(), thr:pop())
-	output:timeout(thr:pop())
-	output:handshake_timeout(thr:pop())
-	output:idle_timeout(thr:pop())
-
+	local max_clients = thr:pop()
+	local name = thr:pop()
+	local target_ip = thr:pop()
+	local target_port = thr:pop()
+	local timeout_s = thr:pop()
+	local handshake_timeout_s = thr:pop()
+	local idle_timeout_s = thr:pop()
 	local protocol_func = thr:pop()
 	local gnutls_priority = thr:pop()
 	local http_method = thr:pop()
+	local output_file = thr:pop()
+	local batch_size = thr:pop()
+	local nbind = thr:pop()
+
+	-- output must be global (per thread) to be accesible in loadstring()
+	-- luacheck: globals output, ignore log
+	output = require("shotgun.output.dnssim").new(max_clients)
+	local log = output:log(name)
+
+	output:target(target_ip, target_port)
+	output:timeout(timeout_s)
+	output:handshake_timeout(handshake_timeout_s)
+	output:idle_timeout(idle_timeout_s)
+
 	local cmd = "output:" .. protocol_func
 
 	if protocol_func == "udp" then
@@ -76,10 +87,6 @@ local function send_thread_main(thr)
 	output:stats_collect(1)
 	output:free_after_use(true)
 
-	local outfile = thr:pop()
-	local batch_size = thr:pop()
-
-	local nbind = thr:pop()
 	for _ = 1, nbind do
 		output:bind(thr:pop())
 	end
@@ -131,7 +138,7 @@ local function send_thread_main(thr)
 		running = output:run_nowait()
 	end
 
-	output:export(outfile)
+	output:export(output_file)
 end
 
 
