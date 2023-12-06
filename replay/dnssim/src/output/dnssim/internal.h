@@ -178,6 +178,14 @@ struct _output_dnssim_quic_sent_payload {
     char data[];
 };
 
+typedef struct _output_dnssim_quic_deferred _output_dnssim_quic_deferred_t;
+struct _output_dnssim_quic_deferred {
+    _output_dnssim_quic_deferred_t* next;
+    ngtcp2_vec vecs[2];
+    int vecs_len;
+    _output_dnssim_query_stream_t* qry;
+};
+
 /* QUIC context for a single connection. */
 typedef struct _output_dnssim_quic_ctx {
     ngtcp2_conn* qconn;
@@ -185,6 +193,7 @@ typedef struct _output_dnssim_quic_ctx {
     ngtcp2_ccerr ccerr;
 
     _output_dnssim_quic_sent_payload_t* sent_payloads;
+    _output_dnssim_quic_deferred_t* deferreds;
 
     uint8_t secret[32];
 } _output_dnssim_quic_ctx_t;

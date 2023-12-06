@@ -116,7 +116,7 @@ static void expiry_timer_cb(uv_timer_t *timer)
         return;
     }
     ret = quic_send(conn, false);
-    if (ret)
+    if (ret && ret != 1)
         mlwarning("could not send quic data in expiry timer: %s", ngtcp2_strerror(ret));
 }
 
@@ -399,6 +399,22 @@ static void quic_send_bye(_output_dnssim_connection_t* conn)
     _output_dnssim_conn_close(conn);
 }
 
+static void quic_defer(_output_dnssim_connection_t *conn,
+                       ngtcp2_vec *vecs, ngtcp2_ssize vecs_len,
+                       _output_dnssim_query_stream_t* qry)
+{
+    mlassert(vecs_len <= 2, "more than 2 vecs not supported");
+
+    _output_dnssim_quic_deferred_t* d;
+    mlfatal_oom(d = calloc(1, sizeof(_output_dnssim_quic_deferred_t)));
+    if (vecs && vecs_len)
+        memcpy(d->vecs, vecs, sizeof(ngtcp2_vec[vecs_len]));
+    d->vecs_len = vecs_len;
+    d->qry = qry;
+
+    _ll_append(conn->quic->deferreds, d);
+}
+
 /** Sends stream packets to server - returns NGTCP2 errors. */
 static int quic_send_data(_output_dnssim_connection_t *conn,
                           ngtcp2_vec *vecs, ngtcp2_ssize vecs_len,
@@ -435,6 +451,11 @@ static int quic_send_data(_output_dnssim_connection_t *conn,
         if (write_ret <= 0) {
             switch (write_ret) {
             case 0:
+                if (send_datalen && vecs && vecs_len && qry) {
+                    quic_defer(conn, vecs, vecs_len, qry);
+                    ret = 1;
+                }
+                goto end;
             case NGTCP2_ERR_STREAM_SHUT_WR:
                 goto end;
             case NGTCP2_ERR_WRITE_MORE:
@@ -473,6 +494,16 @@ end:
 /** Sends technical QUIC packets to server - returns NGTCP2 errors. */
 static int quic_send(_output_dnssim_connection_t *conn, bool bye)
 {
+    while (!bye && conn->quic->deferreds) {
+        _output_dnssim_quic_deferred_t* d = conn->quic->deferreds;
+        _ll_remove(conn->quic->deferreds, d);
+        _output_dnssim_quic_deferred_t dd = *d;
+        free(d);
+
+        int ret = quic_send_data(conn, dd.vecs, dd.vecs_len, dd.qry, false);
+        if (ret)
+            break;
+    }
     return quic_send_data(conn, NULL, 0, NULL, bye);
 }
 
@@ -682,7 +713,7 @@ int  _output_dnssim_quic_connect(output_dnssim_t* self, _output_dnssim_connectio
     }
 
     ret = quic_send(conn, false);
-    if (ret) {
+    if (ret && ret != 1) {
         lwarning("failed to send quic connection req: %s", ngtcp2_strerror(ret));
         return ret;
     }
@@ -756,7 +787,7 @@ void _output_dnssim_quic_process_input_data(_output_dnssim_connection_t* conn,
     mlassert(ret == 0, "ngtcp2_conn_read_pkt returned non-zero");
 
     ret = quic_send(conn, false);
-    if (ret)
+    if (ret && ret != 1)
         mlwarning("could not send quic data after reception: %s", ngtcp2_strerror(ret));
 }
 
@@ -816,7 +847,7 @@ void _output_dnssim_quic_bye(_output_dnssim_connection_t* conn)
     mlassert(conn->state <= _OUTPUT_DNSSIM_CONN_GRACEFUL_CLOSING, "state is already closing");
 
     int ret = quic_send(conn, true);
-    if (ret)
+    if (ret && ret != 1)
         mlwarning("error sending bye: %s", ngtcp2_strerror(ret));
 }
 
@@ -874,7 +905,7 @@ void _output_dnssim_quic_write_query(_output_dnssim_connection_t* conn, _output_
 
     lassert(qry->stream_id >= 0, "stream_id not assigned");
     ret = quic_send_data(conn, vecs, 2, qry, false);
-    if (ret) {
+    if (ret && ret != 1) {
         lwarning("failed to send packet opening bidi stream: %s", ngtcp2_strerror(ret));
         return;
     }
