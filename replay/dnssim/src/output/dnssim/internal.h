@@ -382,7 +382,7 @@ void _output_dnssim_conn_activate(_output_dnssim_connection_t* conn);
 void _output_dnssim_conn_maybe_free(_output_dnssim_connection_t* conn);
 void _output_dnssim_read_dns_stream(_output_dnssim_connection_t* conn, size_t len, const char* data, int64_t stream_id);
 void _output_dnssim_read_dnsmsg(_output_dnssim_connection_t* conn, size_t len, const char* data);
-_output_dnssim_query_stream_t* _output_dnssim_get_stream_qry(_output_dnssim_connection_t* conn, int64_t stream_id);
+_output_dnssim_query_stream_t* _output_dnssim_get_stream_query(_output_dnssim_connection_t* conn, int64_t stream_id);
 void _output_dnssim_0rtt_data_push(_output_dnssim_client_t* client,
                                    _output_dnssim_0rtt_data_t* zero_rtt_data);
 void _output_dnssim_0rtt_data_pop_and_free(_output_dnssim_client_t* client);

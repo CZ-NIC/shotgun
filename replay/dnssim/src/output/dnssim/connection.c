@@ -485,7 +485,7 @@ static int _process_dnsmsg(_output_dnssim_connection_t* conn,
         lassert(stream->stream_id >= 0, "quic stream must have a non-negative id");
 
         /* TODO - maybe assign the query pointer to the stream? */
-        qry = &_output_dnssim_get_stream_qry(conn, stream->stream_id)->qry;
+        qry = &_output_dnssim_get_stream_query(conn, stream->stream_id)->qry;
         if (qry) {
             ret = _output_dnssim_answers_request(qry->req, &dns_a);
             switch (ret) {
@@ -676,7 +676,7 @@ void _output_dnssim_read_dnsmsg(_output_dnssim_connection_t* conn, size_t len, c
     stream->data_free_after_use = false;
 }
 
-_output_dnssim_query_stream_t* _output_dnssim_get_stream_qry(
+_output_dnssim_query_stream_t* _output_dnssim_get_stream_query(
         _output_dnssim_connection_t* conn, int64_t stream_id)
 {
     mlassert(conn, "conn is nil");

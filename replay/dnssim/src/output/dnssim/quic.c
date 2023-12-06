@@ -211,7 +211,7 @@ static int recv_stream_data_cb(ngtcp2_conn* qconn, uint32_t flags,
     _output_dnssim_connection_t* conn = (_output_dnssim_connection_t*)user_data;
     mlassert(conn, "conn is nil");
 
-    _output_dnssim_query_stream_t* qry = _output_dnssim_get_stream_qry(conn, stream_id);
+    _output_dnssim_query_stream_t* qry = _output_dnssim_get_stream_query(conn, stream_id);
     mldebug("quic: data chunk recv, qconn=%p, len=%d", qconn, datalen);
     if (!qry) {
         mldebug("no query associated with this stream id, ignoring");
@@ -244,7 +244,7 @@ static int stream_close_cb(ngtcp2_conn* qconn, uint32_t flags,
         free(stream_user_data);
     }
 
-    _output_dnssim_query_stream_t* qry = _output_dnssim_get_stream_qry(conn, stream_id);
+    _output_dnssim_query_stream_t* qry = _output_dnssim_get_stream_query(conn, stream_id);
     mldebug("quic: stream closed, qconn=%p", qconn);
     if (!qry) {
         mldebug("no query associated with this stream id, ignoring");
