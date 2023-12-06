@@ -231,7 +231,7 @@ void _output_dnssim_conn_idle(_output_dnssim_connection_t* conn)
 
     if (conn->queued == NULL && conn->sent == NULL) {
         if (conn->idle_timer == NULL)
-            _output_dnssim_conn_close(conn);
+            _output_dnssim_conn_bye(conn);
         else if (!conn->is_idle) {
             conn->is_idle = true;
             uv_timer_again(conn->idle_timer);
