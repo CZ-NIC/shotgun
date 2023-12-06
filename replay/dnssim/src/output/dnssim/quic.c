@@ -219,31 +219,6 @@ static int handshake_confirmed_cb(ngtcp2_conn *qconn, void *user_data)
 
     conn->is_0rtt = false;
 
-    /* Store 0-RTT data */
-    if (conn->client->dnssim->zero_rtt) {
-        _output_dnssim_0rtt_data_t* zrttd;
-        mlfatal_oom(zrttd = calloc(1, sizeof(*zrttd)));
-        for (;;) {
-            zrttd->capacity = conn->client->dnssim->zero_rtt_data_initial_capacity;
-            mlfatal_oom(zrttd->data = malloc(zrttd->capacity));
-            ngtcp2_ssize ssize = ngtcp2_conn_encode_0rtt_transport_params(conn->quic->qconn, zrttd->data, zrttd->capacity);
-            if (ssize == NGTCP2_ERR_NOBUF) {
-                free(zrttd->data);
-                conn->client->dnssim->zero_rtt_data_initial_capacity *= 2;
-                continue;
-            }
-            if (ssize < 0) {
-                mlwarning("Could not encode 0-RTT data: %s", ngtcp2_strerror(ssize));
-                free(zrttd->data);
-                free(zrttd);
-            } else {
-                zrttd->used = ssize;
-                _output_dnssim_0rtt_data_push(conn->client, zrttd);
-            }
-            break;
-        }
-    }
-
     _output_dnssim_conn_activate(conn);
     return 0;
 }
@@ -529,6 +504,37 @@ static void quic_check_max_streams(_output_dnssim_connection_t* conn)
             conn->state = _OUTPUT_DNSSIM_CONN_EARLY_DATA_CONGESTED;
             break;
         default:
+            break;
+        }
+    }
+}
+
+static void quic_store_0rtt(_output_dnssim_connection_t* conn)
+{
+    mlassert(conn, "conn is nil");
+    mlassert(conn->quic, "conn->quic is nil");
+
+    /* Store 0-RTT data */
+    if (conn->client->dnssim->zero_rtt) {
+        _output_dnssim_0rtt_data_t* zrttd;
+        mlfatal_oom(zrttd = calloc(1, sizeof(*zrttd)));
+        for (;;) {
+            zrttd->capacity = conn->client->dnssim->zero_rtt_data_initial_capacity;
+            mlfatal_oom(zrttd->data = malloc(zrttd->capacity));
+            ngtcp2_ssize ssize = ngtcp2_conn_encode_0rtt_transport_params(conn->quic->qconn, zrttd->data, zrttd->capacity);
+            if (ssize == NGTCP2_ERR_NOBUF) {
+                free(zrttd->data);
+                conn->client->dnssim->zero_rtt_data_initial_capacity *= 2;
+                continue;
+            }
+            if (ssize < 0) {
+                mlwarning("Could not encode 0-RTT data: %s", ngtcp2_strerror(ssize));
+                free(zrttd->data);
+                free(zrttd);
+            } else {
+                zrttd->used = ssize;
+                _output_dnssim_0rtt_data_push(conn->client, zrttd);
+            }
             break;
         }
     }
@@ -831,6 +837,7 @@ void _output_dnssim_quic_close(_output_dnssim_connection_t* conn)
         if (ret)
             mlwarning("disconnect failure: %s", uv_strerror(ret));
         uv_udp_recv_stop(conn->transport.udp);
+        quic_store_0rtt(conn);
         uv_close((uv_handle_t*)conn->transport.udp, _output_dnssim_quic_handle_on_close);
     } else {
         mlassert(conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_NULL,
