@@ -248,6 +248,13 @@ static int stream_close_cb(ngtcp2_conn* qconn, uint32_t flags,
         return 0;
     }
 
+    if (flags & NGTCP2_STREAM_CLOSE_FLAG_APP_ERROR_CODE_SET) {
+        mldebug("stream closed with app error code: %" PRIu64, app_error_code);
+        _output_dnssim_conn_move_query_to_pending(qry);
+        _output_dnssim_handle_pending_queries(conn->client);
+        return 0;
+    }
+
     if (qry->recv_buf_len)
         _output_dnssim_read_dns_stream(conn, qry->recv_buf_len, (char*)qry->recv_buf, stream_id);
 
@@ -558,7 +565,7 @@ int  _output_dnssim_quic_connect(output_dnssim_t* self, _output_dnssim_connectio
     }
 
     /* Set up 0-RTT */
-    if (conn->client->dnssim->zero_rtt && conn->client->zero_rtt_data) {
+    if (conn->client->dnssim->zero_rtt && conn->client->zero_rtt_data && conn->tls->has_ticket) {
         ret = ngtcp2_conn_decode_and_set_0rtt_transport_params(
                 conn->quic->qconn,
                 conn->client->zero_rtt_data->data,

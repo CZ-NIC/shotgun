@@ -150,6 +150,7 @@ typedef enum _output_dnssim_read_state {
 /* TLS-related data for a single connection. */
 typedef struct _output_dnssim_tls_ctx {
     gnutls_session_t session;
+    bool has_ticket;
     uint8_t*         buf;
     ssize_t          buf_len;
     ssize_t          buf_pos;

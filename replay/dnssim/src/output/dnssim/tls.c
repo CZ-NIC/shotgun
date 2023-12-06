@@ -287,6 +287,7 @@ int  _output_dnssim_tls_init(_output_dnssim_connection_t* conn, bool has_0rtt)
 
     int ret;
     mlfatal_oom(conn->tls = malloc(sizeof(_output_dnssim_tls_ctx_t)));
+    conn->tls->has_ticket       = false;
     conn->tls->buf              = NULL;
     conn->tls->buf_len          = 0;
     conn->tls->buf_pos          = 0;
@@ -294,9 +295,8 @@ int  _output_dnssim_tls_init(_output_dnssim_connection_t* conn, bool has_0rtt)
 
     unsigned int flags = GNUTLS_CLIENT | GNUTLS_NONBLOCK;
 
-    if (has_0rtt) {
+    if (has_0rtt && conn->client->tls_ticket.size != 0) {
         flags |= GNUTLS_ENABLE_EARLY_DATA
-            | GNUTLS_ENABLE_FALSE_START
             | GNUTLS_NO_END_OF_EARLY_DATA;
     }
 
@@ -344,6 +344,7 @@ int  _output_dnssim_tls_init(_output_dnssim_connection_t* conn, bool has_0rtt)
         gnutls_session_set_data(conn->tls->session, ticket->data, ticket->size);
         gnutls_free(conn->client->tls_ticket.data);
         conn->client->tls_ticket.size = 0;
+        conn->tls->has_ticket = true;
     }
 
     gnutls_transport_set_pull_function(conn->tls->session, _tls_pull);
