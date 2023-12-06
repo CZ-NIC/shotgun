@@ -275,6 +275,7 @@ static void _send_pending_queries(_output_dnssim_connection_t* conn)
         _output_dnssim_query_stream_t* next = (_output_dnssim_query_stream_t*)qry->qry.next;
         qry->qry.is_0rtt = conn->is_0rtt;
         if (qry->qry.is_0rtt) {
+            conn->had_0rtt_success = true;
             conn->stats->quic_0rtt_sent++;
             self->stats_sum->quic_0rtt_sent++;
         }
@@ -387,8 +388,11 @@ void _output_dnssim_0rtt_data_push(_output_dnssim_client_t* client,
                                    _output_dnssim_0rtt_data_t* zero_rtt_data)
 {
     mlassert(!zero_rtt_data->next, "zero_rtt_data->next must be NULL before push");
+    mlassert(client->zero_rtt_data_count < _OUTPUT_DNSSIM_CLIENT_MAX_0RTT_DATA,
+            "0-RTT data is over limit");
     zero_rtt_data->next = client->zero_rtt_data;
     client->zero_rtt_data = zero_rtt_data;
+    client->zero_rtt_data_count++;
 }
 
 void _output_dnssim_0rtt_data_pop_and_free(_output_dnssim_client_t* client)
@@ -398,6 +402,7 @@ void _output_dnssim_0rtt_data_pop_and_free(_output_dnssim_client_t* client)
     client->zero_rtt_data = zrttd->next;
     free(zrttd->data);
     free(zrttd);
+    client->zero_rtt_data_count--;
 }
 
 static _output_dnssim_stream_t*

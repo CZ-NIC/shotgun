@@ -57,6 +57,7 @@ static int quic_send_data(_output_dnssim_connection_t *conn,
 static uint64_t quic_timestamp(void);
 static void quic_update_expiry_timer(_output_dnssim_connection_t *conn);
 static void quic_check_max_streams(_output_dnssim_connection_t* conn);
+static void quic_store_0rtt(_output_dnssim_connection_t* conn);
 
 
 /* Callbacks for LibUV ********************************************************/
@@ -231,6 +232,7 @@ static int handshake_confirmed_cb(ngtcp2_conn *qconn, void *user_data)
 
     conn->is_0rtt = false;
 
+    quic_store_0rtt(conn);
     _output_dnssim_conn_activate(conn);
     return 0;
 }
@@ -533,7 +535,8 @@ static void quic_store_0rtt(_output_dnssim_connection_t* conn)
     output_dnssim_t* self = conn->client->dnssim;
 
     /* Store 0-RTT data */
-    if (conn->client->dnssim->zero_rtt) {
+    if (conn->client->dnssim->zero_rtt
+            && conn->client->zero_rtt_data_count < _OUTPUT_DNSSIM_CLIENT_MAX_0RTT_DATA) {
         _output_dnssim_0rtt_data_t* zrttd;
         lfatal_oom(zrttd = calloc(1, sizeof(*zrttd)));
         for (;;) {
@@ -696,7 +699,6 @@ int  _output_dnssim_quic_connect(output_dnssim_t* self, _output_dnssim_connectio
         } else {
             conn->is_0rtt = true;
         }
-        _output_dnssim_0rtt_data_pop_and_free(conn->client);
     }
 
     ret = ngtcp2_crypto_gnutls_configure_client_session(conn->tls->session);
@@ -857,7 +859,10 @@ void _output_dnssim_quic_close(_output_dnssim_connection_t* conn)
         if (ret)
             lwarning("disconnect failure: %s", uv_strerror(ret));
         uv_udp_recv_stop(conn->transport.udp);
-        quic_store_0rtt(conn);
+        if (conn->is_0rtt && !conn->had_0rtt_success) {
+            // 0-RTT probably failed
+            _output_dnssim_0rtt_data_pop_and_free(conn->client);
+        }
         uv_close((uv_handle_t*)conn->transport.udp, _output_dnssim_quic_handle_on_close);
     } else {
         lassert(conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_NULL,

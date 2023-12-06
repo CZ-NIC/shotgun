@@ -38,6 +38,8 @@
 #define MAX_DNSMSG_SIZE 65535
 #define WIRE_BUF_SIZE (MAX_DNSMSG_SIZE + 2 + 16384) /** max tcplen + 2b tcplen + 16kb tls record */
 
+#define _OUTPUT_DNSSIM_CLIENT_MAX_0RTT_DATA 8
+
 typedef struct _output_dnssim_request     _output_dnssim_request_t;
 typedef struct _output_dnssim_connection  _output_dnssim_connection_t;
 typedef struct _output_dnssim_client      _output_dnssim_client_t;
@@ -234,6 +236,7 @@ struct _output_dnssim_connection {
 
     /* Whether the connection is in an early data state. */
     bool is_0rtt;
+    bool had_0rtt_success;
 
     /* Timer that nudges the connection logic on expiry - e.g. ngtcp2. */
     uv_timer_t *expiry_timer;
@@ -314,6 +317,7 @@ struct _output_dnssim_client {
 
     /* Stack of encoded 0-RTT data. */
     _output_dnssim_0rtt_data_t* zero_rtt_data;
+    size_t zero_rtt_data_count;
 
     /* List of queries that are pending to be sent over any available connection. */
     _output_dnssim_query_t* pending;
