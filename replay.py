@@ -24,6 +24,7 @@ DEFAULT_TRAFFIC_FIELDS = [
     "handshake_timeout_s",
     "idle_timeout_s",
     "gnutls_priority",
+    "zero_rtt",
     "http_method",
     "dns_port",
     "dot_port",

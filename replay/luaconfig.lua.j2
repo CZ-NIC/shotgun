@@ -17,6 +17,7 @@ config.threads[{{ loop.index }}] = {
 	idle_timeout_s = {{ thread.idle_timeout_s|default(10)|int }},
 	protocol_func = "{{ thread.protocol_func|default('udp') }}",
 	gnutls_priority = "{{ thread.gnutls_priority|default('dnssim-default') }}",
+	zero_rtt = {{ thread.zero_rtt|default(1)|int }},
 	http_method = "{{ thread.http_method|default('GET') }}",
 	output_file = "{{ thread.output_file }}",
 	channel_size = {{ thread.channel_size|default(2048)|int }},

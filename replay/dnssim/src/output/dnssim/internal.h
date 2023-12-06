@@ -285,6 +285,16 @@ struct _output_dnssim_connection {
  * Client structure.
  */
 
+typedef struct _output_dnssim_0rtt_data _output_dnssim_0rtt_data_t;
+struct _output_dnssim_0rtt_data {
+    _output_dnssim_0rtt_data_t* next;
+
+    size_t capacity;
+    size_t used;
+    uint8_t* data;
+};
+
+
 struct _output_dnssim_client {
     /* Dnssim component this client belongs to. */
     output_dnssim_t* dnssim;
@@ -293,6 +303,9 @@ struct _output_dnssim_client {
      * Multiple connections may be used (e.g. some are already closed for writing).
      */
     _output_dnssim_connection_t* conn;
+
+    /* Stack of encoded 0-RTT data. */
+    _output_dnssim_0rtt_data_t* zero_rtt_data;
 
     /* List of queries that are pending to be sent over any available connection. */
     _output_dnssim_query_t* pending;
@@ -370,6 +383,10 @@ void _output_dnssim_conn_maybe_free(_output_dnssim_connection_t* conn);
 void _output_dnssim_read_dns_stream(_output_dnssim_connection_t* conn, size_t len, const char* data, int64_t stream_id);
 void _output_dnssim_read_dnsmsg(_output_dnssim_connection_t* conn, size_t len, const char* data);
 _output_dnssim_query_stream_t* _output_dnssim_get_stream_qry(_output_dnssim_connection_t* conn, int64_t stream_id);
+void _output_dnssim_0rtt_data_push(_output_dnssim_client_t* client,
+                                   _output_dnssim_0rtt_data_t* zero_rtt_data);
+void _output_dnssim_0rtt_data_pop_and_free(_output_dnssim_client_t* client);
+
 
 #if DNSSIM_HAS_GNUTLS
 void _output_dnssim_rand(void *data, size_t len);

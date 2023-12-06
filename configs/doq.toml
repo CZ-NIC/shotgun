@@ -22,6 +22,11 @@ protocol = "doq"
 #protocol = "doq"
 #gnutls_priority = "dnssim-default:%NO_TICKETS"
 
+# DoQ clients without QUIC 0-RTT
+#[traffic.DoQ-no_0rtt]
+#protocol = "doq"
+#zero_rtt = false
+
 [charts]
 
 [charts.latency]
@@ -45,5 +50,5 @@ title = "Handshakes over Time"
 
 [charts.resumptions]
 type = "connections"
-kind = ["quic_hs", "tls_resumed"]
-title = "TLS Session Resumption for New Connections"
+kind = ["quic_hs", "tls_resumed", "quic_0rtt"]
+title = "TLS Session Resumption and QUIC 0-RTT for New Connections"

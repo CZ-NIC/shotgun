@@ -173,6 +173,32 @@ static int handshake_confirmed_cb(ngtcp2_conn *qconn, void *user_data)
     _output_dnssim_connection_t* conn = user_data;
     if (gnutls_session_is_resumed(conn->tls->session))
         conn->stats->conn_resumed++;
+
+    /* Store 0-RTT data */
+    if (conn->client->dnssim->zero_rtt) {
+        _output_dnssim_0rtt_data_t* zrttd;
+        mlfatal_oom(zrttd = calloc(1, sizeof(*zrttd)));
+        for (;;) {
+            zrttd->capacity = conn->client->dnssim->zero_rtt_data_initial_capacity;
+            mlfatal_oom(zrttd->data = malloc(zrttd->capacity));
+            ngtcp2_ssize ssize = ngtcp2_conn_encode_0rtt_transport_params(conn->quic->qconn, zrttd->data, zrttd->capacity);
+            if (ssize == NGTCP2_ERR_NOBUF) {
+                free(zrttd->data);
+                conn->client->dnssim->zero_rtt_data_initial_capacity *= 2;
+                continue;
+            }
+            if (ssize < 0) {
+                mlwarning("Could not encode 0-RTT data: %s", ngtcp2_strerror(ssize));
+                free(zrttd->data);
+                free(zrttd);
+            } else {
+                zrttd->used = ssize;
+                _output_dnssim_0rtt_data_push(conn->client, zrttd);
+            }
+            break;
+        }
+    }
+
     _output_dnssim_conn_activate(conn);
     return 0;
 }
@@ -518,6 +544,20 @@ int  _output_dnssim_quic_connect(output_dnssim_t* self, _output_dnssim_connectio
 
     quic_update_expiry_timer(conn);
 
+    /* Set up 0-RTT */
+    if (conn->client->dnssim->zero_rtt && conn->client->zero_rtt_data) {
+        ret = ngtcp2_conn_decode_and_set_0rtt_transport_params(
+                conn->quic->qconn,
+                conn->client->zero_rtt_data->data,
+                conn->client->zero_rtt_data->used);
+        if (ret)
+            lwarning("Unable to decode 0-RTT data: %s", ngtcp2_strerror(ret));
+        _output_dnssim_0rtt_data_pop_and_free(conn->client);
+        conn->stats->conn_quic_0rtt_loaded++;
+        _output_dnssim_conn_activate(conn);
+        /* TODO: 0-RTT rejected */
+    }
+
     /* Set connection handshake timeout. */
     lfatal_oom(conn->handshake_timer = malloc(sizeof(uv_timer_t)));
     uv_timer_init(&_self->loop, conn->handshake_timer);
@@ -615,9 +655,9 @@ static void _output_dnssim_quic_handle_on_close(uv_handle_t* handle)
     _output_dnssim_conn_move_queries_to_pending((_output_dnssim_query_stream_t*)conn->sent);
     conn->sent = NULL;
 
+    /* Delete connection */
     ngtcp2_conn_del(conn->quic->qconn);
     _output_dnssim_tls_close(conn);
-
     _output_dnssim_conn_maybe_free(conn);
 }
 

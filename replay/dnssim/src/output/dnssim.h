@@ -47,8 +47,12 @@ struct output_dnssim_stats {
     /* Number of QUIC connection handshake attempts during the stats interval. */
     uint64_t conn_quic_handshakes;
 
-    /* Number of connection that have been resumed with TLS session resumption. */
+    /* Number of connections that have been resumed with TLS session resumption. */
     uint64_t conn_resumed;
+
+    /* Number of QUIC connections that have used 0-RTT transport parameters to
+     * initiate a new connection. */
+    uint64_t conn_quic_0rtt_loaded;
 
     /* Number of timed out connection handshakes during the stats interval. */
     uint64_t conn_handshakes_failed;
@@ -86,8 +90,11 @@ typedef struct output_dnssim {
     output_dnssim_stats_t* stats_current;
     output_dnssim_stats_t* stats_first;
 
+    size_t zero_rtt_data_initial_capacity;
+
     size_t max_clients;
     bool   free_after_use;
+    bool   zero_rtt;
 
     uint64_t timeout_ms;
     uint64_t idle_timeout_ms;

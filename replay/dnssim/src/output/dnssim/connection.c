@@ -371,6 +371,23 @@ int _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client)
     return ret;
 }
 
+void _output_dnssim_0rtt_data_push(_output_dnssim_client_t* client,
+                                   _output_dnssim_0rtt_data_t* zero_rtt_data)
+{
+    mlassert(!zero_rtt_data->next, "zero_rtt_data->next must be NULL before push");
+    zero_rtt_data->next = client->zero_rtt_data;
+    client->zero_rtt_data = zero_rtt_data;
+}
+
+void _output_dnssim_0rtt_data_pop_and_free(_output_dnssim_client_t* client)
+{
+    mlassert(client->zero_rtt_data, "no self->zero_rtt_data to pop");
+    _output_dnssim_0rtt_data_t* zrttd = client->zero_rtt_data;
+    client->zero_rtt_data = zrttd->next;
+    free(zrttd->data);
+    free(zrttd);
+}
+
 static _output_dnssim_stream_t*
 _output_dnssim_conn_find_stream(_output_dnssim_connection_t* conn,
                                 int64_t stream_id, bool create)

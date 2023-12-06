@@ -69,6 +69,7 @@ DATA_STRUCTURE_STATS = {
     "conn_resumed": sum,
     "conn_tcp_handshakes": sum,
     "conn_quic_handshakes": sum,
+    "conn_quic_0rtt_loaded": sum,
     "conn_handshakes_failed": sum,
     "rcode_noerror": sum,
     "rcode_formerr": sum,

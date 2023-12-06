@@ -24,6 +24,8 @@
 #define DEFAULT_PRIORITY_QUIC \
     "%DISABLE_TLS13_COMPAT_MODE:NORMAL:"DEFAULT_PRIORITY_QUIC_VERSION":"DEFAULT_PRIORITY_QUIC_GROUPS
 
+#define DEFAULT_INITIAL_0RTT_DATA_CAPACITY 128
+
 static core_log_t      _log      = LOG_T_INIT("output.dnssim");
 static output_dnssim_t _defaults = { LOG_T_INIT_OBJ("output.dnssim") };
 
@@ -58,6 +60,9 @@ output_dnssim_t* output_dnssim_new(size_t max_clients)
     _self->source            = NULL;
     _self->transport         = OUTPUT_DNSSIM_TRANSPORT_UDP_ONLY;
     _self->h2_zero_out_msgid = false;
+
+    self->zero_rtt_data_initial_capacity = DEFAULT_INITIAL_0RTT_DATA_CAPACITY;
+    self->zero_rtt = true;
 
     self->max_clients = max_clients;
     lfatal_oom(_self->client_arr = calloc(max_clients, sizeof(_output_dnssim_client_t)));

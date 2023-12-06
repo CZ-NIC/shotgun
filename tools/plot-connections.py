@@ -21,6 +21,7 @@ JSON_VERSION = 20200527
 COLOR_ACTIVE = cycle(["royalblue", "cornflowerblue", "darkblue", "lightsteelblue"])
 COLOR_TCP_HS = cycle(["forestgreen", "limegreen", "darkgreen", "lightgreen"])
 COLOR_QUIC_HS = cycle(["darkmagenta", "darkorchid", "orchid", "magenta"])
+COLOR_QUIC_0RTT = cycle(["darkolivegreen", "darkseagreen", "darkslategray", "greenyellow"])
 COLOR_TLS_RESUMED = cycle(["orange", "moccasin", "darkorange", "antiquewhite"])
 COLOR_FAILED_HS = cycle(["gray", "silver", "black", "gainsboro"])
 
@@ -99,7 +100,7 @@ def main():
         "-k",
         "--kind",
         nargs="+",
-        choices=["active", "tcp_hs", "quic_hs", "tls_resumed", "failed_hs"],
+        choices=["active", "tcp_hs", "quic_hs", "quic_0rtt", "tls_resumed", "failed_hs"],
         default=["active", "tcp_hs", "tls_resumed", "failed_hs"],
         help="Which data should be rendered",
     )
@@ -153,6 +154,14 @@ def main():
                 label=f"QUIC Handshakes ({name})",
                 color=next(COLOR_QUIC_HS),
                 eval_func=lambda stats: stats["conn_quic_handshakes"],
+            )
+        if "quic_0rtt" in args.kind:
+            plot(
+                ax,
+                data,
+                label=f"QUIC 0RTT ({name})",
+                color=next(COLOR_QUIC_0RTT),
+                eval_func=lambda stats: stats["conn_quic_0rtt_loaded"],
             )
         if "tls_resumed" in args.kind:
             plot(
