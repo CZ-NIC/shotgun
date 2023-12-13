@@ -37,6 +37,7 @@
 #define _MAX_URI_LEN 65536
 #define MAX_DNSMSG_SIZE 65535
 #define WIRE_BUF_SIZE (MAX_DNSMSG_SIZE + 2 + 16384) /** max tcplen + 2b tcplen + 16kb tls record */
+#define MAX_QUIC_TOKEN_LENGTH 1024
 
 #define _OUTPUT_DNSSIM_CLIENT_MAX_0RTT_DATA 8
 
@@ -324,6 +325,10 @@ struct _output_dnssim_client {
 
     /* TLS-ticket for session resumption. */
     gnutls_datum_t tls_ticket;
+
+    /* QUIC token. */
+    uint8_t quic_token[MAX_QUIC_TOKEN_LENGTH];
+    size_t quic_token_length;
 };
 
 /*

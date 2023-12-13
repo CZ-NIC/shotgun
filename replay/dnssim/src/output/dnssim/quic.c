@@ -307,6 +307,24 @@ static int extend_max_local_streams_cb(ngtcp2_conn *qconn,
     return 0;
 }
 
+static int recv_new_token_cb(ngtcp2_conn *qconn, const uint8_t *token,
+                             size_t tokenlen, void *user_data)
+{
+    _output_dnssim_connection_t* conn = user_data;
+    _output_dnssim_client_t* client = conn->client;
+    output_dnssim_t* self = client->dnssim;
+
+    if (tokenlen > MAX_QUIC_TOKEN_LENGTH) {
+        lwarning("token too long (%zu bytes)", tokenlen);
+        return 0;
+    }
+
+    client->quic_token_length = tokenlen;
+    memcpy(client->quic_token, token, tokenlen);
+
+    return 0;
+}
+
 static const ngtcp2_callbacks quic_client_callbacks = {
     // NGTCP2-provided callbacks
     .client_initial           = ngtcp2_crypto_client_initial_cb,
@@ -330,6 +348,7 @@ static const ngtcp2_callbacks quic_client_callbacks = {
     .stream_close                  = stream_close_cb,
     .stream_reset                  = stream_reset_cb,
     .extend_max_local_streams_bidi = extend_max_local_streams_cb,
+    .recv_new_token                = recv_new_token_cb,
 };
 
 
@@ -622,6 +641,7 @@ int  _output_dnssim_quic_init(_output_dnssim_connection_t* conn)
 int  _output_dnssim_quic_connect(output_dnssim_t* self, _output_dnssim_connection_t* conn)
 {
     int ret = -1;
+    _output_dnssim_client_t* client = conn->client;
 
     conn->state = _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE;
 
@@ -643,6 +663,10 @@ int  _output_dnssim_quic_connect(output_dnssim_t* self, _output_dnssim_connectio
     ngtcp2_settings_default(&settings);
     settings.handshake_timeout = self->handshake_timeout_ms * NGTCP2_MILLISECONDS;
     settings.initial_ts = quic_timestamp();
+    if (client->quic_token_length) {
+        settings.token = client->quic_token;
+        settings.tokenlen = client->quic_token_length;
+    }
 //    settings.log_printf = debug_log_printf; /* lots of spam - enable when actually needed */
 
     ngtcp2_transport_params params;
