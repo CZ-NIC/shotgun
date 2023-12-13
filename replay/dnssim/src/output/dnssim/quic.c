@@ -279,11 +279,23 @@ static int stream_close_cb(ngtcp2_conn* qconn, uint32_t flags,
     quic_check_max_streams(conn);
 
     if (flags & NGTCP2_STREAM_CLOSE_FLAG_APP_ERROR_CODE_SET) {
-        lwarning("stream closed with %s (%" PRIu64")",
+        linfo("stream closed with %s (%" PRIu64")",
                 quic_strerror(app_error_code), app_error_code);
         return 0;
     }
 
+    return 0;
+}
+
+static int stream_reset_cb(ngtcp2_conn *qconn, int64_t stream_id,
+                           uint64_t final_size, uint64_t app_error_code,
+                           void *user_data, void *stream_user_data)
+{
+    _output_dnssim_connection_t* conn = user_data;
+    _output_dnssim_query_stream_t* qry = _output_dnssim_get_stream_query(conn, stream_id);
+    if (!qry)
+        return 0;
+    _output_dnssim_close_request(qry->qry.req);
     return 0;
 }
 
@@ -316,6 +328,7 @@ static const ngtcp2_callbacks quic_client_callbacks = {
     .handshake_confirmed           = handshake_confirmed_cb,
     .recv_stream_data              = recv_stream_data_cb,
     .stream_close                  = stream_close_cb,
+    .stream_reset                  = stream_reset_cb,
     .extend_max_local_streams_bidi = extend_max_local_streams_cb,
 };
 

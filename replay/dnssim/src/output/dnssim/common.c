@@ -12,11 +12,9 @@
 
 static core_log_t _log = LOG_T_INIT("output.dnssim");
 
-static void _close_request(_output_dnssim_request_t* req);
-
 static void _on_request_timeout(uv_timer_t* handle)
 {
-    _close_request((_output_dnssim_request_t*)handle->data);
+    _output_dnssim_close_request(handle->data);
 }
 
 static ssize_t parse_qsection(core_object_dns_t* dns)
@@ -144,8 +142,83 @@ void _output_dnssim_create_request(output_dnssim_t* self, _output_dnssim_client_
     return;
 failure:
     self->discarded++;
-    _close_request(req);
+    _output_dnssim_close_request(req);
     return;
+}
+
+static void _on_request_timer_closed(uv_handle_t* handle)
+{
+    _output_dnssim_request_t* req = (_output_dnssim_request_t*)handle->data;
+    mlassert(req, "req is nil");
+    free(handle);
+    req->timer = NULL;
+    _output_dnssim_maybe_free_request(req);
+}
+
+static void _close_query(_output_dnssim_query_t* qry)
+{
+    mlassert(qry, "qry is nil");
+
+    switch (qry->transport) {
+    case OUTPUT_DNSSIM_TRANSPORT_UDP:
+        _output_dnssim_close_query_udp((_output_dnssim_query_udp_t*)qry);
+        break;
+    case OUTPUT_DNSSIM_TRANSPORT_TCP:
+        _output_dnssim_close_query_tcp((_output_dnssim_query_stream_t*)qry);
+        break;
+#if DNSSIM_HAS_GNUTLS
+    case OUTPUT_DNSSIM_TRANSPORT_TLS:
+        _output_dnssim_close_query_tls((_output_dnssim_query_stream_t*)qry);
+        break;
+    case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
+        _output_dnssim_close_query_https2((_output_dnssim_query_stream_t*)qry);
+        break;
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+        _output_dnssim_close_query_quic((_output_dnssim_query_stream_t*)qry);
+        break;
+#else
+    case OUTPUT_DNSSIM_TRANSPORT_TLS:
+    case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+        mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
+        break;
+#endif
+    default:
+        mlfatal("invalid query transport");
+        break;
+    }
+}
+
+void _output_dnssim_close_request(_output_dnssim_request_t* req)
+{
+    if (req == NULL || req->state == _OUTPUT_DNSSIM_REQ_CLOSING)
+        return;
+    mlassert(req->state == _OUTPUT_DNSSIM_REQ_ONGOING, "request to be closed must be ongoing");
+    req->state = _OUTPUT_DNSSIM_REQ_CLOSING;
+    req->dnssim->ongoing--;
+
+    /* Calculate latency. */
+    uint64_t latency;
+    req->ended_at = uv_now(&((_output_dnssim_t*)req->dnssim)->loop);
+    latency       = req->ended_at - req->created_at;
+    if (latency > req->dnssim->timeout_ms) {
+        req->ended_at = req->created_at + req->dnssim->timeout_ms;
+        latency       = req->dnssim->timeout_ms;
+    }
+    req->stats->latency[latency]++;
+    req->dnssim->stats_sum->latency[latency]++;
+
+    if (req->timer != NULL) {
+        uv_timer_stop(req->timer);
+        uv_close((uv_handle_t*)req->timer, _on_request_timer_closed);
+    }
+
+    /* Finish any queries in flight. */
+    _output_dnssim_query_t* qry = req->qry;
+    if (qry != NULL)
+        _close_query(qry);
+
+    _output_dnssim_maybe_free_request(req);
 }
 
 /* Bind before connect to be able to send from different source IPs. */
@@ -194,81 +267,6 @@ void _output_dnssim_maybe_free_request(_output_dnssim_request_t* req)
         core_object_dns_free(req->dns_q);
         free(req);
     }
-}
-
-static void _close_query(_output_dnssim_query_t* qry)
-{
-    mlassert(qry, "qry is nil");
-
-    switch (qry->transport) {
-    case OUTPUT_DNSSIM_TRANSPORT_UDP:
-        _output_dnssim_close_query_udp((_output_dnssim_query_udp_t*)qry);
-        break;
-    case OUTPUT_DNSSIM_TRANSPORT_TCP:
-        _output_dnssim_close_query_tcp((_output_dnssim_query_stream_t*)qry);
-        break;
-#if DNSSIM_HAS_GNUTLS
-    case OUTPUT_DNSSIM_TRANSPORT_TLS:
-        _output_dnssim_close_query_tls((_output_dnssim_query_stream_t*)qry);
-        break;
-    case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
-        _output_dnssim_close_query_https2((_output_dnssim_query_stream_t*)qry);
-        break;
-    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
-        _output_dnssim_close_query_quic((_output_dnssim_query_stream_t*)qry);
-        break;
-#else
-    case OUTPUT_DNSSIM_TRANSPORT_TLS:
-    case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
-    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
-        mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
-        break;
-#endif
-    default:
-        mlfatal("invalid query transport");
-        break;
-    }
-}
-
-static void _on_request_timer_closed(uv_handle_t* handle)
-{
-    _output_dnssim_request_t* req = (_output_dnssim_request_t*)handle->data;
-    mlassert(req, "req is nil");
-    free(handle);
-    req->timer = NULL;
-    _output_dnssim_maybe_free_request(req);
-}
-
-static void _close_request(_output_dnssim_request_t* req)
-{
-    if (req == NULL || req->state == _OUTPUT_DNSSIM_REQ_CLOSING)
-        return;
-    mlassert(req->state == _OUTPUT_DNSSIM_REQ_ONGOING, "request to be closed must be ongoing");
-    req->state = _OUTPUT_DNSSIM_REQ_CLOSING;
-    req->dnssim->ongoing--;
-
-    /* Calculate latency. */
-    uint64_t latency;
-    req->ended_at = uv_now(&((_output_dnssim_t*)req->dnssim)->loop);
-    latency       = req->ended_at - req->created_at;
-    if (latency > req->dnssim->timeout_ms) {
-        req->ended_at = req->created_at + req->dnssim->timeout_ms;
-        latency       = req->dnssim->timeout_ms;
-    }
-    req->stats->latency[latency]++;
-    req->dnssim->stats_sum->latency[latency]++;
-
-    if (req->timer != NULL) {
-        uv_timer_stop(req->timer);
-        uv_close((uv_handle_t*)req->timer, _on_request_timer_closed);
-    }
-
-    /* Finish any queries in flight. */
-    _output_dnssim_query_t* qry = req->qry;
-    if (qry != NULL)
-        _close_query(qry);
-
-    _output_dnssim_maybe_free_request(req);
 }
 
 void _output_dnssim_request_answered(_output_dnssim_request_t* req, core_object_dns_t* msg, bool is_early)
@@ -365,7 +363,7 @@ void _output_dnssim_request_answered(_output_dnssim_request_t* req, core_object_
         req->stats->rcode_other++;
     }
 
-    _close_request(req);
+    _output_dnssim_close_request(req);
 }
 
 void _output_dnssim_on_uv_alloc(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf)

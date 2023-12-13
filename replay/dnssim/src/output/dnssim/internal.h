@@ -381,6 +381,7 @@ void _output_dnssim_maybe_free_request(_output_dnssim_request_t* req);
 void _output_dnssim_on_uv_alloc(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
 int  _output_dnssim_append_to_query_buf(_output_dnssim_query_stream_t* qry, const uint8_t* data, size_t datalen);
 void _output_dnssim_create_request(output_dnssim_t* self, _output_dnssim_client_t* client, core_object_payload_t* payload);
+void _output_dnssim_close_request(_output_dnssim_request_t* req);
 int  _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client);
 int  _output_dnssim_tcp_connect(output_dnssim_t* self, _output_dnssim_connection_t* conn);
 void _output_dnssim_tcp_close(_output_dnssim_connection_t* conn);
