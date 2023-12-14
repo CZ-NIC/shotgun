@@ -296,6 +296,9 @@ static int stream_reset_cb(ngtcp2_conn *qconn, int64_t stream_id,
                            void *user_data, void *stream_user_data)
 {
     _output_dnssim_connection_t* conn = user_data;
+    output_dnssim_t* self = conn->client->dnssim;
+    linfo("stream closed with %s (%" PRIu64")",
+            quic_strerror(app_error_code), app_error_code);
     _output_dnssim_query_stream_t* qry = _output_dnssim_get_stream_query(conn, stream_id);
     if (!qry)
         return 0;
