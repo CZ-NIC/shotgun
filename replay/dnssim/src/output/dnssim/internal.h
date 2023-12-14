@@ -133,6 +133,9 @@ struct _output_dnssim_request {
         _OUTPUT_DNSSIM_REQ_CLOSING
     } state;
 
+    /* When `true`, the request has been answered properly. */
+    bool answered;
+
     /* Statistics interval in which this request is tracked. */
     output_dnssim_stats_t* stats;
 };

@@ -197,11 +197,14 @@ void _output_dnssim_close_request(_output_dnssim_request_t* req)
     req->state = _OUTPUT_DNSSIM_REQ_CLOSING;
     req->dnssim->ongoing--;
 
-    /* Calculate latency. */
+    /* Calculate latency. It is set to the timeout value if the request was
+     * closed prematurely as well. */
     uint64_t latency;
-    req->ended_at = uv_now(&((_output_dnssim_t*)req->dnssim)->loop);
-    latency       = req->ended_at - req->created_at;
-    if (latency > req->dnssim->timeout_ms) {
+    if (req->answered) {
+        req->ended_at = uv_now(&((_output_dnssim_t*)req->dnssim)->loop);
+        latency       = req->ended_at - req->created_at;
+    }
+    if (!req->answered || latency > req->dnssim->timeout_ms) {
         req->ended_at = req->created_at + req->dnssim->timeout_ms;
         latency       = req->dnssim->timeout_ms;
     }
@@ -274,6 +277,7 @@ void _output_dnssim_request_answered(_output_dnssim_request_t* req, core_object_
     mlassert(req, "req is nil");
     mlassert(msg, "msg is nil");
 
+    req->answered = true;
     req->dnssim->stats_sum->answers++;
     req->stats->answers++;
     if (is_early) {
