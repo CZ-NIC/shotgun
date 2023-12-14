@@ -253,8 +253,12 @@ static int recv_stream_data_cb(ngtcp2_conn* qconn, uint32_t flags,
         return ret;
 
     if (flags & NGTCP2_STREAM_DATA_FLAG_FIN) {
-        lassert(qry->recv_buf_len, "stream fin, but recv_buf_len is zero");
-        _output_dnssim_read_dns_stream(conn, qry->recv_buf_len, (char*)qry->recv_buf, stream_id);
+        if (qry->recv_buf_len) {
+            _output_dnssim_read_dns_stream(conn, qry->recv_buf_len, (char*)qry->recv_buf, stream_id);
+        } else {
+            lwarning("stream fin, but qry->recv_buf_len is zero - closing request");
+            _output_dnssim_close_request(qry->qry.req);
+        }
     }
 
     return 0;
