@@ -784,8 +784,8 @@ int  _output_dnssim_quic_connect(output_dnssim_t* self, _output_dnssim_connectio
         return ret;
     }
 
-    conn->stats->conn_quic_handshakes++;
-    self->stats_sum->conn_quic_handshakes++;
+    conn->stats->conn_handshakes++;
+    self->stats_sum->conn_handshakes++;
 
     if (conn->is_0rtt)
         _output_dnssim_conn_early_data(conn);

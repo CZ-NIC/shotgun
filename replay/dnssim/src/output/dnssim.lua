@@ -74,11 +74,8 @@ struct output_dnssim_stats {
     /* Number of connections that are open at the end of the stats interval. */
     uint64_t conn_active;
 
-    /* Number of TCP connection handshake attempts during the stats interval. */
-    uint64_t conn_tcp_handshakes;
-
-    /* Number of QUIC connection handshake attempts during the stats interval. */
-    uint64_t conn_quic_handshakes;
+    /* Number of TCP/QUIC connection handshake attempts during the stats interval. */
+    uint64_t conn_handshakes;
 
     /* Number of connections that have been resumed with TLS session resumption. */
     uint64_t conn_resumed;
@@ -467,8 +464,7 @@ function DnsSim:export(filename)
                 '"ongoing":', tonumber(stats.ongoing), ',',
                 '"answers":', tonumber(stats.answers), ',',
                 '"conn_active":', tonumber(stats.conn_active), ',',
-                '"conn_tcp_handshakes":', tonumber(stats.conn_tcp_handshakes), ',',
-                '"conn_quic_handshakes":', tonumber(stats.conn_quic_handshakes), ',',
+                '"conn_handshakes":', tonumber(stats.conn_handshakes), ',',
                 '"conn_resumed":', tonumber(stats.conn_resumed), ',',
                 '"conn_quic_0rtt_loaded":', tonumber(stats.conn_quic_0rtt_loaded), ',',
                 '"quic_0rtt_sent":', tonumber(stats.quic_0rtt_sent), ',',

@@ -41,11 +41,8 @@ struct output_dnssim_stats {
     /* Number of connections that are open at the end of the stats interval. */
     uint64_t conn_active;
 
-    /* Number of TCP connection handshake attempts during the stats interval. */
-    uint64_t conn_tcp_handshakes;
-
-    /* Number of QUIC connection handshake attempts during the stats interval. */
-    uint64_t conn_quic_handshakes;
+    /* Number of TCP/QUIC connection handshake attempts during the stats interval. */
+    uint64_t conn_handshakes;
 
     /* Number of connections that have been resumed with TLS session resumption. */
     uint64_t conn_resumed;

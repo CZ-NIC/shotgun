@@ -255,8 +255,8 @@ int _output_dnssim_tcp_connect(output_dnssim_t* self, _output_dnssim_connection_
     if (ret < 0)
         goto failure;
 
-    conn->stats->conn_tcp_handshakes++;
-    self->stats_sum->conn_tcp_handshakes++;
+    conn->stats->conn_handshakes++;
+    self->stats_sum->conn_handshakes++;
     conn->state = _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE;
     return 0;
 failure:

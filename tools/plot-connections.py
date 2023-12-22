@@ -19,8 +19,7 @@ import mplhlpr.styles
 JSON_VERSION = 20200527
 
 COLOR_ACTIVE = cycle(["royalblue", "cornflowerblue", "darkblue", "lightsteelblue"])
-COLOR_TCP_HS = cycle(["forestgreen", "limegreen", "darkgreen", "lightgreen"])
-COLOR_QUIC_HS = cycle(["darkmagenta", "darkorchid", "orchid", "magenta"])
+COLOR_CONN_HS = cycle(["forestgreen", "limegreen", "darkgreen", "lightgreen"])
 COLOR_QUIC_0RTT = cycle(
     ["darkolivegreen", "darkseagreen", "darkslategray", "greenyellow"]
 )
@@ -106,15 +105,15 @@ def main():
         nargs="+",
         choices=[
             "active",
-            "tcp_hs",
-            "quic_hs",
+            "conn_hs",
+            "tcp_hs",  # same as conn_hs - backwards compatibility
             "quic_0rtt",
             "quic_0rtt_sent",
             "quic_0rtt_answered",
             "tls_resumed",
             "failed_hs",
         ],
-        default=["active", "tcp_hs", "tls_resumed", "failed_hs"],
+        default=["active", "conn_hs", "tls_resumed", "failed_hs"],
         help="Which data should be rendered",
     )
     args = parser.parse_args()
@@ -152,21 +151,13 @@ def main():
                 color=next(COLOR_ACTIVE),
                 eval_func=lambda stats: stats["conn_active"],
             )
-        if "tcp_hs" in args.kind:
+        if "conn_hs" in args.kind or "tcp_hs" in args.kind:
             plot(
                 ax,
                 data,
-                label=f"TCP Handshakes ({name})",
-                color=next(COLOR_TCP_HS),
-                eval_func=lambda stats: stats["conn_tcp_handshakes"],
-            )
-        if "quic_hs" in args.kind:
-            plot(
-                ax,
-                data,
-                label=f"QUIC Handshakes ({name})",
-                color=next(COLOR_QUIC_HS),
-                eval_func=lambda stats: stats["conn_quic_handshakes"],
+                label=f"Handshakes ({name})",
+                color=next(COLOR_CONN_HS),
+                eval_func=lambda stats: stats["conn_handshakes"],
             )
         if "quic_0rtt" in args.kind:
             plot(
