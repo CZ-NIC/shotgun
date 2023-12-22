@@ -265,10 +265,10 @@ void _output_dnssim_conn_move_queries_to_pending(_output_dnssim_query_stream_t**
 
 static void _send_pending_queries(_output_dnssim_connection_t* conn)
 {
-    output_dnssim_t* self = conn->client->dnssim;
     _output_dnssim_query_stream_t* qry;
     mlassert(conn, "conn is nil");
     mlassert(conn->client, "conn->client is nil");
+    output_dnssim_t* self = conn->client->dnssim;
     qry = (_output_dnssim_query_stream_t*)conn->client->pending;
 
     while (qry != NULL && (conn->state == _OUTPUT_DNSSIM_CONN_ACTIVE || conn->state == _OUTPUT_DNSSIM_CONN_EARLY_DATA)) {
@@ -519,7 +519,6 @@ static int _process_dnsmsg(_output_dnssim_connection_t* conn,
         lassert(conn->quic, "conn must have quic ctx");
         lassert(stream->stream_id >= 0, "quic stream must have a non-negative id");
 
-        /* TODO - maybe assign the query pointer to the stream? */
         qry = &_output_dnssim_get_stream_query(conn, stream->stream_id)->qry;
         if (qry) {
             ret = _output_dnssim_answers_request(qry->req, &dns_a);

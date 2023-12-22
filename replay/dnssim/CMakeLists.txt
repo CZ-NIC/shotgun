@@ -9,18 +9,13 @@ option(DNSJIT_PATH "Path to dnsjit prefix" "")
 option(ASAN "Use AddressSanitizer" OFF)
 option(UBSAN "Use UndefinedBehaviorSanitizer" OFF)
 option(USE_SYSTEM_NGTCP2 "Use ngtcp2 from the system" OFF)
-option(ENABLE_GNUTLS "Whether GnuTLS support is enabled" ON)
 
 
 ## Dependencies ################################################################
 
 # GnuTLS
-if (ENABLE_GNUTLS)
-	find_package(GnuTLS REQUIRED)
-	list(APPEND DNSSIM_LIBS GnuTLS::GnuTLS)
-else ()
-	list(APPEND DNSSIM_OPTS -DDNSSIM_HAS_GNUTLS=0)
-endif ()
+find_package(GnuTLS REQUIRED)
+list(APPEND DNSSIM_LIBS GnuTLS::GnuTLS)
 
 # LibUV
 find_library(LIBUV_LIB libuv.so REQUIRED)
