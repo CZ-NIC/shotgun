@@ -197,8 +197,10 @@ void _output_dnssim_close_request(_output_dnssim_request_t* req)
     req->state = _OUTPUT_DNSSIM_REQ_CLOSING;
     req->dnssim->ongoing--;
 
-    /* Calculate latency. It is set to the timeout value if the request was
-     * closed prematurely as well. */
+    /* Calculate latency. When the request was answered in time, this is set to
+     * the actual time it took to answer it. If the request timed-out or failed
+     * prematurely (e.g. because of stream reset), the latency is set to the
+     * maximum timeout value to indicate that it was lost. */
     uint64_t latency;
     if (req->answered) {
         req->ended_at = uv_now(&((_output_dnssim_t*)req->dnssim)->loop);
