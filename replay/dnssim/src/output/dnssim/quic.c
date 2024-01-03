@@ -1032,6 +1032,7 @@ void _output_dnssim_close_query_quic(_output_dnssim_query_stream_t* qry)
     if (qry->conn) {
         _output_dnssim_connection_t* conn = qry->conn;
         _ll_try_remove(conn->sent, &qry->qry);
+        _ll_remove_cond(conn->quic->deferreds, d, (*d)->qry == qry, true);
         qry->conn = NULL;
         _output_dnssim_conn_idle(conn);
     }
