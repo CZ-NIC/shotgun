@@ -50,5 +50,10 @@ title = "Handshakes over Time"
 
 [charts.resumptions]
 type = "connections"
-kind = ["conn_hs", "tls_resumed", "quic_0rtt"]
-title = "TLS Session Resumption and QUIC 0-RTT for New Connections"
+kind = ["conn_hs", "tls_resumed"]
+title = "TLS Session Resumption for New Connections"
+
+[charts.0rtt]
+type = "connections"
+kind = ["conn_hs", "quic_0rtt"]
+title = "QUIC 0-RTT for New Connections"
