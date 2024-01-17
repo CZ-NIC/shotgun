@@ -43,11 +43,15 @@ local getopt = require("dnsjit.lib.getopt").new({
 	{ "k", "keep", false, "keep last chunk even if it's incomplete", "?" },
 	{ nil, "seed", seed_def, "seed for RNG", "?" },
 	{ nil, "stdout", false, "output to stdout as a single file, no splits", "?" },
+	{ nil, "query-rewrite", false, "rewrite all queries to . NS", "?" },
 })
 
 local SNAPLEN = 66000
 local LINKTYPE = 12  -- DLT_RAW in Linux, see https://github.com/the-tcpdump-group/libpcap/blob/master/pcap/dlt.h
 local HEADERSLEN = 40 + 8  -- IPv6 header and UDP header
+
+-- DNS payload WITHOUT message ID, query . NS +RD; used if --query-rewrite
+local DNS_PAYLOAD = "\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01"
 
 log:enable("all")
 
@@ -60,6 +64,7 @@ args.keep = getopt:val("k")
 args.outdir = getopt:val("O")
 args.seed = getopt:val("seed")
 args.stdout = getopt:val("stdout")
+args.query_rewrite = getopt:val("query-rewrite")
 math.randomseed(args.seed)
 
 -- Display help
@@ -247,9 +252,16 @@ while true do
 		put_uint16_be(bytes, 4, obj_udp.ulen)  -- IPv6 payload length
 		put_uint16_be(bytes, 40, 0x0035)  -- normalized src port 53
 		put_uint16_be(bytes, 42, 0x0035)  -- normalized dst port 53
-		put_uint16_be(bytes, 44, obj_udp.ulen)
-		put_uint16_be(bytes, 46, obj_udp.sum)
-		ffi.copy(bytes + HEADERSLEN, obj_pl.payload, obj_pl.len)
+		if args.query_rewrite then
+			put_uint16_be(bytes, 44, 0x0019)  -- UDP length incl. UDP header
+			put_uint16_be(bytes, 46, 0x0000)  -- checksum: disabled/ignored
+			put_uint16_be(bytes, 48, math.random(0, 65535))  -- msg ID
+			ffi.copy(bytes + HEADERSLEN + 2, DNS_PAYLOAD)
+		else
+			put_uint16_be(bytes, 44, obj_udp.ulen)
+			put_uint16_be(bytes, 46, obj_udp.sum)
+			ffi.copy(bytes + HEADERSLEN, obj_pl.payload, obj_pl.len)
+		end
 
 		-- check output state only every 10 000 packets - optimization
 		if npacketsout % 10000 == 0 then
