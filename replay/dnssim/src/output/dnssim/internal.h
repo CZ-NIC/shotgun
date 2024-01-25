@@ -200,6 +200,7 @@ typedef struct _output_dnssim_quic_ctx {
 
     _output_dnssim_quic_sent_payload_t* sent_payloads;
     _output_dnssim_quic_deferred_t* deferreds;
+    bool bye;
 
     uint8_t secret[32];
 } _output_dnssim_quic_ctx_t;

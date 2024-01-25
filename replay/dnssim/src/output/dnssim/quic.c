@@ -398,21 +398,27 @@ static uint64_t quic_timestamp(void)
 static void quic_send_bye(_output_dnssim_connection_t* conn)
 {
     output_dnssim_t* self = conn->client->dnssim;
+
+    if (conn->quic->bye || conn->state < _OUTPUT_DNSSIM_CONN_EARLY_DATA)
+        goto end;
+
     const size_t destlen = ngtcp2_conn_get_max_tx_udp_payload_size(conn->quic->qconn);
     _output_dnssim_quic_packet_t* pkt;
     lfatal_oom(pkt = malloc(sizeof(*pkt) + destlen));
     ngtcp2_pkt_info pi = {0};
+    conn->quic->bye = true;
 
     ngtcp2_ssize write_ret = ngtcp2_conn_write_connection_close(conn->quic->qconn,
             (ngtcp2_path *)ngtcp2_conn_get_path(conn->quic->qconn),
             &pi, pkt->data, destlen, &conn->quic->ccerr, quic_timestamp());
     if (write_ret == 0) {
-        _output_dnssim_conn_close(conn);
-        return;
+        free(pkt);
+        goto end;
     }
     if (write_ret < 0) {
         lwarning("write_connection_close: %s", ngtcp2_strerror(write_ret));
-        return;
+        free(pkt);
+        goto end;
     }
 
     uv_buf_t uv_buf = { (char*)pkt->data, write_ret };
@@ -421,6 +427,7 @@ static void quic_send_bye(_output_dnssim_connection_t* conn)
     if (send_ret < 0)
         lwarning("uv_udp_send error: (%d) %s", send_ret, uv_strerror(send_ret));
 
+end:
     _output_dnssim_conn_close(conn);
 }
 
@@ -447,8 +454,6 @@ static int quic_send_data(_output_dnssim_connection_t *conn,
                           _output_dnssim_query_stream_t* qry, bool bye)
 {
     output_dnssim_t* self = conn->client->dnssim;
-    if (ngtcp2_conn_in_closing_period(conn->quic->qconn))
-        return 0;
 
     uv_timer_stop(conn->expiry_timer);
     if (!conn->transport_type)
@@ -457,6 +462,9 @@ static int quic_send_data(_output_dnssim_connection_t *conn,
     lassert(conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_UDP,
             "Transport type must be UDP");
     if (uv_is_closing((uv_handle_t *)conn->transport.udp))
+        return 0;
+
+    if (conn->quic->bye || ngtcp2_conn_in_closing_period(conn->quic->qconn))
         return 0;
 
     int ret = 0;
@@ -526,6 +534,8 @@ end:
 /** Sends technical QUIC packets to server - returns NGTCP2 errors. */
 static int quic_send(_output_dnssim_connection_t *conn, bool bye)
 {
+    if (conn->quic->bye)
+        return 0;
     while (!bye && conn->quic->deferreds) {
         _output_dnssim_quic_deferred_t* d = conn->quic->deferreds;
         _ll_remove(conn->quic->deferreds, d);
