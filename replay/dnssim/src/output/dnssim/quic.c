@@ -209,6 +209,13 @@ static void debug_log_printf(void* user_data, const char* fmt, ...)
 static int handshake_completed_cb(ngtcp2_conn *qconn, void *user_data)
 {
     _output_dnssim_connection_t* conn = user_data;
+
+    if (conn->idle_timer) {
+        uint64_t local_max_idle = ngtcp2_conn_get_local_transport_params(qconn)->max_idle_timeout / NGTCP2_MILLISECONDS;
+        uint64_t remote_max_idle = ngtcp2_conn_get_remote_transport_params(qconn)->max_idle_timeout / NGTCP2_MILLISECONDS;
+        uv_timer_set_repeat(conn->idle_timer, MIN(local_max_idle, remote_max_idle));
+    }
+
     if (conn->tls->has_ticket) {
         // Send 1-RTT data (if 0-RTT was not already active)
         _output_dnssim_conn_early_data(conn);
