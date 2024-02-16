@@ -21,6 +21,7 @@ protocol = "doq"
 #[traffic.DoQ-no_tickets]
 #protocol = "doq"
 #gnutls_priority = "dnssim-default:%NO_TICKETS"
+#zero_rtt = false  # 0-RTT makes no sense without tickets
 
 # DoQ clients without QUIC 0-RTT
 #[traffic.DoQ-no_0rtt]
