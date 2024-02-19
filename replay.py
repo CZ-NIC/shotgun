@@ -24,10 +24,12 @@ DEFAULT_TRAFFIC_FIELDS = [
     "handshake_timeout_s",
     "idle_timeout_s",
     "gnutls_priority",
+    "zero_rtt",
     "http_method",
     "dns_port",
     "dot_port",
     "doh_port",
+    "doq_port",
     "server",
     "channel_size",
     "max_clients",
@@ -40,8 +42,10 @@ PROTOCOL_FUNCS = {
     "tcp": "tcp",
     "dot": "tls",
     "doh": "https2",
+    "doq": "quic",
     "tls": "tls",
     "https2": "https2",
+    "quic": "quic",
 }
 
 
@@ -52,6 +56,7 @@ CPU_FACTORS = {
     "tcp": 2,
     "tls": 3,
     "https2": 3,
+    "quic": 3,
 }
 
 # Maps protocol functions to keywords selecting the port number.
@@ -60,6 +65,7 @@ PROTOCOL_FUNC_PORTS = {
     "tcp": "dns_port",
     "tls": "dot_port",
     "https2": "doh_port",
+    "quic": "doq_port",
 }
 
 DIR = os.path.dirname(os.path.realpath(__file__))
@@ -85,7 +91,7 @@ def load_config(confname: str) -> Dict[str, Any]:
     if path is None:
         raise FileNotFoundError(f'config file not found: "{confname}"')
 
-    return dict(**toml.load(path))
+    return {**toml.load(path)}
 
 
 def fill_config_defaults(config: Dict[str, Any]) -> None:
@@ -115,11 +121,11 @@ def bind_net_to_ips(bind_net: Optional[List[str]]) -> List[str]:
             raise RuntimeError(
                 f"bind_net: {entry} doesn't represent valid net or address"
             ) from e
-        hosts = set(net.hosts())
+        hosts = set({str(host) for host in net.hosts()})
         if hosts:
             ips = ips.union(hosts)
         else:  # workaround for missing /32 or /128 support, Python issue #28577
-            ips.add(net.network_address)
+            ips.add(str(net.network_address))
     return list(ips)
 
 
@@ -172,6 +178,7 @@ def create_luaconfig(config: Dict[str, Any], threads: Dict[str, int], args: Any)
         thrconf.setdefault("dns_port", args.dns_port)
         thrconf.setdefault("dot_port", args.dot_port)
         thrconf.setdefault("doh_port", args.doh_port)
+        thrconf.setdefault("doq_port", args.doq_port)
 
         thrconf["target_ip"] = thrconf["server"]
         thrconf["target_port"] = thrconf[PROTOCOL_FUNC_PORTS[thrconf["protocol_func"]]]
@@ -194,7 +201,7 @@ def create_luaconfig(config: Dict[str, Any], threads: Dict[str, int], args: Any)
 
     template = JINJA_ENV.get_template("luaconfig.lua.j2")
     confpath = os.path.join(confdir, "luaconfig.lua")
-    with open(confpath, "w") as f:
+    with open(confpath, "w", encoding="utf-8") as f:
         f.write(template.render(data))
     logging.debug("luaconfig.lua written to: %s", confpath)
     return confpath
@@ -217,7 +224,7 @@ def assign_threads(config: Dict[str, Any], nthreads: int) -> Dict[str, int]:
     for name, conf in config["traffic"].items():
         target_cpu_weight = conf["weight"] * conf["cpu_factor"]
         senders[name] = {"threads": 1, "target_cpu_weight": target_cpu_weight}
-    total_cpu_weight = sum([sender["target_cpu_weight"] for sender in senders.values()])
+    total_cpu_weight = sum(sender["target_cpu_weight"] for sender in senders.values())
     thread_cpu_weight = total_cpu_weight / nthreads
     nthreads = nthreads - nsenders
 
@@ -274,7 +281,7 @@ def get_log_level(verbosity: int) -> int:
     return logging.DEBUG
 
 
-def run_or_exit(args: List[str], env: collections.abc.Mapping = None) -> None:
+def run_or_exit(args: List[str], env: Optional[collections.abc.Mapping] = None) -> None:
     try:
         subprocess.run(args, check=True, env=env)
     except subprocess.CalledProcessError as ex:
@@ -389,6 +396,9 @@ def main():
         "--doh-port", type=int, default=443, help="port for DNS-over-HTTPS"
     )
     parser.add_argument(
+        "--doq-port", type=int, default=853, help="port for DNS-over-QUIC"
+    )
+    parser.add_argument(
         "--preload",
         help="LD_PRELOAD shotgun with the specified libraries (for debugging)",
     )
@@ -434,9 +444,9 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except toml.TomlDecodeError as e:
-        logging.critical("TOML config syntax error: %s", e)
-    except FileNotFoundError as e:
-        logging.critical(e)
-    except RuntimeError as e:
-        logging.critical(e)
+    except toml.TomlDecodeError as err:
+        logging.critical("TOML config syntax error: %s", err)
+    except FileNotFoundError as err:
+        logging.critical(err)
+    except RuntimeError as err:
+        logging.critical(err)

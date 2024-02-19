@@ -13,6 +13,19 @@
 #include <gnutls/gnutls.h>
 #include <string.h>
 
+#define DEFAULT_PRIORITY_TOKEN "dnssim-default"
+
+#define DEFAULT_PRIORITY_GENERAL "NORMAL"
+
+#define DEFAULT_PRIORITY_QUIC_VERSION \
+    "-VERS-ALL:+VERS-TLS1.3"
+#define DEFAULT_PRIORITY_QUIC_GROUPS \
+    "-GROUP-ALL:+GROUP-X25519:+GROUP-SECP256R1:+GROUP-SECP384R1:+GROUP-SECP521R1"
+#define DEFAULT_PRIORITY_QUIC \
+    "%DISABLE_TLS13_COMPAT_MODE:NORMAL:"DEFAULT_PRIORITY_QUIC_VERSION":"DEFAULT_PRIORITY_QUIC_GROUPS
+
+#define DEFAULT_INITIAL_0RTT_DATA_CAPACITY 128
+
 static core_log_t      _log      = LOG_T_INIT("output.dnssim");
 static output_dnssim_t _defaults = { LOG_T_INIT_OBJ("output.dnssim") };
 
@@ -48,6 +61,9 @@ output_dnssim_t* output_dnssim_new(size_t max_clients)
     _self->transport         = OUTPUT_DNSSIM_TRANSPORT_UDP_ONLY;
     _self->h2_zero_out_msgid = false;
 
+    self->zero_rtt_data_initial_capacity = DEFAULT_INITIAL_0RTT_DATA_CAPACITY;
+    self->zero_rtt = true;
+
     self->max_clients = max_clients;
     lfatal_oom(_self->client_arr = calloc(max_clients, sizeof(_output_dnssim_client_t)));
 
@@ -57,7 +73,11 @@ output_dnssim_t* output_dnssim_new(size_t max_clients)
 
     ret = gnutls_certificate_allocate_credentials(&_self->tls_cred);
     if (ret < 0)
-        lfatal("failed to allocated TLS credentials (%s)", gnutls_strerror(ret));
+        lfatal("failed to allocate TLS credentials (%s)", gnutls_strerror(ret));
+
+    ret = gnutls_certificate_set_x509_system_trust(_self->tls_cred);
+    if (ret < 0)
+        lwarning("system trust not set (%s)", gnutls_strerror(ret));
 
     ret = uv_loop_init(&_self->loop);
     if (ret < 0)
@@ -94,8 +114,17 @@ void output_dnssim_free(output_dnssim_t* self)
     }
 
     for (i = 0; i < self->max_clients; ++i) {
-        if (_self->client_arr[i].tls_ticket.size != 0) {
+        _output_dnssim_client_t* client = &_self->client_arr[i];
+        if (client->tls_ticket.size != 0) {
             gnutls_free(_self->client_arr[i].tls_ticket.data);
+        }
+
+        _output_dnssim_0rtt_data_t* zrttd = client->zero_rtt_data;
+        while (zrttd) {
+            _output_dnssim_0rtt_data_t* next = zrttd->next;
+            free(zrttd->data);
+            free(zrttd);
+            zrttd = next;
         }
     }
     free(_self->client_arr);
@@ -234,22 +263,25 @@ void output_dnssim_set_transport(output_dnssim_t* self, output_dnssim_transport_
     case OUTPUT_DNSSIM_TRANSPORT_TCP:
         lnotice("transport set to TCP");
         break;
+#if DNSSIM_HAS_GNUTLS
     case OUTPUT_DNSSIM_TRANSPORT_TLS:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
         lnotice("transport set to TLS");
-#else
-        lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
-#endif
         break;
     case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
         lnotice("transport set to HTTP/2 over TLS");
-        if (&_self->h2_uri_authority[0])
+        if (_self->h2_uri_authority[0])
             lnotice("set uri authority to: %s", _self->h2_uri_authority);
-#else
-        lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
-#endif
         break;
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+        lnotice("transport set to QUIC");
+        break;
+#else
+    case OUTPUT_DNSSIM_TRANSPORT_TLS:
+    case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+        lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
+        break;
+#endif
     case OUTPUT_DNSSIM_TRANSPORT_UDP:
         lfatal("UDP transport with TCP fallback is not supported yet.");
         break;
@@ -322,7 +354,50 @@ int output_dnssim_bind(output_dnssim_t* self, const char* ip)
     return 0;
 }
 
-int output_dnssim_tls_priority(output_dnssim_t* self, const char* priority)
+static void handle_default_priority(const char** inout_priority,
+                                    bool* out_free_priority,
+                                    bool is_quic)
+{
+    const char* default_priority = (is_quic)
+        ? DEFAULT_PRIORITY_QUIC
+        : DEFAULT_PRIORITY_GENERAL;
+
+    size_t sep_ix = 0;
+    while ((*inout_priority)[sep_ix] && (*inout_priority)[sep_ix] != ':')
+        sep_ix++;
+
+    if (strncmp(*inout_priority, DEFAULT_PRIORITY_TOKEN, sep_ix) != 0) {
+        mldebug("non-default_priority");
+        *out_free_priority = false;
+        return;
+    }
+
+    if (!(*inout_priority)[sep_ix]) {
+        mldebug("default_priority - sep_ix: %zu - %s", sep_ix, *inout_priority);
+        *inout_priority = default_priority;
+        *out_free_priority = false;
+        return;
+    }
+
+    size_t prefix_len = strlen(default_priority);
+    const char *suffix = &(*inout_priority)[sep_ix];
+    size_t suffix_len = strlen(suffix);
+    size_t total_len = prefix_len + suffix_len + 1;
+
+    mldebug("priority concat:\nprefix: %.*s\nsuffix: %.*s",
+            (int)prefix_len, default_priority,
+            (int)suffix_len, suffix);
+
+    char *out_priority = malloc(total_len);
+    memcpy(out_priority, default_priority, prefix_len);
+    memcpy(&out_priority[prefix_len], suffix, suffix_len);
+    out_priority[prefix_len + suffix_len] = '\0';
+
+    *inout_priority = out_priority;
+    *out_free_priority = true;
+}
+
+int output_dnssim_tls_priority(output_dnssim_t* self, const char* priority, bool is_quic)
 {
     mlassert_self();
     lassert(priority, "priority is nil");
@@ -333,12 +408,18 @@ int output_dnssim_tls_priority(output_dnssim_t* self, const char* priority)
     }
     lfatal_oom(_self->tls_priority = malloc(sizeof(gnutls_priority_t)));
 
+    bool free_priority = false;
+    handle_default_priority(&priority, &free_priority, is_quic);
+
     int ret = gnutls_priority_init(_self->tls_priority, priority, NULL);
     if (ret < 0) {
-        lfatal("failed to initialize TLS priority cache: %s", gnutls_strerror(ret));
+        lfatal("failed to initialize TLS priority cache (with string '%s'): %s", priority, gnutls_strerror(ret));
     } else {
         lnotice("GnuTLS priority set: %s", priority);
     }
+
+    if (free_priority)
+        free((char*)priority); /* Here it is effectively non-const after being malloc'd */
 
     return 0;
 }

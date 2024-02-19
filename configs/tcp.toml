@@ -29,5 +29,5 @@ kind = "active"
 
 [charts.handshakes]
 type = "connections"
-kind = ["tcp_hs", "failed_hs"]
+kind = ["conn_hs", "failed_hs"]
 title = "Handshakes over Time"

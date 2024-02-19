@@ -19,7 +19,12 @@ import mplhlpr.styles
 JSON_VERSION = 20200527
 
 COLOR_ACTIVE = cycle(["royalblue", "cornflowerblue", "darkblue", "lightsteelblue"])
-COLOR_TCP_HS = cycle(["forestgreen", "limegreen", "darkgreen", "lightgreen"])
+COLOR_CONN_HS = cycle(["forestgreen", "limegreen", "darkgreen", "lightgreen"])
+COLOR_QUIC_0RTT = cycle(
+    ["darkolivegreen", "darkseagreen", "darkslategray", "greenyellow"]
+)
+COLOR_QUIC_0RTT_SENT = cycle(["crimson", "brown", "firebrick", "indianred"])
+COLOR_QUIC_0RTT_ANSWERED = cycle(["khaki", "moccasin", "peru", "wheat"])
 COLOR_TLS_RESUMED = cycle(["orange", "moccasin", "darkorange", "antiquewhite"])
 COLOR_FAILED_HS = cycle(["gray", "silver", "black", "gainsboro"])
 
@@ -37,7 +42,7 @@ def siname(n):
         0,
         min(len(sinames) - 1, int(math.floor(0 if n == 0 else math.log10(abs(n)) / 3))),
     )
-    return "{:.0f}{}".format(n / 10 ** (3 * siidx), sinames[siidx])
+    return f"{(n / 10 ** (3 * siidx)):.0f}{sinames[siidx]}"
 
 
 def init_plot(title):
@@ -98,8 +103,17 @@ def main():
         "-k",
         "--kind",
         nargs="+",
-        choices=["active", "tcp_hs", "tls_resumed", "failed_hs"],
-        default=["active", "tcp_hs", "tls_resumed", "failed_hs"],
+        choices=[
+            "active",
+            "conn_hs",
+            "tcp_hs",  # same as conn_hs - backwards compatibility
+            "quic_0rtt",
+            "quic_0rtt_sent",
+            "quic_0rtt_answered",
+            "tls_resumed",
+            "failed_hs",
+        ],
+        default=["active", "conn_hs", "tls_resumed", "failed_hs"],
         help="Which data should be rendered",
     )
     args = parser.parse_args()
@@ -109,7 +123,7 @@ def main():
 
     for json_path in args.json_file:
         try:
-            with open(json_path) as f:
+            with open(json_path, encoding="utf-8") as f:
                 data = json.load(f)
         except FileNotFoundError as exc:
             logging.critical("%s", exc)
@@ -137,13 +151,37 @@ def main():
                 color=next(COLOR_ACTIVE),
                 eval_func=lambda stats: stats["conn_active"],
             )
-        if "tcp_hs" in args.kind:
+        if "conn_hs" in args.kind or "tcp_hs" in args.kind:
             plot(
                 ax,
                 data,
-                label=f"TCP Handshakes ({name})",
-                color=next(COLOR_TCP_HS),
+                label=f"Handshakes ({name})",
+                color=next(COLOR_CONN_HS),
                 eval_func=lambda stats: stats["conn_handshakes"],
+            )
+        if "quic_0rtt" in args.kind:
+            plot(
+                ax,
+                data,
+                label=f"QUIC 0RTT ({name})",
+                color=next(COLOR_QUIC_0RTT),
+                eval_func=lambda stats: stats["conn_quic_0rtt_loaded"],
+            )
+        if "quic_0rtt_sent" in args.kind:
+            plot(
+                ax,
+                data,
+                label=f"QUIC 0RTT sent ({name})",
+                color=next(COLOR_QUIC_0RTT_SENT),
+                eval_func=lambda stats: stats["quic_0rtt_sent"],
+            )
+        if "quic_0rtt_answered" in args.kind:
+            plot(
+                ax,
+                data,
+                label=f"QUIC 0RTT answered ({name})",
+                color=next(COLOR_QUIC_0RTT_ANSWERED),
+                eval_func=lambda stats: stats["quic_0rtt_answered"],
             )
         if "tls_resumed" in args.kind:
             plot(

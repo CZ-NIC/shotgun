@@ -6,9 +6,14 @@ variables:
 
 stages:
   - docker
-  - build
   - test
   - deploy
+
+.rebuild-image-rule: &rebuild-image-rule
+  if: $CI_PIPELINE_SOURCE == "push"
+  changes:
+  - ci/dnsjit/**/*
+  - .gitlab-ci.yml
 
 dnsjit-image:
   stage: docker
@@ -19,10 +24,7 @@ dnsjit-image:
     - amd64
     - dind
   rules:
-    - if: $CI_PIPELINE_SOURCE == "push"
-      changes:
-      - ci/dnsjit/**/*
-      - .gitlab-ci.yml
+    - <<: *rebuild-image-rule
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
     - docker pull "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest" || true # to use as many cached layers as possible (allowed to fail)
@@ -45,19 +47,24 @@ dnsjit-image:
 
 .debian: &debian
   image: $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH
+  # This is unsupported in GitLab <16.1
+  #needs: []
+  #rules:
+  #  - <<: *rebuild-image-rule
+  #    needs:
+  #      - job: dnsjit-image
+  #        artifacts: false
+  #  - when: on_success
   tags:
     - docker
     - linux
     - amd64
 
 black:
-  image: docker.io/pyfound/black:latest
-  tags:
-    - docker
-    - linux
-    - amd64
+  <<: *debian
+  stage: test
   script:
-    - black --check .
+    - python3 -m black --check . --extend-exclude 'replay/dnssim/vendor'
 
 mypy:
   <<: *debian
@@ -80,7 +87,7 @@ luacheck:
 
 .dnssim-build: &dnssim-build
   <<: *debian
-  stage: build
+  stage: test
   script:
     - mkdir replay/dnssim/build
     - cd    replay/dnssim/build

@@ -182,7 +182,7 @@ def main():
         sys.exit(3)
     for csv_path, line_props in zip(args.csv_file, plot_props):
         try:
-            with open(csv_path) as f:
+            with open(csv_path, encoding="utf-8") as f:
                 period, xyrate = parse_csv(f, args.since, args.until)
         except FileNotFoundError as exc:
             logging.critical("%s", exc)

@@ -43,41 +43,48 @@ local function send_thread_main(thr)
 	local channel = thr:pop()
 	local running
 
-	-- output must be global (per thread) to be accesible in loadstring()
-	-- luacheck: globals output, ignore log
-	output = require("shotgun.output.dnssim").new(thr:pop())
-	local log = output:log(thr:pop())
-
-	output:target(thr:pop(), thr:pop())
-	output:timeout(thr:pop())
-	output:handshake_timeout(thr:pop())
-	output:idle_timeout(thr:pop())
-
+	local max_clients = thr:pop()
+	local name = thr:pop()
+	local target_ip = thr:pop()
+	local target_port = thr:pop()
+	local timeout_s = thr:pop()
+	local handshake_timeout_s = thr:pop()
+	local idle_timeout_s = thr:pop()
 	local protocol_func = thr:pop()
 	local gnutls_priority = thr:pop()
+	local zero_rtt = thr:pop()
 	local http_method = thr:pop()
-	local cmd = "output:" .. protocol_func
+	local output_file = thr:pop()
+	local batch_size = thr:pop()
+	local nbind = thr:pop()
+
+	local output = require("shotgun.output.dnssim").new(max_clients)
+	-- luacheck: ignore log
+	local log = output:log(name)
+
+	output:target(target_ip, target_port)
+	output:timeout(timeout_s)
+	output:handshake_timeout(handshake_timeout_s)
+	output:idle_timeout(idle_timeout_s)
+	output:zero_rtt(zero_rtt)
 
 	if protocol_func == "udp" then
-		cmd = cmd .. "()"
+		output:udp()
 	elseif protocol_func == "tcp" then
-		cmd = cmd .. "()"
+		output:tcp()
 	elseif protocol_func == "tls" then
-		cmd = cmd .. "('" .. gnutls_priority .. "')"
+		output:tls(gnutls_priority)
 	elseif protocol_func == "https2" then
-		cmd = cmd .. "({ method = '" .. http_method .. "' }, '" .. gnutls_priority .. "')"
+		output:https2({ method = http_method }, gnutls_priority)
+	elseif protocol_func == "quic" then
+		output:quic(gnutls_priority)
 	else
 		log:fatal("unknown protocol_func: " .. protocol_func)
 	end
-	assert(loadstring(cmd))()
 
 	output:stats_collect(1)
 	output:free_after_use(true)
 
-	local outfile = thr:pop()
-	local batch_size = thr:pop()
-
-	local nbind = thr:pop()
 	for _ = 1, nbind do
 		output:bind(thr:pop())
 	end
@@ -129,7 +136,7 @@ local function send_thread_main(thr)
 		running = output:run_nowait()
 	end
 
-	output:export(outfile)
+	output:export(output_file)
 end
 
 
@@ -184,6 +191,7 @@ for i, thrconf in ipairs(config.threads) do
 	threads[i]:push(thrconf.idle_timeout_s)
 	threads[i]:push(thrconf.protocol_func)
 	threads[i]:push(thrconf.gnutls_priority)
+	threads[i]:push(thrconf.zero_rtt)
 	threads[i]:push(thrconf.http_method)
 	threads[i]:push(thrconf.output_file)
 	threads[i]:push(thrconf.batch_size)

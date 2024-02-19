@@ -26,14 +26,12 @@ class MismatchData(RuntimeError):
 
 class MissingData(RuntimeError):
     def __init__(self, field):
-        super().__init__(
-            'Field "{field}" is missing in one or more files.'.format(field=field)
-        )
+        super().__init__(f'Field "{field}" is missing in one or more files.')
 
 
 class MergeFailed(RuntimeError):
     def __init__(self, field):
-        super().__init__('Failed to merge field "{field}".'.format(field=field))
+        super().__init__(f'Failed to merge field "{field}".')
 
 
 def first(iterable):
@@ -68,6 +66,9 @@ DATA_STRUCTURE_STATS = {
     "conn_active": sum,
     "conn_resumed": sum,
     "conn_handshakes": sum,
+    "conn_quic_0rtt_loaded": sum,
+    "quic_0rtt_sent": sum,
+    "quic_0rtt_answered": sum,
     "conn_handshakes_failed": sum,
     "rcode_noerror": sum,
     "rcode_formerr": sum,
@@ -100,7 +101,7 @@ def merge_stats(iterable):
 def merge_periodic_stats(iterable):
     out = []
 
-    for i in range(max([len(stats_periodic) for stats_periodic in iterable])):
+    for i in range(max(len(stats_periodic) for stats_periodic in iterable)):
         to_merge = []
         for stats_periodic in iterable:
             try:
@@ -169,12 +170,12 @@ def main():
     try:
         thread_data = []
         for path in args.json_file:
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 thread_data.append(json.load(f))
 
         merged = merge_data(thread_data)
 
-        with open(outpath, "w") as f:
+        with open(outpath, "w", encoding="utf-8") as f:
             json.dump(merged, f)
         logging.info("DONE: merged shotgun results saved as %s", outpath)
     except (FileNotFoundError, VersionError) as exc:

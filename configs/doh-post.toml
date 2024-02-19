@@ -32,10 +32,10 @@ kind = "active"
 
 [charts.handshakes]
 type = "connections"
-kind = ["tcp_hs", "failed_hs"]
+kind = ["conn_hs", "failed_hs"]
 title = "Handshakes over Time"
 
 [charts.resumptions]
 type = "connections"
-kind = ["tcp_hs", "tls_resumed"]
+kind = ["conn_hs", "tls_resumed"]
 title = "TLS Session Resumption for New Connections"

@@ -12,11 +12,9 @@
 
 static core_log_t _log = LOG_T_INIT("output.dnssim");
 
-static void _close_request(_output_dnssim_request_t* req);
-
 static void _on_request_timeout(uv_timer_t* handle)
 {
-    _close_request((_output_dnssim_request_t*)handle->data);
+    _output_dnssim_close_request(handle->data);
 }
 
 static ssize_t parse_qsection(core_object_dns_t* dns)
@@ -109,20 +107,23 @@ void _output_dnssim_create_request(output_dnssim_t* self, _output_dnssim_client_
     case OUTPUT_DNSSIM_TRANSPORT_TCP:
         ret = _output_dnssim_create_query_tcp(self, req);
         break;
+#if DNSSIM_HAS_GNUTLS
     case OUTPUT_DNSSIM_TRANSPORT_TLS:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
         ret = _output_dnssim_create_query_tls(self, req);
-#else
-        lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
-#endif
         break;
     case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
         ret = _output_dnssim_create_query_https2(self, req);
-#else
-        lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
-#endif
         break;
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+        ret = _output_dnssim_create_query_quic(self, req);
+        break;
+#else
+    case OUTPUT_DNSSIM_TRANSPORT_TLS:
+    case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+        lfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
+        break;
+#endif
     default:
         lfatal("unsupported dnssim transport");
         break;
@@ -141,8 +142,88 @@ void _output_dnssim_create_request(output_dnssim_t* self, _output_dnssim_client_
     return;
 failure:
     self->discarded++;
-    _close_request(req);
+    _output_dnssim_close_request(req);
     return;
+}
+
+static void _on_request_timer_closed(uv_handle_t* handle)
+{
+    _output_dnssim_request_t* req = (_output_dnssim_request_t*)handle->data;
+    mlassert(req, "req is nil");
+    free(handle);
+    req->timer = NULL;
+    _output_dnssim_maybe_free_request(req);
+}
+
+static void _close_query(_output_dnssim_query_t* qry)
+{
+    mlassert(qry, "qry is nil");
+
+    switch (qry->transport) {
+    case OUTPUT_DNSSIM_TRANSPORT_UDP:
+        _output_dnssim_close_query_udp((_output_dnssim_query_udp_t*)qry);
+        break;
+    case OUTPUT_DNSSIM_TRANSPORT_TCP:
+        _output_dnssim_close_query_tcp((_output_dnssim_query_stream_t*)qry);
+        break;
+#if DNSSIM_HAS_GNUTLS
+    case OUTPUT_DNSSIM_TRANSPORT_TLS:
+        _output_dnssim_close_query_tls((_output_dnssim_query_stream_t*)qry);
+        break;
+    case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
+        _output_dnssim_close_query_https2((_output_dnssim_query_stream_t*)qry);
+        break;
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+        _output_dnssim_close_query_quic((_output_dnssim_query_stream_t*)qry);
+        break;
+#else
+    case OUTPUT_DNSSIM_TRANSPORT_TLS:
+    case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+        mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
+        break;
+#endif
+    default:
+        mlfatal("invalid query transport");
+        break;
+    }
+}
+
+void _output_dnssim_close_request(_output_dnssim_request_t* req)
+{
+    if (req == NULL || req->state == _OUTPUT_DNSSIM_REQ_CLOSING)
+        return;
+    mlassert(req->state == _OUTPUT_DNSSIM_REQ_ONGOING, "request to be closed must be ongoing");
+    req->state = _OUTPUT_DNSSIM_REQ_CLOSING;
+    req->dnssim->ongoing--;
+
+    /* Calculate latency. When the request was answered in time, this is set to
+     * the actual time it took to answer it. If the request timed-out or failed
+     * prematurely (e.g. because of stream reset), the latency is set to the
+     * maximum timeout value to indicate that it was lost. */
+    uint64_t latency;
+    if (req->answered) {
+        req->ended_at = uv_now(&((_output_dnssim_t*)req->dnssim)->loop);
+        latency       = req->ended_at - req->created_at;
+    }
+    if (!req->answered || latency > req->dnssim->timeout_ms) {
+        req->ended_at = req->created_at + req->dnssim->timeout_ms;
+        latency       = req->dnssim->timeout_ms;
+    }
+    req->stats->latency[latency]++;
+    req->dnssim->stats_sum->latency[latency]++;
+
+    if (req->timer != NULL) {
+        uv_timer_stop(req->timer);
+        uv_close((uv_handle_t*)req->timer, _on_request_timer_closed);
+    }
+
+    /* Finish any queries in flight. */
+    _output_dnssim_query_t* qry = req->qry;
+    if (qry != NULL)
+        _close_query(qry);
+
+    _output_dnssim_maybe_free_request(req);
 }
 
 /* Bind before connect to be able to send from different source IPs. */
@@ -193,85 +274,18 @@ void _output_dnssim_maybe_free_request(_output_dnssim_request_t* req)
     }
 }
 
-static void _close_query(_output_dnssim_query_t* qry)
-{
-    mlassert(qry, "qry is nil");
-
-    switch (qry->transport) {
-    case OUTPUT_DNSSIM_TRANSPORT_UDP:
-        _output_dnssim_close_query_udp((_output_dnssim_query_udp_t*)qry);
-        break;
-    case OUTPUT_DNSSIM_TRANSPORT_TCP:
-        _output_dnssim_close_query_tcp((_output_dnssim_query_tcp_t*)qry);
-        break;
-    case OUTPUT_DNSSIM_TRANSPORT_TLS:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
-        _output_dnssim_close_query_tls((_output_dnssim_query_tcp_t*)qry);
-#else
-        mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
-#endif
-        break;
-    case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
-        _output_dnssim_close_query_https2((_output_dnssim_query_tcp_t*)qry);
-#else
-        mlfatal(DNSSIM_MIN_GNUTLS_ERRORMSG);
-#endif
-        break;
-    default:
-        mlfatal("invalid query transport");
-        break;
-    }
-}
-
-static void _on_request_timer_closed(uv_handle_t* handle)
-{
-    _output_dnssim_request_t* req = (_output_dnssim_request_t*)handle->data;
-    mlassert(req, "req is nil");
-    free(handle);
-    req->timer = NULL;
-    _output_dnssim_maybe_free_request(req);
-}
-
-static void _close_request(_output_dnssim_request_t* req)
-{
-    if (req == NULL || req->state == _OUTPUT_DNSSIM_REQ_CLOSING)
-        return;
-    mlassert(req->state == _OUTPUT_DNSSIM_REQ_ONGOING, "request to be closed must be ongoing");
-    req->state = _OUTPUT_DNSSIM_REQ_CLOSING;
-    req->dnssim->ongoing--;
-
-    /* Calculate latency. */
-    uint64_t latency;
-    req->ended_at = uv_now(&((_output_dnssim_t*)req->dnssim)->loop);
-    latency       = req->ended_at - req->created_at;
-    if (latency > req->dnssim->timeout_ms) {
-        req->ended_at = req->created_at + req->dnssim->timeout_ms;
-        latency       = req->dnssim->timeout_ms;
-    }
-    req->stats->latency[latency]++;
-    req->dnssim->stats_sum->latency[latency]++;
-
-    if (req->timer != NULL) {
-        uv_timer_stop(req->timer);
-        uv_close((uv_handle_t*)req->timer, _on_request_timer_closed);
-    }
-
-    /* Finish any queries in flight. */
-    _output_dnssim_query_t* qry = req->qry;
-    if (qry != NULL)
-        _close_query(qry);
-
-    _output_dnssim_maybe_free_request(req);
-}
-
-void _output_dnssim_request_answered(_output_dnssim_request_t* req, core_object_dns_t* msg)
+void _output_dnssim_request_answered(_output_dnssim_request_t* req, core_object_dns_t* msg, bool is_early)
 {
     mlassert(req, "req is nil");
     mlassert(msg, "msg is nil");
 
+    req->answered = true;
     req->dnssim->stats_sum->answers++;
     req->stats->answers++;
+    if (is_early) {
+        req->dnssim->stats_sum->quic_0rtt_answered++;
+        req->stats->quic_0rtt_answered++;
+    }
 
     switch (msg->rcode) {
     case CORE_OBJECT_DNS_RCODE_NOERROR:
@@ -355,7 +369,7 @@ void _output_dnssim_request_answered(_output_dnssim_request_t* req, core_object_
         req->stats->rcode_other++;
     }
 
-    _close_request(req);
+    _output_dnssim_close_request(req);
 }
 
 void _output_dnssim_on_uv_alloc(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf)
@@ -363,3 +377,35 @@ void _output_dnssim_on_uv_alloc(uv_handle_t* handle, size_t suggested_size, uv_b
     mlfatal_oom(buf->base = malloc(suggested_size));
     buf->len = suggested_size;
 }
+
+int _output_dnssim_append_to_query_buf(_output_dnssim_query_stream_t* qry, const uint8_t* data, size_t datalen)
+{
+    if (datalen == 0)
+        return 0;
+    mlassert(data, "non-zero datalen with NULL data");
+
+    mlassert(qry->recv_buf_len || !qry->recv_buf,
+            "recv_buf was assigned while recv_buf_len was zero");
+    size_t total_len = qry->recv_buf_len + datalen;
+    if (total_len > MAX_DNSMSG_SIZE) {
+        mlwarning("response exceeded maximum size of dns message");
+        return -1;
+    }
+    if (qry->recv_buf_len < total_len)
+        mlfatal_oom(qry->recv_buf = realloc(qry->recv_buf, total_len));
+
+    memcpy(&qry->recv_buf[qry->recv_buf_len], data, datalen);
+    qry->recv_buf_len = total_len;
+
+    return 0;
+}
+
+#if DNSSIM_HAS_GNUTLS
+void _output_dnssim_rand(void *data, size_t len)
+{
+    mlassert(data, "data must not be nil");
+
+    int ret = gnutls_rnd(GNUTLS_RND_RANDOM, data, len);
+    mlassert(!ret, "random number generation failed: %d %s", ret, gnutls_strerror(ret));
+}
+#endif

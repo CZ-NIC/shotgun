@@ -35,33 +35,49 @@
  *
  * In strict mode, the node must be present in the list.
  */
-#define _ll_remove_template(list, node, strict)                                                    \
-    {                                                                                              \
+#define _ll_remove_template(list, currname, cond, strict, once, dealloc)                           \
+    do {                                                                                           \
         if (strict)                                                                                \
             glassert((list), "list can't be null when removing nodes");                            \
-        if ((list) != NULL && (node) != NULL) {                                                    \
-            if ((list) == (node)) {                                                                \
-                (list)       = (node)->next;                                                       \
-                (node)->next = NULL;                                                               \
-            } else {                                                                               \
-                typeof(list) _current = (list);                                                    \
-                while (_current != NULL && _current->next != (node)) {                             \
-                    if (strict)                                                                    \
-                        glassert((_current->next), "list doesn't contain the node to be removed"); \
-                    _current = _current->next;                                                     \
-                }                                                                                  \
-                if (_current != NULL) {                                                            \
-                    _current->next = (node)->next;                                                 \
-                    (node)->next   = NULL;                                                         \
+        if ((list) != NULL) {                                                                      \
+            bool _removed = false;                                                                 \
+            typeof(list)* currname = &(list);                                                      \
+            while (*currname) {                                                                    \
+                if ((cond)) {                                                                      \
+                    typeof(list) _c = *currname;                                                   \
+                    (*currname) = _c->next;                                                        \
+                    _c->next = NULL;                                                               \
+                    _removed = true;                                                               \
+                    if ((dealloc))                                                                 \
+                        free(_c);                                                                  \
+                    if ((once))                                                                    \
+                        break;                                                                     \
+                } else {                                                                           \
+                    currname = &(*currname)->next;                                                 \
                 }                                                                                  \
             }                                                                                      \
+            if (!_removed && (strict))                                                             \
+                glfatal("list doesn't contain the node to be removed");                            \
         }                                                                                          \
-    }
+    } while (0)
 
-/* Remove a node from the list. */
-#define _ll_remove(list, node) _ll_remove_template((list), (node), true)
+#define _ll_remove_node_template(list, node, strict) \
+        _ll_remove_template((list), curr, *curr == (node), strict, true, false)
 
-/* Remove a node from the list if it's present. */
-#define _ll_try_remove(list, node) _ll_remove_template((list), (node), false)
+/* Remove the specified node from the list. */
+#define _ll_remove(list, node) \
+        _ll_remove_node_template((list), (node), true)
+
+/* Remove the specified node from the list if it's present. */
+#define _ll_try_remove(list, node) \
+        _ll_remove_node_template((list), (node), false)
+
+/* Remove all nodes for which `cond` is `true`. Here, `currname` is the name of
+ * the pointer to the node currently checked by `cond`. I.e. in the first case,
+ * `currname` will be `&list`, then `&list->next`, then `&list->next->next` etc.
+ *
+ * For `currname = c`, `cond` may be e.g. `(*c)->qry == qry`. */
+#define _ll_remove_cond(list, currname, cond, dealloc) \
+        _ll_remove_template((list), currname, (cond), false, false, (dealloc))
 
 #endif

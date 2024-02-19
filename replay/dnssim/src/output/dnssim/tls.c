@@ -8,7 +8,7 @@
 
 #include <string.h>
 
-#if GNUTLS_VERSION_NUMBER >= DNSSIM_MIN_GNUTLS_VERSION
+#if DNSSIM_HAS_GNUTLS
 
 #ifndef MIN
 #define MIN(a, b) (((a) < (b)) ? (a) : (b)) /** Minimum of two numbers **/
@@ -29,11 +29,6 @@ static int _tls_handshake(_output_dnssim_connection_t* conn)
     mlassert(conn->client, "conn must belong to a client");
     mlassert(conn->state <= _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE, "conn in invalid state");
 
-    /* Set TLS session resumption ticket if available. */
-    if (conn->state < _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE && conn->client->tls_ticket.size != 0) {
-        gnutls_datum_t* ticket = &conn->client->tls_ticket;
-        gnutls_session_set_data(conn->tls->session, ticket->data, ticket->size);
-    }
     conn->state = _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE;
 
     return gnutls_handshake(conn->tls->session);
@@ -57,11 +52,13 @@ void _output_dnssim_tls_process_input_data(_output_dnssim_connection_t* conn)
         int err = _tls_handshake(conn);
         mldebug("tls handshake returned: %s", gnutls_strerror(err));
         if (err == GNUTLS_E_SUCCESS) {
-            if (gnutls_session_is_resumed(conn->tls->session))
+            if (gnutls_session_is_resumed(conn->tls->session)) {
                 conn->stats->conn_resumed++;
+                self->stats_sum->conn_resumed++;
+            }
             if (_self->transport == OUTPUT_DNSSIM_TRANSPORT_HTTPS2) {
                 if (_output_dnssim_https2_setup(conn) < 0) {
-                    _output_dnssim_conn_close(conn);
+                    _output_dnssim_conn_bye(conn);
                     return;
                 }
             }
@@ -91,7 +88,7 @@ void _output_dnssim_tls_process_input_data(_output_dnssim_connection_t* conn)
         if (count > 0) {
             switch (_self->transport) {
             case OUTPUT_DNSSIM_TRANSPORT_TLS:
-                _output_dnssim_read_dns_stream(conn, count, _self->wire_buf);
+                _output_dnssim_read_dns_stream(conn, count, _self->wire_buf, -1);
                 break;
             case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
                 _output_dnssim_https2_process_input_data(conn, count, _self->wire_buf);
@@ -159,6 +156,7 @@ static ssize_t _tls_vec_push(gnutls_transport_ptr_t ptr, const giovec_t* iov, in
 {
     _output_dnssim_connection_t* conn = (_output_dnssim_connection_t*)ptr;
     mlassert(conn != NULL, "conn is null");
+    mlassert(conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_TCP, "conn transport type must be tcp");
     mlassert(conn->tls != NULL, "conn must have tls ctx");
 
     if (iovcnt == 0)
@@ -185,7 +183,7 @@ static ssize_t _tls_vec_push(gnutls_transport_ptr_t ptr, const giovec_t* iov, in
     /* Try to perform the immediate write first to avoid copy */
     int ret = 0;
     if (conn->tls->write_queue_size == 0) {
-        ret = uv_try_write((uv_stream_t*)conn->handle, uv_buf, iovcnt);
+        ret = uv_try_write((uv_stream_t*)conn->transport.tcp, uv_buf, iovcnt);
         /* from libuv documentation -
            uv_try_write will return either:
            > 0: number of bytes written (can be less than the supplied buffer size).
@@ -251,7 +249,7 @@ static ssize_t _tls_vec_push(gnutls_transport_ptr_t ptr, const giovec_t* iov, in
         write_req->data = p;
 
         /* Perform an asynchronous write with a callback */
-        if (uv_write(write_req, (uv_stream_t*)conn->handle, uv_buf, 1, _tls_on_write_complete) == 0) {
+        if (uv_write(write_req, (uv_stream_t*)conn->transport.tcp, uv_buf, 1, _tls_on_write_complete) == 0) {
             ret = total_len;
             conn->tls->write_queue_size += 1;
         } else {
@@ -281,19 +279,28 @@ int _tls_pull_timeout(gnutls_transport_ptr_t ptr, unsigned int ms)
     return avail;
 }
 
-int _output_dnssim_tls_init(_output_dnssim_connection_t* conn)
+int  _output_dnssim_tls_init(_output_dnssim_connection_t* conn, bool has_0rtt)
 {
     mlassert(conn, "conn is nil");
+    mlassert(conn->client, "conn does not have client");
     mlassert(conn->tls == NULL, "conn already has tls context");
 
     int ret;
     mlfatal_oom(conn->tls = malloc(sizeof(_output_dnssim_tls_ctx_t)));
+    conn->tls->has_ticket       = false;
     conn->tls->buf              = NULL;
     conn->tls->buf_len          = 0;
     conn->tls->buf_pos          = 0;
     conn->tls->write_queue_size = 0;
 
-    ret = gnutls_init(&conn->tls->session, GNUTLS_CLIENT | GNUTLS_NONBLOCK);
+    unsigned int flags = GNUTLS_CLIENT | GNUTLS_NONBLOCK;
+
+    if (has_0rtt && conn->client->tls_ticket.size != 0) {
+        flags |= GNUTLS_ENABLE_EARLY_DATA
+            | GNUTLS_NO_END_OF_EARLY_DATA;
+    }
+
+    ret = gnutls_init(&conn->tls->session, flags);
     if (ret < 0) {
         mldebug("failed gnutls_init() (%s)", gnutls_strerror(ret));
         free(conn->tls);
@@ -331,6 +338,15 @@ int _output_dnssim_tls_init(_output_dnssim_connection_t* conn)
         return ret;
     }
 
+    /* Set TLS session resumption ticket if available. */
+    if (conn->client->tls_ticket.size != 0) {
+        gnutls_datum_t* ticket = &conn->client->tls_ticket;
+        gnutls_session_set_data(conn->tls->session, ticket->data, ticket->size);
+        gnutls_free(conn->client->tls_ticket.data);
+        conn->client->tls_ticket.size = 0;
+        conn->tls->has_ticket = true;
+    }
+
     gnutls_transport_set_pull_function(conn->tls->session, _tls_pull);
     gnutls_transport_set_pull_timeout_function(conn->tls->session, _tls_pull_timeout);
     gnutls_transport_set_vec_push_function(conn->tls->session, _tls_vec_push);
@@ -345,9 +361,9 @@ int _output_dnssim_create_query_tls(output_dnssim_t* self, _output_dnssim_reques
     lassert(req, "req is nil");
     lassert(req->client, "request must have a client associated with it");
 
-    _output_dnssim_query_tcp_t* qry;
+    _output_dnssim_query_stream_t* qry;
 
-    lfatal_oom(qry = calloc(1, sizeof(_output_dnssim_query_tcp_t)));
+    lfatal_oom(qry = calloc(1, sizeof(_output_dnssim_query_stream_t)));
 
     qry->qry.transport = OUTPUT_DNSSIM_TRANSPORT_TLS;
     qry->qry.req       = req;
@@ -358,7 +374,7 @@ int _output_dnssim_create_query_tls(output_dnssim_t* self, _output_dnssim_reques
     return _output_dnssim_handle_pending_queries(req->client);
 }
 
-void _output_dnssim_close_query_tls(_output_dnssim_query_tcp_t* qry)
+void _output_dnssim_close_query_tls(_output_dnssim_query_stream_t* qry)
 {
     mlassert(qry, "qry can't be null");
     mlassert(qry->qry.req, "query must be part of a request");
@@ -386,9 +402,6 @@ void _output_dnssim_tls_close(_output_dnssim_connection_t* conn)
     /* Try and get a TLS session ticket for potential resumption. */
     int ret;
     if (gnutls_session_get_flags(conn->tls->session) & GNUTLS_SFLAGS_SESSION_TICKET) {
-        if (conn->client->tls_ticket.size != 0) {
-            gnutls_free(conn->client->tls_ticket.data);
-        }
         ret = gnutls_session_get_data2(conn->tls->session, &conn->client->tls_ticket);
         if (ret < 0) {
             mldebug("gnutls_session_get_data2 failed: %s", gnutls_strerror(ret));
@@ -397,10 +410,11 @@ void _output_dnssim_tls_close(_output_dnssim_connection_t* conn)
     }
 
     gnutls_deinit(conn->tls->session);
-    _output_dnssim_tcp_close(conn);
+    if (conn->transport_type == _OUTPUT_DNSSIM_CONN_TRANSPORT_TCP)
+        _output_dnssim_tcp_close(conn);
 }
 
-void _output_dnssim_tls_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_tcp_t* qry)
+void _output_dnssim_tls_write_query(_output_dnssim_connection_t* conn, _output_dnssim_query_stream_t* qry)
 {
     mlassert(qry, "qry can't be null");
     mlassert(qry->qry.state == _OUTPUT_DNSSIM_QUERY_PENDING_WRITE, "qry must be pending write");
