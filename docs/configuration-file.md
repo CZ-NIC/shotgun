@@ -72,6 +72,10 @@ by [section 4.2 of RFC 9001](https://www.rfc-editor.org/rfc/rfc9001.html#section
 and disables some of the less secure ciphers (settings taken from
 [Knot DNS](https://gitlab.nic.cz/knot/knot-dns/-/blob/v3.3.2/src/libknot/quic/quic.c#L50)).
 
+!!! warning
+    When `%NO_TICKETS` is set here for DNS-over-QUIC transport, `zero_rtt`
+    needs to be **disabled**. Otherwise, DNS Shotgun may misbehave.
+
 
 ### http_method
 
@@ -93,6 +97,12 @@ Integer. Defaults to 2 seconds.
 Timeout for establishing a connection in seconds.
 
 Integer. Defaults to 5 seconds.
+
+### zero_rtt
+
+Whether 0-RTT (early data) is enabled. Only applicable to DNS-over-QUIC.
+
+Boolean. Defaults to `true`.
 
 ### Advanced settings
 
