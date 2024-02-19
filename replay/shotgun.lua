@@ -4,11 +4,11 @@ local object = require("dnsjit.core.objects")
 local log = require("dnsjit.core.log")
 local dnssim = require("shotgun.output.dnssim")
 
-local DNSSIM_REQ_VERSION = 20210714
+local DNSSIM_REQ_VERSION = 20240219
 local has_check_version, version = pcall(dnssim.check_version, DNSSIM_REQ_VERSION)
 if not has_check_version or version == nil then
 	log.fatal(string.format(
-		"Newer dnsjit is required. Minimum version of dnssim component is v%d.",
+		"Newer dnssim is required. Minimum version of dnssim component is v%d.",
 		DNSSIM_REQ_VERSION))
 end
 
