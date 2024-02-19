@@ -1,3 +1,8 @@
+dnssim forever
+==============
+Since dnssim is now a part of Shotgun, all future changes will be logged in
+Shotgun's `NEWS` file.
+
 dnssim v20210714
 ================
 - dnssim was moved from dnsjit to shotgun, this implies new

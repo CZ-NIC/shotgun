@@ -1,3 +1,44 @@
+DNS Shotgun v20240219
+=====================
+
+Incompatible changes
+--------------------
+- CMake is now being used to build dnssim instead of Autotools
+- GnuTLS 3.7.0+ is now required
+
+Improvements
+------------
+- pcap/extract-clients: always reset UDP port numbers to 53 (!56)
+- pcap/extract-clients: ability to write to stdout (!62)
+- pcap/filter-dnsq: skip 'special' queries for \*.dotnxdomain.net (!58)
+- pcap/split-clients: new tool to split larger PCAPs into smaller ones (!61)
+- pcap/merge-chunks: allow disabling randomization (!67)
+- tools/plot-latency: ability to diversify lines with linestyles (!69)
+- tools/plot-response-rate: estimate worst-case drop caused by discarded packets (!74)
+- tools/plot-packet-rate: handle incomplete last sampling period (!71)
+- tools/plot-response-rate: ability to ignore RCODEs with small response rate (!73)
+- pcap/filter-dnsq: ability to log malformed queries (!72)
+- pcap/generate-const-qps: new tool to generate constant QPS (!33)
+- tools: allow customizing plot charts with `SHOTGUN_MPLSTYLES` (!65)
+- replay: `--preload` argument, mainly for dnssim debugging with sanitizers (!76)
+- tools/plot-latency: use fractional values for humans in charts (!78)
+- pcap/extract-clients: warn if some input packets were skipped (!80)
+- dnssim: replace Autotools with CMake (!77, !86)
+- configs: DoH configs with exclusively GET/POST methods (!82)
+- tools/plot-response-rate: avoid division by zero (!89)
+- tools/plot-latency: denser labels to improve logarithmic scale readability (!90)
+- pcap/extract-clients: allow query rewriting - anonymization (!91)
+- Support for DNS-over-QUIC :tada: (!75)
+
+Bugfixes
+--------
+- tools/plot-response-rate: avoid white lines on white background (!55)
+- tools/plot-client-distribution: properly handle file limit (!59)
+- pcap: proper PCAP write error handling (!60)
+- tools/plot-connections: set axis limits properly (!66)
+- tools/plot-packet-rate: trim chart whitespace (!79)
+- replay: do not exit silently when dnssim returns non-zero (!87)
+
 DNS Shotgun v20210714
 =====================
 
