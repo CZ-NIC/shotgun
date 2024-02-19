@@ -26,19 +26,21 @@ dnsjit-image:
   rules:
     - <<: *rebuild-image-rule
   script:
+      # We concatenate '$CI_COMMIT_TAG$CI_COMMIT_TAG' here - they are exclusive,
+      # only one of them should apply
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
     - docker pull "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest" || true # to use as many cached layers as possible (allowed to fail)
-    - docker pull "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH" || true # to use as many cached layers as possible (allowed to fail)
+    - docker pull "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH$CI_COMMIT_TAG" || true # to use as many cached layers as possible (allowed to fail)
     - docker build --build-arg "CI_REGISTRY=$CI_REGISTRY" --tag "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA" ci/dnsjit
     - test "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH"
       && docker tag "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest"
       && echo "Created 'latest' tag"
       || echo "Not on '$CI_DEFAULT_BRANCH' branch - skipping"
-    - test -n "$CI_COMMIT_BRANCH"
-      && docker tag "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH"
-      && docker push "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH"
-      && echo "Pushed '$CI_COMMIT_BRANCH' tag"
-      || echo "Not on a branch"
+    - test -n "$CI_COMMIT_BRANCH$CI_COMMIT_TAG"
+      && docker tag "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH$CI_COMMIT_TAG"
+      && docker push "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH$CI_COMMIT_TAG"
+      && echo "Pushed '$CI_COMMIT_BRANCH$CI_COMMIT_TAG' tag"
+      || echo "Not on a branch/tag"
     - test "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH"
       && docker tag "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest"
       && docker push "$CI_REGISTRY/$DNSJIT_IMAGE_NAME:latest"
@@ -46,7 +48,8 @@ dnsjit-image:
       || echo "Not on '$CI_DEFAULT_BRANCH' branch - skipping"
 
 .debian: &debian
-  image: $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH
+  # Concatenating
+  image: $CI_REGISTRY/$DNSJIT_IMAGE_NAME:$CI_COMMIT_BRANCH$CI_COMMIT_TAG
   # This is unsupported in GitLab <16.1
   #needs: []
   #rules:
