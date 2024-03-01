@@ -40,7 +40,7 @@ The toolchain also provides scripts that can plot these into readable charts.
 **The latest documentation can be found at <https://dns-shotgun.readthedocs.io/>.**
 
 For installation and/or build instructions, see the
-[Installation section](https://dns-shotgun.readthedocs.io/en/stable/installation.html)
+[Installation section](https://dns-shotgun.readthedocs.io/en/stable/installation/)
 of the documentation. The same section also contains instructions for building
 the documentation itself.
 
