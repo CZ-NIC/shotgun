@@ -124,6 +124,11 @@ local function send_thread_main(thr)
 		-- execute libuv loop
 		running = output:run_nowait()
 
+		-- check servers are responding
+		if output:server_unresponsive() then
+			channel:close()
+		end
+
 		-- check if channel is still open
 		if obj == nil and channel.closed == 1 then
 			output:stats_finish()
@@ -209,7 +214,10 @@ copy:receiver(ipsplit)
 -- process PCAP
 local prod, pctx = layer:produce()
 local recv, rctx = copy:receive()
-while true do
+local dnssim_error = false
+local check_channels = config.threads[1].batch_size * #config.threads
+local npkt = 0
+while not dnssim_error do
 	local obj = prod(pctx)
 	if obj == nil then break end
 	if config.stop_after_s then
@@ -219,6 +227,17 @@ while true do
 		end
 	end
 	recv(rctx, obj)
+	npkt = npkt + 1
+	if npkt % check_channels == 0 then
+		for i, _ in ipairs(config.threads) do
+			if channels[i].closed == 1 then
+				log.notice("dnssim error detected, finishing up")
+				dnssim_error = true
+				break
+			end
+		end
+		if dnssim_error then break end
+	end
 end
 log.notice('processed %.0f packets from input PCAP', input:packets())
 
@@ -228,4 +247,8 @@ for i, _ in ipairs(config.threads) do
 end
 for i, _ in ipairs(config.threads) do
 	threads[i]:stop()
+end
+
+if dnssim_error then
+	log.fatal("dnssim error caused premature abort")
 end

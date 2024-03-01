@@ -99,6 +99,9 @@ typedef struct output_dnssim {
     uint64_t idle_timeout_ms;
     uint64_t handshake_timeout_ms;
     uint64_t stats_interval_ms;
+
+    uint64_t response_deadline_ms;
+    bool     server_unresponsive;
 } output_dnssim_t;
 
 core_log_t* output_dnssim_log();

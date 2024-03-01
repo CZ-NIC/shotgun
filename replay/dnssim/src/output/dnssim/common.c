@@ -280,6 +280,7 @@ void _output_dnssim_request_answered(_output_dnssim_request_t* req, core_object_
     mlassert(msg, "msg is nil");
 
     req->answered = true;
+    req->dnssim->response_deadline_ms = UINT64_MAX;
     req->dnssim->stats_sum->answers++;
     req->stats->answers++;
     if (is_early) {

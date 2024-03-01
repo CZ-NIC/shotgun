@@ -26,6 +26,8 @@
 
 #define DEFAULT_INITIAL_0RTT_DATA_CAPACITY 128
 
+#define OUTPUT_DNSSIM_SERVER_NONRESPONSIVE_TIMEOUT_MS 16000
+
 static core_log_t      _log      = LOG_T_INIT("output.dnssim");
 static output_dnssim_t _defaults = { LOG_T_INIT_OBJ("output.dnssim") };
 
@@ -83,6 +85,9 @@ output_dnssim_t* output_dnssim_new(size_t max_clients)
     if (ret < 0)
         lfatal("failed to initialize uv_loop (%s)", uv_strerror(ret));
     ldebug("initialized uv_loop");
+
+    self->response_deadline_ms = UINT64_MAX;
+    self->server_unresponsive = false;
 
     return self;
 }
@@ -242,6 +247,9 @@ static void _receive(output_dnssim_t* self, const core_object_t* obj)
         lwarning("packet discarded (client exceeded max_clients)");
         return;
     }
+
+    if (self->response_deadline_ms == UINT64_MAX)
+        self->response_deadline_ms = uv_now(&_self->loop) + OUTPUT_DNSSIM_SERVER_NONRESPONSIVE_TIMEOUT_MS;
 
     ldebug("client(c): %d", client);
     _output_dnssim_create_request(self, &_self->client_arr[client], payload);
@@ -427,6 +435,11 @@ int output_dnssim_tls_priority(output_dnssim_t* self, const char* priority, bool
 int output_dnssim_run_nowait(output_dnssim_t* self)
 {
     mlassert_self();
+
+    if (!self->server_unresponsive && self->response_deadline_ms < uv_now(&_self->loop)) {
+        lcritical("target server not responding");
+        self->server_unresponsive  = true;
+    }
 
     return uv_run(&_self->loop, UV_RUN_NOWAIT);
 }

@@ -132,6 +132,9 @@ typedef struct output_dnssim {
     uint64_t idle_timeout_ms;
     uint64_t handshake_timeout_ms;
     uint64_t stats_interval_ms;
+
+    uint64_t response_deadline_ms;
+    bool     server_unresponsive;
 } output_dnssim_t;
 
 core_log_t* output_dnssim_log();
@@ -410,6 +413,11 @@ end
 -- Set this to false if DnsSim should NOT use 0-RTT for QUIC connections.
 function DnsSim:zero_rtt(zero_rtt)
     self.obj.zero_rtt = zero_rtt
+end
+
+-- A flag indicating the server hasn't been responding to sent queries.
+function DnsSim:server_unresponsive()
+    return self.obj.server_unresponsive
 end
 
 -- Number of input packets discarded due to various reasons.
