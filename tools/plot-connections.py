@@ -138,9 +138,6 @@ def main():
             )
             sys.exit(1)
 
-        if data["discarded"] != 0:
-            logging.warning("%d discarded packets may skew results!", data["discarded"])
-
         name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
 
         if "active" in args.kind:
