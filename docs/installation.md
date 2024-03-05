@@ -54,7 +54,7 @@ When using the scripts directly, the following dependencies are needed.
 If you only wish to process shotgun JSON output (e.g. plot charts), then dnsjit
 and compiling the dnssim module isn't required.
 
-- [dnsjit 1.2+](https://github.com/DNS-OARC/dnsjit): Can be installed from [DNS-OARC
+- [dnsjit 1.3+](https://github.com/DNS-OARC/dnsjit): Can be installed from [DNS-OARC
   repositories](https://dev.dns-oarc.net/packages/).
 - libuv
 - libnghttp2

@@ -1,5 +1,13 @@
-DNS Shotgun v20240219
-=====================
+Next
+====
+
+Incompatible changes
+--------------------
+- dnsjit 1.3.0+ is now required
+
+Bugfixes
+--------
+- pcap/filter-dnsq: fix potential data mixup between packets
 
 Incompatible changes
 --------------------
