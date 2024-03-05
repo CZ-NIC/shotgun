@@ -9,7 +9,7 @@ the scripts from the repository directly.
 Pre-built image can be obtained from [CZ.NIC DNS Shotgun
 Registry](https://gitlab.nic.cz/knot/shotgun/container_registry/65).
 
-```
+```console
 $ docker pull registry.nic.cz/knot/shotgun:v20240219
 ```
 
@@ -21,7 +21,7 @@ Alternately, you can build the image yourself from Dockerfile in the repository.
 - Mount input/output directories and files with `-v/--volume`.
 - Using `--privileged` might slightly improve performance if you don't mind the security risk.
 
-```
+```console
 $ docker run \
     --network host \
     -v "$PWD:/mnt" \
@@ -36,7 +36,7 @@ ensure you have the required dependencies installed and the compile and install
 the dnssim module. Also make sure to check out some tagged version, as the
 development happens in master branch.
 
-```
+```console
 $ git clone https://gitlab.nic.cz/knot/shotgun.git
 $ cd shotgun
 $ git checkout v20240219
@@ -75,7 +75,7 @@ You may wish to edit the documentation locally and preview those local changes.
 To do that, [install MkDocs](https://www.mkdocs.org/user-guide/installation/),
 then, in the sources directory, run:
 
-```
+```console
 $ mkdocs build
 ```
 
@@ -85,6 +85,6 @@ HTML format.
 For testing the locally built documentation with live-rebuild, MkDocs' built-in
 development server may be used like so:
 
-```
+```console
 $ mkdocs serve
 ```
