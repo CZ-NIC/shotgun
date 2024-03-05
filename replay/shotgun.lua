@@ -129,6 +129,11 @@ local function send_thread_main(thr)
 			channel:close()
 		end
 
+		if output:discarded() >= 100 and (output:discarded() / output:requests()) > 0.001 then
+			log:critical("number of discarded packets exceeded threshold")
+			channel:close()
+		end
+
 		-- check if channel is still open
 		if obj == nil and channel.closed == 1 then
 			output:stats_finish()
