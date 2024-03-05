@@ -1,3 +1,10 @@
+DNS Shotgun vYYYYMMDD
+=====================
+
+Improvements
+------------
+- Abort traffic replay if servers are unresponsive (#32)
+
 DNS Shotgun v20240219
 =====================
 
