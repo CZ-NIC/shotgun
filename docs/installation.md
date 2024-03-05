@@ -38,9 +38,10 @@ development happens in master branch.
 
 ```
 $ git clone https://gitlab.nic.cz/knot/shotgun.git
+$ cd shotgun
 $ git checkout v20240219
 $ git submodule update --init --recursive
-$ cd shotgun/replay/dnssim
+$ cd replay/dnssim
 $ mkdir build && cd build
 $ cmake ..
 $ cmake --build .
