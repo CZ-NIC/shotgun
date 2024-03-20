@@ -84,6 +84,8 @@ output_dnssim_t* output_dnssim_new(size_t max_clients)
         lfatal("failed to initialize uv_loop (%s)", uv_strerror(ret));
     ldebug("initialized uv_loop");
 
+    signal(SIGPIPE, SIG_IGN);
+
     return self;
 }
 
