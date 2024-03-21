@@ -211,6 +211,7 @@ local function is_dnsq(obj)
 		if matches_addresses(ip_obj.dst, len) == false then return false end
 	end
 
+	dns:reset()
 	dns.obj_prev = obj
 	dns:parse_header()
 	if dns.qr == 1 then return false end  -- ignore DNS responses
