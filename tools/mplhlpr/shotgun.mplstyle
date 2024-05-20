@@ -9,5 +9,8 @@ figure.constrained_layout.use: True
 # autolayout is not compatible with constrained_layout
 figure.autolayout: False
 
+lines.linestyle: "dotted"
+lines.marker: "x"
+
 # deterministic SVG output for easier diff-ing
 svg.hashsalt: 0      # If not None, use this string as hash salt instead of uuid4

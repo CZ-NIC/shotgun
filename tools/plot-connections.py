@@ -75,7 +75,7 @@ def plot(ax, data, label, eval_func, min_timespan=0, color=None):
         xvalues.append(time)
         yvalues.append(eval_func(stats))
 
-    ax.plot(xvalues, yvalues, label=label, marker="o", linestyle="--", color=color)
+    ax.plot(xvalues, yvalues, label=label, color=color)
 
 
 def main():
