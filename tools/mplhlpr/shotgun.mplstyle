@@ -2,12 +2,15 @@
 grid.color:     "#dddddd"  # grid color
 grid.linestyle: "dotted"    # default: solid
 
-figure.figsize:     20, 10  # inches
+figure.figsize:     16, 9  # inches
 
 # automatically make plot elements fit on the figure
 figure.constrained_layout.use: True
 # autolayout is not compatible with constrained_layout
 figure.autolayout: False
+
+lines.linestyle: "dotted"
+lines.marker: "x"
 
 # deterministic SVG output for easier diff-ing
 svg.hashsalt: 0      # If not None, use this string as hash salt instead of uuid4

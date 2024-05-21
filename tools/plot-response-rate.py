@@ -145,8 +145,8 @@ def plot_response_rate(
     eval_func=None,
     min_timespan=0,
     min_rate=0,
-    marker="o",
-    linestyle="--",
+    marker=None,
+    linestyle=None,
     color=None,
 ):
     stats_periodic = data["stats_periodic"]
@@ -341,7 +341,6 @@ def process_file(json_path, json_color, args, ax):
                 min_timespan=min_timespan,
                 min_rate=args.ignore_rcodes_rate_pct,
                 marker=f"${symbol}$",
-                linestyle="dotted",
                 color=cur_rcode_colors[rcode],
             )
 
@@ -360,7 +359,6 @@ def process_file(json_path, json_color, args, ax):
             eval_func=eval_func,
             min_timespan=min_timespan,
             marker="$\\sum$",
-            linestyle="dotted",
             color=json_color,
         )
 

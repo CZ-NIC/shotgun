@@ -305,7 +305,7 @@ def main():
         for name_re, style in args.linestyle.items():
             if name_re.search(name):
                 linestyle = style
-        ax.plot(group_x, group_yavg, lw=2, label=label, linestyle=linestyle)
+        ax.plot(group_x, group_yavg, lw=2, label=label, marker="", linestyle=linestyle)
 
     plt.legend()
     plt.savefig(args.output)

@@ -47,7 +47,7 @@ def plot(ax, data, label, since, until, line_props):
         xvalues.append(time_s)
         yvalues.append(rate)
 
-    ax.plot(xvalues, yvalues, label=label, linestyle="", **line_props)
+    ax.plot(xvalues, yvalues, label=label, **line_props)
     ax.set_xlim(xmin=since)
     if not math.isfinite(until):
         until = xvalues[-1]
