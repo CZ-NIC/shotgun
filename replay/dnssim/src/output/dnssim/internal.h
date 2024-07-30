@@ -263,7 +263,7 @@ struct _output_dnssim_connection {
         _OUTPUT_DNSSIM_CONN_TRANSPORT_HANDSHAKE   = 10,
         _OUTPUT_DNSSIM_CONN_TLS_HANDSHAKE         = 20,
         _OUTPUT_DNSSIM_CONN_EARLY_DATA            = 25,
-        _OUTPUT_DNSSIM_CONN_EARLY_DATA_CONGESTED  = 26,
+        _OUTPUT_DNSSIM_CONN_EARLY_DATA_WAIT       = 26,
         _OUTPUT_DNSSIM_CONN_ACTIVE                = 30,
         _OUTPUT_DNSSIM_CONN_CONGESTED             = 35,
         _OUTPUT_DNSSIM_CONN_CLOSE_REQUESTED       = 38,

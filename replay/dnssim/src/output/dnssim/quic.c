@@ -574,7 +574,7 @@ static void quic_check_max_streams(_output_dnssim_connection_t* conn)
             break;
         case _OUTPUT_DNSSIM_CONN_EARLY_DATA:
             linfo("reached maximum number of concurrent streams (early data)");
-            conn->state = _OUTPUT_DNSSIM_CONN_EARLY_DATA_CONGESTED;
+            conn->state = _OUTPUT_DNSSIM_CONN_EARLY_DATA_WAIT;
             break;
         default:
             break;
@@ -795,17 +795,18 @@ int  _output_dnssim_quic_connect(output_dnssim_t* self, _output_dnssim_connectio
         return ret;
     }
 
-    ret = quic_send(conn, false);
-    if (ret && ret != 1) {
-        lwarning("failed to send quic connection req: %s", ngtcp2_strerror(ret));
-        return ret;
+    if (conn->is_0rtt) {
+        _output_dnssim_conn_early_data(conn);
+    } else {
+        ret = quic_send(conn, false);
+        if (ret && ret != 1) {
+            lwarning("failed to send quic connection req: %s", ngtcp2_strerror(ret));
+            return ret;
+        }
     }
 
     conn->stats->conn_handshakes++;
     self->stats_sum->conn_handshakes++;
-
-    if (conn->is_0rtt)
-        _output_dnssim_conn_early_data(conn);
 
     return 0;
 }
@@ -993,6 +994,10 @@ void _output_dnssim_quic_write_query(_output_dnssim_connection_t* conn, _output_
 
     ldebug("stream %" PRIi64 " send id: %04x",
             qry->stream_id, qry->qry.req->dns_q->id);
+
+    if (conn->state == _OUTPUT_DNSSIM_CONN_EARLY_DATA) {
+        conn->state = _OUTPUT_DNSSIM_CONN_EARLY_DATA_WAIT;
+    }
 
     lassert(qry->stream_id >= 0, "stream_id not assigned");
     ret = quic_send_data(conn, vecs, 2, qry, false);
