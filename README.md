@@ -2,6 +2,7 @@
 
 Realistic DNS benchmarking tool which supports multiple transport protocols:
 
+  - **DNS-over-QUIC (DoQ)**
   - **DNS-over-TLS (DoT)**
   - **DNS-over-HTTPS (DoH)**
   - UDP
@@ -11,7 +12,7 @@ Realistic DNS benchmarking tool which supports multiple transport protocols:
 clients.*
 
 Every client establishes its own connection(s) when communicating over
-TCP-based protocol. This makes the tool uniquely suited for realistic DoT/DoH
+TCP-based protocol or DoQ. This makes the tool uniquely suited for realistic DoT/DoH/DoQ
 benchmarks since its traffic patterns are very similar to real clients.
 
 DNS Shotgun exports a number of statistics, such as query latencies, number of
@@ -20,7 +21,7 @@ The toolchain also provides scripts that can plot these into readable charts.
 
 ## Features
 
-- Supports DNS over UDP, TCP, TLS and HTTP/2
+- Supports DNS over UDP, TCP, TLS, HTTP/2 and pure QUIC without HTTP
 - Allows mixed-protocol simultaneous benchmark/testing
 - Can bind to multiple source IP addresses
 - Customizable client behaviour (idle time, TLS versions, HTTP method, ...)
