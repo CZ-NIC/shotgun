@@ -220,13 +220,13 @@ local function is_dnsq(obj)
 	if dns.qdcount > 0 then  -- parse all questions
 		for idx = 1, dns.qdcount do
 			if dns:parse_q(dns_q, labels, 127) ~= 0 then
-				log_packet(obj, 'cannot parse qname idx %d', idx)
+				log_packet(obj, string.format('cannot parse qname idx %d', idx))
 				nmalformed = nmalformed + 1
 				return args.malformed
 			end
 			local is_skipped = is_skipped_qname(dns.payload, labels, 127)
 			if is_skipped == nil then
-				log_packet(obj, 'too suspicious qname idx %d', idx)
+				log_packet(obj, string.format('too suspicious qname idx %d', idx))
 				nmalformed = nmalformed + 1
 				return args.malformed
 			elseif is_skipped and not args.skipped then
