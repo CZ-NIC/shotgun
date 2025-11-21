@@ -450,3 +450,6 @@ if __name__ == "__main__":
         logging.critical(err)
     except RuntimeError as err:
         logging.critical(err)
+    else:
+        sys.exit(0)
+    sys.exit(1)
