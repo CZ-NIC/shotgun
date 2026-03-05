@@ -3,7 +3,6 @@
 import argparse
 import collections
 import itertools
-import json
 import logging
 import math
 import os.path
@@ -18,97 +17,33 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 import mplhlpr.styles
-
-JSON_VERSION = 20200527
-
-
-StatRcode = collections.namedtuple("StatRcode", ["field", "label"])
-
-RCODES = {
-    0: StatRcode("rcode_noerror", "NOERROR"),
-    1: StatRcode("rcode_formerr", "FORMERR"),
-    2: StatRcode("rcode_servfail", "SERVFAIL"),
-    3: StatRcode("rcode_nxdomain", "NXDOMAIN"),
-    4: StatRcode("rcode_notimp", "NOTIMP"),
-    5: StatRcode("rcode_refused", "REFUSED"),
-    6: StatRcode("rcode_yxdomain", "YXDOMAIN"),
-    7: StatRcode("rcode_yxrrset", "YXRRSET"),
-    8: StatRcode("rcode_nxrrset", "NXRRSET"),
-    9: StatRcode("rcode_notauth", "NOTAUTH"),
-    10: StatRcode("rcode_notzone", "NOTZONE"),
-    16: StatRcode("rcode_badvers", "BADVERS"),
-    17: StatRcode("rcode_badkey", "BADKEY"),
-    18: StatRcode("rcode_badtime", "BADTIME"),
-    19: StatRcode("rcode_badmode", "BADMODE"),
-    20: StatRcode("rcode_badname", "BADNAME"),
-    21: StatRcode("rcode_badalg", "BADALG"),
-    22: StatRcode("rcode_badtrunc", "BADTRUNC"),
-    23: StatRcode("rcode_badcookie", "BADCOOKIE"),
-    100000: StatRcode("rcode_other", "other"),
-}
-
-RCODES_TO_NUM = {rcodestat.field: number for number, rcodestat in RCODES.items()}
-
-RCODE_MARKERS = {1: "f", 2: "s", 3: "n", 4: "i", 5: "r", 100000: "?"}
-
-RCODE_COLORS = {
-    0: "tab:green",
-    1: "tab:brown",
-    2: "tab:red",
-    3: "tab:blue",
-    4: "tab:pink",
-    5: "tab:orange",
-    6: "tab:purple",
-    7: "tab:olive",
-    8: "tab:cyan",
-    9: "#f0944d",
-    10: "#840000",
-    11: "#bc13fe",
-    12: "#601ef9",
-    13: "#bbf90f",
-    14: "#fffd01",
-    15: "#4f738e",
-    16: "#ac7e04",
-    17: "#5d1451",
-    18: "#fdb0c0",
-    19: "#fd3c06",
-    20: "#536267",
-    21: "#a03623",
-    22: "#b7e1a1",
-    23: "#0a888a",
-    100000: "#000000",
-}
-
-sinames = ["", " k", " M", " G", " T"]
-
-
-def siname(n):
-    try:
-        n = float(n)
-    except ValueError:
-        return n
-
-    siidx = max(
-        0,
-        min(len(sinames) - 1, int(math.floor(0 if n == 0 else math.log10(abs(n)) / 3))),
-    )
-    return f"{(n / 10 ** (3 * siidx)):.0f}{sinames[siidx]}"
-
+import _plot_common as pc
 
 def stat_field_rate(field):
     def inner(stats):
-        if stats["requests"] == 0:
+        if stats["queries"] == 0:
             return float("nan")
         if callable(field):
             field_val = field(stats)
         else:
             field_val = stats[field]
-        return 100.0 * field_val / stats["requests"]
+        return 100.0 * field_val / stats["queries"]
 
     return inner
 
 
-response_rate = stat_field_rate("answers")
+response_rate = stat_field_rate("responses")
+
+
+def rcode_rate(rcodes):
+    if isinstance(rcodes, str):
+        rcodes = [rcodes]
+    def inner(stats):
+        if stats["queries"] == 0:
+            return float("nan")
+        total = sum(stats.get("response_rcodes", {}).get(r, 0) for r in rcodes)
+        return 100.0 * total / stats["queries"]
+    return inner
 
 
 def init_plot(title):
@@ -140,7 +75,7 @@ def set_axes_limits(ax):
 
 def plot_response_rate(
     ax,
-    data,
+    stats_periodic,
     label,
     eval_func=None,
     min_timespan=0,
@@ -149,8 +84,7 @@ def plot_response_rate(
     linestyle=None,
     color=None,
 ):
-    stats_periodic = data["stats_periodic"]
-    time_offset = stats_periodic[0]["since_ms"]
+    time_offset = stats_periodic[0]["since"]
 
     if not eval_func:
         eval_func = response_rate
@@ -158,10 +92,10 @@ def plot_response_rate(
     xvalues = []
     yvalues = []
     for stats in stats_periodic:
-        timespan = stats["until_ms"] - stats["since_ms"]
+        timespan = stats["until"] - stats["since"]
         if timespan < min_timespan:
             continue
-        time = (stats["until_ms"] - time_offset) / 1000
+        time = (stats["until"] - time_offset) / 1000
         xvalues.append(time)
         yvalues.append(eval_func(stats))
 
@@ -174,18 +108,6 @@ def plot_response_rate(
             linestyle=linestyle,
             color=color,
         )
-
-
-def rcode_to_int(rcode: str) -> int:
-    try:
-        return int(rcode)
-    except ValueError:
-        pass
-
-    try:
-        return RCODES_TO_NUM[f"rcode_{rcode.lower()}"]
-    except KeyError:
-        raise argparse.ArgumentTypeError(f'unsupported rcode "{rcode}"') from None
 
 
 def main():
@@ -202,25 +124,34 @@ def main():
         description="Plot response rate from shotgun experiment"
     )
 
-    parser.add_argument("json_file", nargs="+", help="Shotgun results JSON file(s)")
     parser.add_argument(
-        "-t", "--title", default="Response Rate over Time", help="Graph title"
+        "json_file",
+        nargs="+",
+        help="Shotgun results JSON file(s)")
+    parser.add_argument(
+        "-t",
+        "--title",
+        default="Response Rate over Time",
+        help="Graph title"
     )
     parser.add_argument(
-        "-o", "--output", default="response_rate.svg", help="Output graph filename"
+        "-o",
+        "--output",
+        default="response_rate.svg",
+        help="Output graph filename"
     )
     parser.add_argument(
         "-T",
         "--skip-total",
         action="store_const",
         const="True",
-        help="Plot line for total response rate (default)",
+        help="Skip line for total response rate",
     )
     parser.add_argument(
         "-r",
         "--rcode",
         nargs="*",
-        type=rcode_to_int,
+        type=str,
         help="RCODE(s) to plot in addition to answer rate",
     )
     parser.add_argument(
@@ -239,7 +170,11 @@ def main():
         "(a single spike will cause the RCODE to show)",
     )
     parser.add_argument(
-        "-s", "--sum-rcodes", nargs="*", type=rcode_to_int, help="Plot sum of RCODE(s)"
+        "-s",
+        "--sum-rcodes",
+        nargs="*",
+        type=str,
+        help="Plot sum of RCODE(s)"
     )
     args = parser.parse_args()
 
@@ -264,24 +199,16 @@ def main():
 
 
 def process_file(json_path, json_color, args, ax):
-    with open(json_path, encoding="utf-8") as f:
-        data = json.load(f)
-    try:
-        assert data["version"] == JSON_VERSION
-    except (KeyError, AssertionError):
-        raise NotImplementedError(
-            "Older formats of JSON data aren't supported. "
-            "Use older tooling or re-run the tests with newer shotgun."
-        ) from None
+    header, stats_sum, stats_periodic = pc.load_json_lines_file(json_path)
 
-    if data["discarded"] != 0:
-        proportion_all_perc = data["discarded"] / data["stats_sum"]["requests"] * 100
+    if header['discarded'] != 0:
+        proportion_all_perc = header['discarded'] / stats_sum['queries'] * 100
         proportion_one_sec_perc = (
-            data["discarded"]
+            header['discarded']
             / min(
-                sample["requests"]
-                for sample in data["stats_periodic"]
-                if sample["requests"] > 0
+                sample["queries"]
+                for sample in stats_periodic
+                if sample["queries"] > 0
             )
             * 100
         )
@@ -289,29 +216,29 @@ def process_file(json_path, json_color, args, ax):
             "%d discarded packets may skew results! Discarded %.1f %% of all "
             "requests; theoretical worst case %.1f %% loss if all discarded packets "
             "happened to be in one %d ms sample",
-            data["discarded"],
+            header['discarded'],
             proportion_all_perc,
             proportion_one_sec_perc,
-            data["stats_interval_ms"],
+            header["stats_interval"],
         )
 
-    timespan = (data["stats_sum"]["until_ms"] - data["stats_sum"]["since_ms"]) / 1000
-    qps = data["stats_sum"]["requests"] / timespan
+    timespan = (stats_sum["until"] - stats_sum["since"]) / 1000
+    qps = stats_sum["queries"] / timespan
     name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
-    label = f"{name} ({siname(qps)} QPS)"
-    min_timespan = data["stats_interval_ms"] / 2
+    label = f"{name} ({pc.siname(qps)} QPS)"
+    min_timespan = header.get("stats_interval", 1000) / 2
 
     if not args.skip_total:
-        plot_response_rate(ax, data, label, min_timespan=min_timespan, color=json_color)
+        plot_response_rate(ax, stats_periodic, label, min_timespan=min_timespan, color=json_color)
 
     draw_rcodes = set(args.rcode or [])
     sum_rcodes = set(args.sum_rcodes or [])
     if args.rcodes_above_pct is not None:
-        threshold = data["stats_sum"]["answers"] * args.rcodes_above_pct / 100
+        threshold = stats_sum['responses'] * args.rcodes_above_pct / 100
         rcodes_above_limit = set(
-            RCODES_TO_NUM[key]
-            for key, cnt in data["stats_sum"].items()
-            if key.startswith("rcode_") and cnt > threshold
+            rcode
+            for rcode, cnt in stats_sum.get("response_rcodes", {}).items()
+            if cnt > threshold
         )
         draw_rcodes = draw_rcodes.union(rcodes_above_limit)
 
@@ -321,21 +248,19 @@ def process_file(json_path, json_color, args, ax):
             cur_rcode_colors = collections.defaultdict(lambda: json_color)
         else:
             # single JSON - different color for each RCODE
-            cur_rcode_colors = RCODE_COLORS
+            cur_rcode_colors = pc.RCODE_COLORS
         for rcode in draw_rcodes:
-            try:
-                stat_rcode = RCODES[rcode]
-                symbol = RCODE_MARKERS.get(rcode, str(rcode))
-            except KeyError:
+            if rcode not in pc.RCODES:
                 logging.error("Unsupported RCODE: %s", rcode)
                 continue
 
-            eval_func = stat_field_rate(stat_rcode.field)
-            rcode_label = f"{label} {stat_rcode.label}"
+            symbol = pc.RCODE_MARKERS.get(rcode, rcode)
+            eval_func = rcode_rate(rcode)
+            rcode_label = f"{label} {rcode}"
 
             plot_response_rate(
                 ax,
-                data,
+                stats_periodic,
                 rcode_label,
                 eval_func=eval_func,
                 min_timespan=min_timespan,
@@ -345,16 +270,12 @@ def process_file(json_path, json_color, args, ax):
             )
 
     if sum_rcodes:
+        eval_func = rcode_rate(sum_rcodes)
 
-        def sum_rate(stats):
-            return sum(stats[RCODES[ircode].field] for ircode in sum_rcodes)
-
-        eval_func = stat_field_rate(sum_rate)
-
-        sum_label = " ".join(RCODES[ircode].label for ircode in sum_rcodes)
+        sum_label = " ".join(sum_rcodes)
         plot_response_rate(
             ax,
-            data,
+            stats_periodic,
             f"{label} {sum_label}",
             eval_func=eval_func,
             min_timespan=min_timespan,
