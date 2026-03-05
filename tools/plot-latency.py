@@ -9,11 +9,9 @@ import argparse
 import collections
 import itertools
 import logging
-import json
 import math
 import os
 import re
-import sys
 
 import numpy as np
 
@@ -26,24 +24,10 @@ import matplotlib.pyplot as plt
 
 import mplhlpr.styles
 
-JSON_VERSION = 20200527
+import _plot_common as pc
+
 MIN_X_EXP = -1
 MAX_X_EXP = 2
-
-sinames = ["", " k", " M", " G", " T"]
-
-
-def siname(n):
-    try:
-        n = float(n)
-    except ValueError:
-        return n
-
-    siidx = max(
-        0,
-        min(len(sinames) - 1, int(math.floor(0 if n == 0 else math.log10(abs(n)) / 3))),
-    )
-    return f"{(n / 10 ** (3 * siidx)):.0f}{sinames[siidx]}"
 
 
 def init_plot(title):
@@ -91,33 +75,34 @@ def get_xy_from_histogram(latency_histogram):
 
 def merge_latency(data, since=0, until=float("+inf")):
     """generate latency histogram for given period"""
+    header, stats_sum, stats_periodic = data
     # add 100ms tolarence for interval beginning / end
-    since_ms = data["stats_sum"]["since_ms"] + since * 1000 - 100
-    until_ms = data["stats_sum"]["since_ms"] + until * 1000 + 100
+    since_ms = stats_sum["since"] + since * 1000 - 100
+    until_ms = stats_sum["since"] + until * 1000 + 100
 
     latency = []
     requests = 0
     start = None
     end = None
-    for stats in data["stats_periodic"]:
-        if stats["since_ms"] < since_ms:
+    for stats in stats_periodic:
+        if stats["since"] < since_ms:
             continue
-        if stats["until_ms"] >= until_ms:
+        if stats["until"] >= until_ms:
             break
-        requests += stats["requests"]
-        end = stats["until_ms"]
+        requests += stats["queries"]
+        end = stats["until"]
         if not latency:
-            latency = list(stats["latency"])
-            start = stats["since_ms"]
+            latency = list(stats["response_latency"]["buckets"])
+            start = stats["since"]
         else:
-            assert len(stats["latency"]) == len(latency)
-            for i, _ in enumerate(stats["latency"]):
-                latency[i] += stats["latency"][i]
+            assert len(stats["response_latency"]["buckets"]) == len(latency)
+            for i, _ in enumerate(stats["response_latency"]["buckets"]):
+                latency[i] += stats["response_latency"]["buckets"][i]
 
     if not latency:
         raise RuntimeError("no samples matching this interval")
 
-    qps = requests / (end - start) * 1000  # convert from ms
+    qps = requests / (end - start) * header["time_units_per_sec"]
     return latency, qps
 
 
@@ -161,26 +146,16 @@ class LineStyleAction(argparse.Action):
         setattr(namespace, self.dest, linestyles)
 
 
-def read_json(file_obj):
-    data = json.load(file_obj)
-
-    try:
-        assert data["version"] == JSON_VERSION
-    except (KeyError, AssertionError):
-        logging.critical(
-            "Older formats of JSON data aren't supported. "
-            "Use older tooling or re-run the tests with newer shotgun."
-        )
-        sys.exit(1)
-
-    return data
-
-
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Plot query response time histogram from shotgun results"
     )
-    parser.add_argument("-t", "--title", default="Response Latency", help="Graph title")
+    parser.add_argument(
+        "-t",
+        "--title",
+        default="Response Latency",
+        help="Graph title"
+    )
     parser.add_argument(
         "-o",
         "--output",
@@ -256,15 +231,15 @@ def main():
 
     for json_file in args.json_file:
         logging.info("processing %s", json_file.name)
-        data = read_json(json_file)
+        header, stats_sum, stats_periodic = pc.load_json_lines_file(json_file)
         name = os.path.splitext(os.path.basename(os.path.normpath(json_file.name)))[0]
-        groups[name].append(data)
+        groups[name].append([header, stats_sum, stats_periodic])
 
     for name, group_files in args.group.items():
         for json_file in group_files:
             logging.info("processing group %s: %s", name, json_file.name)
-            data = read_json(json_file)
-            groups[name].append(data)
+            header, stats_sum, stats_periodic = pc.load_json_lines_file(json_file)
+            groups[name].append([header, stats_sum, stats_periodic])
 
     for name, group_data in groups.items():
         pos_inf = float("inf")
@@ -275,7 +250,7 @@ def main():
         group_ysum = []
         for run_data in group_data:
             latency, qps = merge_latency(run_data, args.since, args.until)
-            label = f"{name} ({siname(qps)} QPS)"
+            label = f"{name} ({pc.siname(qps)} QPS)"
             group_x, run_y = get_xy_from_histogram(latency)
             if len(group_data) == 1:  # no reason to compute aggregate values
                 group_ysum = run_y

@@ -24,6 +24,16 @@ class MismatchData(RuntimeError):
     pass
 
 
+class UnexpectedType(RuntimeError):
+    def __init__(self, field):
+        super().__init__(f'JSON type "{field}" is not supported by this script')
+
+
+class ThreadMismatch(RuntimeError):
+    def __init__(self):
+        super().__init__('Thread files have different structure.')
+
+
 class MissingData(RuntimeError):
     def __init__(self, field):
         super().__init__(f'Field "{field}" is missing in one or more files.')
@@ -46,7 +56,7 @@ def same(iterable):
     return iterable[0]
 
 
-def merge_latency(iterable):
+def merge_latency_data(iterable):
     assert len(iterable) >= 1
     latency = list(iterable[0])
     for latency_data in iterable[1:]:
@@ -56,83 +66,48 @@ def merge_latency(iterable):
             latency[i] += latency_data[i]
     return latency
 
+def merge_response_rcodes(iterable):
+    merged = {}
+    for rcodes in iterable:
+        for rcode, count in rcodes.items():
+            merged[rcode] = merged.get(rcode, 0) + count
+    return merged
+
+def merge_response_latency(iterable):
+    merged_data = merge_latency_data([entry["buckets"] for entry in iterable])
+    result = {"buckets": merged_data}
+    return result
 
 DATA_STRUCTURE_STATS = {
-    "since_ms": min,
-    "until_ms": max,
-    "requests": sum,
-    "ongoing": sum,
-    "answers": sum,
+    "runid": same,
+    "type": same,
+    "since": min,
+    "until": max,
+    "queries": sum,
+    "responses": sum,
+    "timeouts": sum,
+    "response_rcodes": merge_response_rcodes,
+    "response_latency": merge_response_latency,
     "conn_active": sum,
     "conn_resumed": sum,
     "conn_handshakes": sum,
     "conn_quic_0rtt_loaded": sum,
     "quic_0rtt_sent": sum,
     "quic_0rtt_answered": sum,
-    "conn_handshakes_failed": sum,
-    "rcode_noerror": sum,
-    "rcode_formerr": sum,
-    "rcode_servfail": sum,
-    "rcode_nxdomain": sum,
-    "rcode_notimp": sum,
-    "rcode_refused": sum,
-    "rcode_yxdomain": sum,
-    "rcode_yxrrset": sum,
-    "rcode_nxrrset": sum,
-    "rcode_notauth": sum,
-    "rcode_notzone": sum,
-    "rcode_badvers": sum,
-    "rcode_badkey": sum,
-    "rcode_badtime": sum,
-    "rcode_badmode": sum,
-    "rcode_badname": sum,
-    "rcode_badalg": sum,
-    "rcode_badtrunc": sum,
-    "rcode_badcookie": sum,
-    "rcode_other": sum,
-    "latency": merge_latency,
+    "conn_handshakes_failed": sum
 }
+
+OPTIONAL_STATS_FIELDS = {"response_rcodes", "response_latency"}
 
 
 def merge_stats(iterable):
-    return merge_fields(DATA_STRUCTURE_STATS, iterable)
-
-
-def merge_periodic_stats(iterable):
-    out = []
-
-    for i in range(max(len(stats_periodic) for stats_periodic in iterable)):
-        to_merge = []
-        for stats_periodic in iterable:
-            try:
-                stats = stats_periodic[i]
-            except IndexError:
-                continue
-            else:
-                to_merge.append(stats)
-        out.append(merge_stats(to_merge))
-
-    return out
-
-
-DATA_STRUCTURE_ROOT = {
-    "version": same,
-    "merged": lambda x: True,
-    "stats_interval_ms": same,
-    "timeout_ms": same,
-    "discarded": sum,
-    "stats_sum": merge_stats,
-    "stats_periodic": merge_periodic_stats,
-}
-
-
-def merge_fields(fields, thread_data):
     out = {}
-    for field, merge_func in fields.items():
-        try:
-            field_data = [data[field] for data in thread_data]
-        except KeyError as exc:
-            raise MissingData(field) from exc
+    for field, merge_func in DATA_STRUCTURE_STATS.items():
+        field_data = [data[field] for data in iterable if field in data]
+        if not field_data:
+            if field not in OPTIONAL_STATS_FIELDS:
+                raise MissingData(field)
+            continue
         try:
             out[field] = merge_func(field_data)
         except Exception as exc:
@@ -140,14 +115,76 @@ def merge_fields(fields, thread_data):
     return out
 
 
+DATA_STRUCTURE_HEADER = {
+    "runid": first,
+    "type": same,
+    "schema_version": same,
+    "generator": same,
+    "generator_version": same,
+    "time_units_per_sec": same,
+    "stats_interval": same,
+    "timeout": same,
+    "discarded": sum,
+}
+
+
+def merge_headers(iterable):
+    out = {}
+    for field, merge_func in DATA_STRUCTURE_HEADER.items():
+        try:
+            field_data = [data[field] for data in iterable]
+        except KeyError as exc:
+            raise MissingData(field) from exc
+        try:
+            out[field] = merge_func(field_data)
+        except Exception as exc:
+            raise MergeFailed(field) from exc
+    out["merged"] = True
+    return out
+
+
 def merge_data(thread_data):
-    assert len(thread_data) >= 1
+    paths = thread_data
+    handles = [open(path, encoding="utf-8") for path in paths]
     try:
-        if thread_data[0]["version"] != JSON_VERSION:
-            raise VersionError
-    except KeyError as exc:
-        raise VersionError from exc
-    return merge_fields(DATA_STRUCTURE_ROOT, thread_data)
+        yield from _merge_streams(handles)
+    finally:
+        for f in handles:
+            f.close()
+
+
+def read_next(handles):
+    results = []
+    for f in handles:
+        line = f.readline()
+        if not line:
+            return None
+        results.append(json.loads(line.strip()))
+    return results
+
+
+def _merge_streams(handles):
+    while True:
+        objects = read_next(handles)
+        if objects is None:
+            break
+
+        types = {o.get("type") for o in objects}
+        if len(types) != 1:
+            raise ThreadMismatch()
+        t = types.pop()
+        if t == "header":
+            merged_header = merge_headers(objects)
+            merged_header["merged"] = True
+            yield merged_header
+        elif t == "stats_periodic":
+            merged = merge_stats(objects)
+            yield merged
+        elif t == "stats_sum":
+            merged = merge_stats(objects)
+            yield merged
+        else:
+            raise UnexpectedType(t)
 
 
 def main():
@@ -168,17 +205,11 @@ def main():
         outpath = os.path.join(os.path.dirname(args.json_file[0]), outpath)
 
     try:
-        thread_data = []
-        for path in args.json_file:
-            with open(path, encoding="utf-8") as f:
-                thread_data.append(json.load(f))
-
-        merged = merge_data(thread_data)
-
-        with open(outpath, "w", encoding="utf-8") as f:
-            json.dump(merged, f)
+        with open(outpath, "w", encoding="utf-8") as out:
+            for obj in merge_data(args.json_file):
+                out.write(json.dumps(obj) + "\n")
         logging.info("DONE: merged shotgun results saved as %s", outpath)
-    except (FileNotFoundError, VersionError) as exc:
+    except (FileNotFoundError, UnexpectedType, ThreadMismatch) as exc:
         logging.critical("%s", exc)
         sys.exit(1)
     except (MergeFailed, MissingData) as exc:

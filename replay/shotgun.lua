@@ -5,6 +5,7 @@ local log = require("dnsjit.core.log")
 local dnssim = require("shotgun.output.dnssim")
 
 local DNSSIM_REQ_VERSION = 20240219
+local STATS_COLLECT_FREQUENCY = 1
 local has_check_version, version = pcall(dnssim.check_version, DNSSIM_REQ_VERSION)
 if not has_check_version or version == nil then
 	log.fatal(string.format(
@@ -40,6 +41,8 @@ if config.verbosity > 4 then
 end
 
 local function send_thread_main(thr)
+	local run_id = thr:pop()
+	local thread_id = thr:pop()
 	local channel = thr:pop()
 	local running
 
@@ -56,7 +59,6 @@ local function send_thread_main(thr)
 	local http_method = thr:pop()
 	local output_file = thr:pop()
 	local batch_size = thr:pop()
-	local nbind = thr:pop()
 
 	local output = require("shotgun.output.dnssim").new(max_clients)
 	-- luacheck: ignore log
@@ -82,9 +84,13 @@ local function send_thread_main(thr)
 		log:fatal("unknown protocol_func: " .. protocol_func)
 	end
 
-	output:stats_collect(1)
+	local generator_version = thr:pop()
+	local stats_interval = thr:pop()
+
+	output:stats_collect(stats_interval)
 	output:free_after_use(true)
 
+	local nbind = thr:pop()
 	for _ = 1, nbind do
 		output:bind(thr:pop())
 	end
@@ -136,7 +142,7 @@ local function send_thread_main(thr)
 		running = output:run_nowait()
 	end
 
-	output:export(output_file)
+	output:export(output_file, run_id, thread_id, generator_version, stats_interval, timeout_s)
 end
 
 
@@ -174,6 +180,9 @@ local channel = require("dnsjit.core.channel")
 local threads = {}
 local channels = {}
 
+local socket = require("socket")
+local runid = socket.gettime()
+
 ---- initialize send threads
 for i, thrconf in ipairs(config.threads) do
 	channels[i] = channel.new(thrconf.channel_size)
@@ -181,6 +190,8 @@ for i, thrconf in ipairs(config.threads) do
 
 	threads[i] = thread.new()
 	threads[i]:start(send_thread_main)
+	threads[i]:push(runid)
+	threads[i]:push(i)
 	threads[i]:push(channels[i])
 	threads[i]:push(thrconf.max_clients)
 	threads[i]:push(thrconf.name)
@@ -195,6 +206,8 @@ for i, thrconf in ipairs(config.threads) do
 	threads[i]:push(thrconf.http_method)
 	threads[i]:push(thrconf.output_file)
 	threads[i]:push(thrconf.batch_size)
+	threads[i]:push(DNSSIM_REQ_VERSION)
+	threads[i]:push(STATS_COLLECT_FREQUENCY)
 	threads[i]:push(#thrconf.bind_ips)
 	for _, bind_ip in ipairs(thrconf.bind_ips) do
 		threads[i]:push(bind_ip)

@@ -448,81 +448,96 @@ function DnsSim:stats_finish()
 end
 
 -- Export the results to a JSON file.
-function DnsSim:export(filename)
+function DnsSim:export(filename, run_id, thread_id, generator_version, stats_interval, timeout_s)
     local file = io.open(filename, "w")
     if file == nil then
         self.obj._log:fatal("export failed: no filename")
         return
     end
 
-    local function write_stats(f, stats)
+    local function write_stats(f, stats, stat_type)
+        local rcode_map = {
+            {"NOERROR",   stats.rcode_noerror},
+            {"FORMERR",   stats.rcode_formerr},
+            {"SERVFAIL",  stats.rcode_servfail},
+            {"NXDOMAIN",  stats.rcode_nxdomain},
+            {"NOTIMP",    stats.rcode_notimp},
+            {"REFUSED",   stats.rcode_refused},
+            {"YXDOMAIN",  stats.rcode_yxdomain},
+            {"YXRRSET",   stats.rcode_yxrrset},
+            {"NXRRSET",   stats.rcode_nxrrset},
+            {"NOTAUTH",   stats.rcode_notauth},
+            {"NOTZONE",   stats.rcode_notzone},
+            {"BADVERS",   stats.rcode_badvers},
+            {"BADKEY",    stats.rcode_badkey},
+            {"BADTIME",   stats.rcode_badtime},
+            {"BADMODE",   stats.rcode_badmode},
+            {"BADNAME",   stats.rcode_badname},
+            {"BADALG",    stats.rcode_badalg},
+            {"BADTRUNC",  stats.rcode_badtrunc},
+            {"BADCOOKIE", stats.rcode_badcookie},
+            {"OTHER",     stats.rcode_other},
+        }
+        local rcode_parts = {}
+        for _, entry in ipairs(rcode_map) do
+            if entry[2] ~= 0 then
+                table.insert(rcode_parts, '"' .. entry[1] .. '":' .. tonumber(entry[2]))
+            end
+        end
         f:write(
             "{ ",
-                '"since_ms":', tonumber(stats.since_ms), ',',
-                '"until_ms":', tonumber(stats.until_ms), ',',
-                '"requests":', tonumber(stats.requests), ',',
+                '"runid":', tonumber(run_id), ',',
+                '"threadid":', tonumber(thread_id), ',',
+                '"type":"', stat_type, '",',
+                '"since":', tonumber(stats.since_ms), ',',
+                '"until":', tonumber(stats.until_ms), ',',
+                '"queries":', tonumber(stats.requests), ',',
                 '"ongoing":', tonumber(stats.ongoing), ',',
-                '"answers":', tonumber(stats.answers), ',',
+                '"responses":', tonumber(stats.answers), ',',
+                '"timeouts":', tonumber(stats.latency[self.obj.timeout_ms]), ',',
+                '"response_rcodes": {', table.concat(rcode_parts, ","), '},',
+                '"response_latency": {',
+                '"buckets":[')
+        f:write(tonumber(stats.latency[0]))
+        for i=1,tonumber(self.obj.timeout_ms) do
+            f:write(',', tonumber(stats.latency[i]))
+        end
+        f:write("]},")
+        f:write(
                 '"conn_active":', tonumber(stats.conn_active), ',',
                 '"conn_handshakes":', tonumber(stats.conn_handshakes), ',',
                 '"conn_resumed":', tonumber(stats.conn_resumed), ',',
                 '"conn_quic_0rtt_loaded":', tonumber(stats.conn_quic_0rtt_loaded), ',',
                 '"quic_0rtt_sent":', tonumber(stats.quic_0rtt_sent), ',',
                 '"quic_0rtt_answered":', tonumber(stats.quic_0rtt_answered), ',',
-                '"conn_handshakes_failed":', tonumber(stats.conn_handshakes_failed), ',',
-                '"rcode_noerror":', tonumber(stats.rcode_noerror), ',',
-                '"rcode_formerr":', tonumber(stats.rcode_formerr), ',',
-                '"rcode_servfail":', tonumber(stats.rcode_servfail), ',',
-                '"rcode_nxdomain":', tonumber(stats.rcode_nxdomain), ',',
-                '"rcode_notimp":', tonumber(stats.rcode_notimp), ',',
-                '"rcode_refused":', tonumber(stats.rcode_refused), ',',
-                '"rcode_yxdomain":', tonumber(stats.rcode_yxdomain), ',',
-                '"rcode_yxrrset":', tonumber(stats.rcode_yxrrset), ',',
-                '"rcode_nxrrset":', tonumber(stats.rcode_nxrrset), ',',
-                '"rcode_notauth":', tonumber(stats.rcode_notauth), ',',
-                '"rcode_notzone":', tonumber(stats.rcode_notzone), ',',
-                '"rcode_badvers":', tonumber(stats.rcode_badvers), ',',
-                '"rcode_badkey":', tonumber(stats.rcode_badkey), ',',
-                '"rcode_badtime":', tonumber(stats.rcode_badtime), ',',
-                '"rcode_badmode":', tonumber(stats.rcode_badmode), ',',
-                '"rcode_badname":', tonumber(stats.rcode_badname), ',',
-                '"rcode_badalg":', tonumber(stats.rcode_badalg), ',',
-                '"rcode_badtrunc":', tonumber(stats.rcode_badtrunc), ',',
-                '"rcode_badcookie":', tonumber(stats.rcode_badcookie), ',',
-                '"rcode_other":', tonumber(stats.rcode_other), ',',
-                '"latency":[')
-        f:write(tonumber(stats.latency[0]))
-        for i=1,tonumber(self.obj.timeout_ms) do
-            f:write(',', tonumber(stats.latency[i]))
-        end
-        f:write("]}")
+                '"conn_handshakes_failed":', tonumber(stats.conn_handshakes_failed))
+        f:write(
+            "}\n")
     end
 
     file:write(
-        "{ ",
-            '"version":', _DNSSIM_JSON_VERSION, ',',
-            '"merged":false,',
-            '"stats_interval_ms":', tonumber(self.obj.stats_interval_ms), ',',
-            '"timeout_ms":', tonumber(self.obj.timeout_ms), ',',
-            '"idle_timeout_ms":', tonumber(self.obj.idle_timeout_ms), ',',
-            '"handshake_timeout_ms":', tonumber(self.obj.handshake_timeout_ms), ',',
-            '"discarded":', self:discarded(), ',',
-            '"stats_sum":')
-    write_stats(file, self.obj.stats_sum)
-    file:write(
-            ',',
-            '"stats_periodic":[')
+		"{ ",
+		'"runid":', tonumber(run_id), ',',
+		'"type": "header",',
+		'"schema_version":', '20221207', ',',
+		'"generator": "shotgun",',
+		'"generator_version": "', tonumber(generator_version), '",',
+		'"time_units_per_sec": 1000,',
+		'"stats_interval":', tonumber(stats_interval * 1000), ',',
+		'"timeout":', tonumber(timeout_s * 1000), ',',
+        '"discarded":', tonumber(self.obj.discarded),
+		'}\n')
+
+    write_stats(file, self.obj.stats_sum, "stats_sum")
 
     local stats = self.obj.stats_first
-    write_stats(file, stats)
+    write_stats(file, stats, "stats_periodic")
 
     while (stats.next ~= nil) do
         stats = stats.next
-        file:write(',')
-        write_stats(file, stats)
+        write_stats(file, stats, "stats_periodic")
     end
 
-    file:write(']}')
     file:close()
     self.obj._log:notice("results exported to "..filename)
 end

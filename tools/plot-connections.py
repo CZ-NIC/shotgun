@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
-from itertools import cycle
-import json
 import logging
-import math
 import os
 import sys
 
@@ -16,33 +13,7 @@ import matplotlib.pyplot as plt
 
 import mplhlpr.styles
 
-JSON_VERSION = 20200527
-
-COLOR_ACTIVE = cycle(["royalblue", "cornflowerblue", "darkblue", "lightsteelblue"])
-COLOR_CONN_HS = cycle(["forestgreen", "limegreen", "darkgreen", "lightgreen"])
-COLOR_QUIC_0RTT = cycle(
-    ["darkolivegreen", "darkseagreen", "darkslategray", "greenyellow"]
-)
-COLOR_QUIC_0RTT_SENT = cycle(["crimson", "brown", "firebrick", "indianred"])
-COLOR_QUIC_0RTT_ANSWERED = cycle(["khaki", "moccasin", "peru", "wheat"])
-COLOR_TLS_RESUMED = cycle(["orange", "moccasin", "darkorange", "antiquewhite"])
-COLOR_FAILED_HS = cycle(["gray", "silver", "black", "gainsboro"])
-
-
-sinames = ["", " k", " M", " G", " T"]
-
-
-def siname(n):
-    try:
-        n = float(n)
-    except ValueError:
-        return n
-
-    siidx = max(
-        0,
-        min(len(sinames) - 1, int(math.floor(0 if n == 0 else math.log10(abs(n)) / 3))),
-    )
-    return f"{(n / 10 ** (3 * siidx)):.0f}{sinames[siidx]}"
+import _plot_common as pc
 
 
 def init_plot(title):
@@ -60,18 +31,16 @@ def init_plot(title):
 
 
 def plot(ax, data, label, eval_func, min_timespan=0, color=None):
-    stats_periodic = data["stats_periodic"][
-        :-1
-    ]  # omit the last often misleading datapoint
-    time_offset = stats_periodic[0]["since_ms"]
+    stats_periodic = data[:-1]
+    time_offset = stats_periodic[0]["since"]
 
     xvalues = []
     yvalues = []
     for stats in stats_periodic:
-        timespan = stats["until_ms"] - stats["since_ms"]
+        timespan = stats["until"] - stats["since"]
         if timespan < min_timespan:
             continue
-        time = (stats["until_ms"] - time_offset) / 1000
+        time = (stats["until"] - time_offset) / 1000
         xvalues.append(time)
         yvalues.append(eval_func(stats))
 
@@ -122,15 +91,10 @@ def main():
     ax = init_plot(args.title)
 
     for json_path in args.json_file:
-        try:
-            with open(json_path, encoding="utf-8") as f:
-                data = json.load(f)
-        except FileNotFoundError as exc:
-            logging.critical("%s", exc)
-            sys.exit(1)
+        header, stats_sum, stats_periodic = pc.load_json_lines_file(json_path)
 
         try:
-            assert data["version"] == JSON_VERSION
+            assert header["schema_version"] == pc.SUPPORTED_SCHEMA_VERSION
         except (KeyError, AssertionError):
             logging.critical(
                 "Older formats of JSON data aren't supported. "
@@ -138,65 +102,65 @@ def main():
             )
             sys.exit(1)
 
-        if data["discarded"] != 0:
-            logging.warning("%d discarded packets may skew results!", data["discarded"])
+        if stats_sum["discarded"] != 0:
+            logging.warning("%d discarded packets may skew results!", stats_sum["discarded"])
 
         name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
 
         if "active" in args.kind:
             plot(
                 ax,
-                data,
+                stats_periodic,
                 label=f"Active ({name})",
-                color=next(COLOR_ACTIVE),
+                color=next(pc.COLOR_ACTIVE),
                 eval_func=lambda stats: stats["conn_active"],
             )
         if "conn_hs" in args.kind or "tcp_hs" in args.kind:
             plot(
                 ax,
-                data,
+                stats_periodic,
                 label=f"Handshakes ({name})",
-                color=next(COLOR_CONN_HS),
+                color=next(pc.COLOR_CONN_HS),
                 eval_func=lambda stats: stats["conn_handshakes"],
             )
         if "quic_0rtt" in args.kind:
             plot(
                 ax,
-                data,
+                stats_periodic,
                 label=f"QUIC 0RTT ({name})",
-                color=next(COLOR_QUIC_0RTT),
+                color=next(pc.COLOR_QUIC_0RTT),
                 eval_func=lambda stats: stats["conn_quic_0rtt_loaded"],
             )
         if "quic_0rtt_sent" in args.kind:
             plot(
                 ax,
-                data,
+                stats_periodic,
                 label=f"QUIC 0RTT sent ({name})",
-                color=next(COLOR_QUIC_0RTT_SENT),
+                color=next(pc.COLOR_QUIC_0RTT_SENT),
                 eval_func=lambda stats: stats["quic_0rtt_sent"],
             )
         if "quic_0rtt_answered" in args.kind:
             plot(
                 ax,
-                data,
+                stats_periodic,
                 label=f"QUIC 0RTT answered ({name})",
-                color=next(COLOR_QUIC_0RTT_ANSWERED),
+                color=next(pc.COLOR_QUIC_0RTT_ANSWERED),
                 eval_func=lambda stats: stats["quic_0rtt_answered"],
             )
         if "tls_resumed" in args.kind:
             plot(
                 ax,
-                data,
+                stats_periodic,
                 label=f"TLS Resumed ({name})",
-                color=next(COLOR_TLS_RESUMED),
+                color=next(pc.COLOR_TLS_RESUMED),
                 eval_func=lambda stats: stats["conn_resumed"],
             )
         if "failed_hs" in args.kind:
             plot(
                 ax,
-                data,
+                stats_periodic,
                 label=f"Failed Handshakes ({name})",
-                color=next(COLOR_FAILED_HS),
+                color=next(pc.COLOR_FAILED_HS),
                 eval_func=lambda stats: stats["conn_handshakes_failed"],
             )
 
