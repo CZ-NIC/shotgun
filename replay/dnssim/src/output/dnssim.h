@@ -37,6 +37,7 @@ struct output_dnssim_stats {
     uint64_t requests;
     uint64_t ongoing;
     uint64_t answers;
+    uint64_t discarded;
 
     /* Number of connections that are open at the end of the stats interval. */
     uint64_t conn_active;
@@ -82,7 +83,6 @@ typedef struct output_dnssim {
     core_log_t _log;
 
     uint64_t processed;
-    uint64_t discarded;
     uint64_t ongoing;
 
     output_dnssim_stats_t* stats_sum;

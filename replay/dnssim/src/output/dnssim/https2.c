@@ -376,7 +376,8 @@ static int _http2_send_query_get(_output_dnssim_connection_t* conn, _output_dnss
                             + (content->len * 4) / 3 + 3  /* upper limit of base64 encoding */
                             + 1;  /* terminating null byte */
     if (path_len >= _MAX_URI_LEN) {
-        self->discarded++;
+        self->stats_sum->discarded++;
+        self->stats_current->discarded++;
         linfo("http2: uri path with query too long, query discarded");
         return 0;
     }
@@ -388,7 +389,8 @@ static int _http2_send_query_get(_output_dnssim_connection_t* conn, _output_dnss
         (uint8_t*)&path[uri_path_len + OUTPUT_DNSSIM_HTTP_GET_TEMPLATE_LEN],
         sizeof(path) - uri_path_len - OUTPUT_DNSSIM_HTTP_GET_TEMPLATE_LEN - 1);
     if (ret < 0) {
-        self->discarded++;
+        self->stats_sum->discarded++;
+        self->stats_current->discarded++;
         linfo("http2: base64url encode of query failed, query discarded");
         return 0;
     }

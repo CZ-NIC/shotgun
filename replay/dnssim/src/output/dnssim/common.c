@@ -141,7 +141,8 @@ void _output_dnssim_create_request(output_dnssim_t* self, _output_dnssim_client_
 
     return;
 failure:
-    self->discarded++;
+    self->stats_sum->discarded++;
+    self->stats_current->discarded++;
     _output_dnssim_close_request(req);
     return;
 }

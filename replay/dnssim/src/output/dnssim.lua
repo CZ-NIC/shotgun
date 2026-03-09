@@ -70,6 +70,7 @@ struct output_dnssim_stats {
     uint64_t requests;
     uint64_t ongoing;
     uint64_t answers;
+    uint64_t discarded;
 
     /* Number of connections that are open at the end of the stats interval. */
     uint64_t conn_active;
@@ -115,7 +116,6 @@ typedef struct output_dnssim {
     core_log_t _log;
 
     uint64_t processed;
-    uint64_t discarded;
     uint64_t ongoing;
 
     output_dnssim_stats_t* stats_sum;
@@ -415,7 +415,7 @@ end
 -- Number of input packets discarded due to various reasons.
 -- To investigate causes, run with increased logging level.
 function DnsSim:discarded()
-    return tonumber(self.obj.discarded)
+    return tonumber(self.obj.stats_sum.discarded)
 end
 
 -- Number of valid requests (input packets) processed.
@@ -495,6 +495,7 @@ function DnsSim:export(filename, run_id, thread_id, generator_version, stats_int
                 '"ongoing":', tonumber(stats.ongoing), ',',
                 '"responses":', tonumber(stats.answers), ',',
                 '"timeouts":', tonumber(stats.latency[self.obj.timeout_ms]), ',',
+                '"discarded":', tonumber(stats.discarded), ',',
                 '"response_rcodes": {', table.concat(rcode_parts, ","), '},',
                 '"response_latency": {',
                 '"buckets":[')
@@ -524,8 +525,7 @@ function DnsSim:export(filename, run_id, thread_id, generator_version, stats_int
 		'"generator_version": "', tonumber(generator_version), '",',
 		'"time_units_per_sec": 1000,',
 		'"stats_interval":', tonumber(stats_interval * 1000), ',',
-		'"timeout":', tonumber(timeout_s * 1000), ',',
-        '"discarded":', tonumber(self.obj.discarded),
+		'"timeout":', tonumber(timeout_s * 1000),
 		'}\n')
 
     write_stats(file, self.obj.stats_sum, "stats_sum")
