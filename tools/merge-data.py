@@ -85,6 +85,7 @@ DATA_STRUCTURE_STATS = {
     "queries": sum,
     "responses": sum,
     "timeouts": sum,
+    "discarded": sum,
     "response_rcodes": merge_response_rcodes,
     "response_latency": merge_response_latency,
     "conn_active": sum,
@@ -122,8 +123,7 @@ DATA_STRUCTURE_HEADER = {
     "generator_version": same,
     "time_units_per_sec": same,
     "stats_interval": same,
-    "timeout": same,
-    "discarded": sum,
+    "timeout": same
 }
 
 

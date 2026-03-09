@@ -201,10 +201,10 @@ def main():
 def process_file(json_path, json_color, args, ax):
     header, stats_sum, stats_periodic = pc.load_json_lines_file(json_path)
 
-    if header['discarded'] != 0:
-        proportion_all_perc = header['discarded'] / stats_sum['queries'] * 100
+    if stats_sum['discarded'] != 0:
+        proportion_all_perc = stats_sum['discarded'] / stats_sum['queries'] * 100
         proportion_one_sec_perc = (
-            header['discarded']
+            stats_sum['discarded']
             / min(
                 sample["queries"]
                 for sample in stats_periodic
@@ -216,7 +216,7 @@ def process_file(json_path, json_color, args, ax):
             "%d discarded packets may skew results! Discarded %.1f %% of all "
             "requests; theoretical worst case %.1f %% loss if all discarded packets "
             "happened to be in one %d ms sample",
-            header['discarded'],
+            stats_sum['discarded'],
             proportion_all_perc,
             proportion_one_sec_perc,
             header["stats_interval"],

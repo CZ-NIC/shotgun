@@ -193,7 +193,8 @@ static void _receive(output_dnssim_t* self, const core_object_t* obj)
             break;
         }
         if (current->obj_prev == NULL) {
-            self->discarded++;
+            self->stats_sum->discarded++;
+            self->stats_current->discarded++;
             lwarning("packet discarded (missing payload object)");
             return;
         }
@@ -207,7 +208,8 @@ static void _receive(output_dnssim_t* self, const core_object_t* obj)
             break;
         }
         if (current->obj_prev == NULL) {
-            self->discarded++;
+            self->stats_sum->discarded++;
+            self->stats_current->discarded++;
             lwarning("packet discarded (missing ip/ip6 object)");
             return;
         }
@@ -230,7 +232,8 @@ static void _receive(output_dnssim_t* self, const core_object_t* obj)
     if (_self->h2_zero_out_msgid) {
         lassert(_self->transport == OUTPUT_DNSSIM_TRANSPORT_HTTPS2, "must use HTTP/2 to zero-out msgid");
         if (payload->len < 2) {
-            self->discarded++;
+            self->stats_sum->discarded++;
+            self->stats_current->discarded++;
             lwarning("packet discarded (payload len < 2)");
             return;
         }
@@ -240,7 +243,8 @@ static void _receive(output_dnssim_t* self, const core_object_t* obj)
     }
 
     if (client >= self->max_clients) {
-        self->discarded++;
+        self->stats_sum->discarded++;
+        self->stats_current->discarded++;
         lwarning("packet discarded (client exceeded max_clients)");
         return;
     }
@@ -512,7 +516,7 @@ static void _on_stats_timer_tick(uv_timer_t* handle)
     lassert(self->stats_current, "stats_current is nil");
 
     lnotice("total processed:%10ld; answers:%10ld; discarded:%10ld; ongoing:%10ld",
-        self->processed, self->stats_sum->answers, self->discarded, self->ongoing);
+        self->processed, self->stats_sum->answers, self->stats_sum->discarded, self->ongoing);
 
     output_dnssim_stats_t* stats_next;
     lfatal_oom(stats_next = calloc(1, sizeof(output_dnssim_stats_t)));
