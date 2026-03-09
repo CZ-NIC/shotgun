@@ -12,6 +12,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import json
 from typing import Any, Dict, List, Optional, Set
 
 from jinja2 import Environment, FileSystemLoader
@@ -291,9 +292,11 @@ def run_or_exit(args: List[str], env: Optional[collections.abc.Mapping] = None) 
             logging.error("%s (signum %d)", signal_desc, signum)
         sys.exit(ex.returncode)
 
+def prepare_generator_params(params: List) -> str:
+    return json.dumps(params)
 
 def run_shotgun(luaconfig: str, env: collections.abc.Mapping) -> None:
-    run_or_exit([SHOTGUN_PATH, luaconfig], env)
+    run_or_exit([SHOTGUN_PATH, luaconfig, prepare_generator_params(sys.argv)], env)
 
 
 def list_json_files(directory: str) -> List[str]:

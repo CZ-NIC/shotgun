@@ -15,10 +15,17 @@ end
 
 local getopt = require("dnsjit.lib.getopt").new({})
 
-local confpath = unpack(getopt:parse())
+local args = getopt:parse()
+local confpath = args[1]
+local generator_params = args[2]
+
 if confpath == nil then
 	log.fatal("lua config file must be specified as first argument")
 end
+if generator_params == nil then
+	log.fatal("generator params must be specified as second argument")
+end
+
 local ok, config = pcall(dofile, confpath)
 if not ok then
 	log.fatal("failed to load lua config file \""..config.."\"")
@@ -95,6 +102,8 @@ local function send_thread_main(thr)
 		output:bind(thr:pop())
 	end
 
+	local generator_params = thr:pop()
+
 	local recv, rctx = output:receive()
 	local i_full = 0
 	while true do
@@ -154,6 +163,7 @@ local function send_thread_main(thr)
 		'"schema_version":', '20221207', ',',
 		'"generator": "shotgun",',
 		'"generator_version": "', tonumber(generator_version), '",',
+		'"generator_params": ', generator_params, ',',
 		'"time_units_per_sec": 1000,',
 		'"stats_interval":', tonumber(stats_interval * 1000), ',',
 		'"timeout":', tonumber(timeout_s * 1000),
@@ -229,6 +239,7 @@ for i, thrconf in ipairs(config.threads) do
 	for _, bind_ip in ipairs(thrconf.bind_ips) do
 		threads[i]:push(bind_ip)
 	end
+	threads[i]:push(generator_params)
 end
 
 copy:obj_type(object.PAYLOAD)
