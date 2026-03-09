@@ -71,6 +71,7 @@ local function send_thread_main(thr)
 	-- luacheck: ignore log
 	local log = output:log(name)
 
+	output:identifier(run_id, thread_id)
 	output:target(target_ip, target_port)
 	output:timeout(timeout_s)
 	output:handshake_timeout(handshake_timeout_s)
@@ -103,6 +104,26 @@ local function send_thread_main(thr)
 	end
 
 	local generator_params = thr:pop()
+
+	local file = io.open(output_file, "w")
+	if file == nil then
+		self.obj._log:fatal("export failed: opening file failed")
+		return
+	end
+	file:write(
+		"{ ",
+		'"runid":', tonumber(run_id), ',',
+		'"type": "header",',
+		'"schema_version":', '20221207', ',',
+		'"generator": "shotgun",',
+		'"generator_version": "', tonumber(generator_version), '",',
+		'"generator_params": ', generator_params, ',',
+		'"time_units_per_sec": 1000,',
+		'"stats_interval":', tonumber(stats_interval * 1000), ',',
+		'"timeout":', tonumber(timeout_s * 1000),
+		'}\n')
+	file:close()
+	output:open_file(output_file)
 
 	local recv, rctx = output:receive()
 	local i_full = 0
@@ -151,25 +172,7 @@ local function send_thread_main(thr)
 		running = output:run_nowait()
 	end
 
-	local file = io.open(output_file, "w")
-	if file == nil then
-		self.obj._log:fatal("export failed: opening file failed")
-		return
-	end
-	file:write(
-		"{ ",
-		'"runid":', tonumber(run_id), ',',
-		'"type": "header",',
-		'"schema_version":', '20221207', ',',
-		'"generator": "shotgun",',
-		'"generator_version": "', tonumber(generator_version), '",',
-		'"generator_params": ', generator_params, ',',
-		'"time_units_per_sec": 1000,',
-		'"stats_interval":', tonumber(stats_interval * 1000), ',',
-		'"timeout":', tonumber(timeout_s * 1000),
-		'}\n')
-	file:close()
-	output:export(output_file, run_id, thread_id)
+	output:close_file()
 end
 
 

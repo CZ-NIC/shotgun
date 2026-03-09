@@ -9,6 +9,7 @@
 #define __dnsjit_output_dnssim_h
 
 #include <stdbool.h>
+#include <stdio.h>
 
 typedef enum output_dnssim_transport {
     OUTPUT_DNSSIM_TRANSPORT_UDP_ONLY,
@@ -77,10 +78,15 @@ struct output_dnssim_stats {
     uint64_t rcode_badtrunc;
     uint64_t rcode_badcookie;
     uint64_t rcode_other;
+
+    bool written;
 };
 
 typedef struct output_dnssim {
     core_log_t _log;
+
+    uint64_t run_id;
+    uint16_t thread_id;
 
     uint64_t processed;
     uint64_t ongoing;
@@ -88,6 +94,7 @@ typedef struct output_dnssim {
     output_dnssim_stats_t* stats_sum;
     output_dnssim_stats_t* stats_current;
     output_dnssim_stats_t* stats_first;
+    output_dnssim_stats_t* stats_last_written;
 
     size_t zero_rtt_data_initial_capacity;
 
@@ -99,6 +106,8 @@ typedef struct output_dnssim {
     uint64_t idle_timeout_ms;
     uint64_t handshake_timeout_ms;
     uint64_t stats_interval_ms;
+
+    FILE* output_file;
 } output_dnssim_t;
 
 core_log_t* output_dnssim_log();
@@ -108,6 +117,7 @@ void             output_dnssim_free(output_dnssim_t* self);
 
 void output_dnssim_log_name(output_dnssim_t* self, const char* name);
 void output_dnssim_set_transport(output_dnssim_t* self, output_dnssim_transport_t tr);
+void output_dnssim_identifier(output_dnssim_t* self, uint64_t run_id, uint16_t thread_id);
 int  output_dnssim_target(output_dnssim_t* self, const char* ip, uint16_t port);
 int  output_dnssim_bind(output_dnssim_t* self, const char* ip);
 int  output_dnssim_tls_priority(output_dnssim_t* self, const char* priority, bool is_quic);
@@ -116,6 +126,8 @@ void output_dnssim_timeout_ms(output_dnssim_t* self, uint64_t timeout_ms);
 void output_dnssim_h2_uri_path(output_dnssim_t* self, const char* uri_path);
 void output_dnssim_h2_method(output_dnssim_t* self, const char* method);
 void output_dnssim_h2_zero_out_msgid(output_dnssim_t* self, bool zero_out_msgid);
+int output_dnssim_open_file(output_dnssim_t* self, const char* output_file);
+void output_dnssim_close_file(output_dnssim_t* self);
 void output_dnssim_stats_collect(output_dnssim_t* self, uint64_t interval_ms);
 void output_dnssim_stats_finish(output_dnssim_t* self);
 

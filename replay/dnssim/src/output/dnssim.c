@@ -299,6 +299,12 @@ void output_dnssim_set_transport(output_dnssim_t* self, output_dnssim_transport_
     _self->transport = tr;
 }
 
+void output_dnssim_identifier(output_dnssim_t* self, uint64_t run_id, uint16_t thread_id)
+{
+    self->run_id = run_id;
+    self->thread_id = thread_id;
+}
+
 int output_dnssim_target(output_dnssim_t* self, const char* ip, uint16_t port)
 {
     int ret;
@@ -505,6 +511,78 @@ void output_dnssim_h2_zero_out_msgid(output_dnssim_t* self, bool zero_out_msgid)
     }
 }
 
+static void _output_dnssim_write_stats(output_dnssim_t* self,
+                                        output_dnssim_stats_t* stats,
+                                        const char* stat_type)
+{
+    FILE* f = self->output_file;
+    if (f == NULL) return;
+
+    const char* rcode_names[] = {
+        "NOERROR", "FORMERR", "SERVFAIL", "NXDOMAIN", "NOTIMP",
+        "REFUSED", "YXDOMAIN", "YXRRSET", "NXRRSET", "NOTAUTH",
+        "NOTZONE", "BADVERS", "BADKEY", "BADTIME", "BADMODE",
+        "BADNAME", "BADALG", "BADTRUNC", "BADCOOKIE", "OTHER"
+    };
+    uint64_t rcode_vals[] = {
+        stats->rcode_noerror, stats->rcode_formerr, stats->rcode_servfail,
+        stats->rcode_nxdomain, stats->rcode_notimp, stats->rcode_refused,
+        stats->rcode_yxdomain, stats->rcode_yxrrset, stats->rcode_nxrrset,
+        stats->rcode_notauth, stats->rcode_notzone, stats->rcode_badvers,
+        stats->rcode_badkey, stats->rcode_badtime, stats->rcode_badmode,
+        stats->rcode_badname, stats->rcode_badalg, stats->rcode_badtrunc,
+        stats->rcode_badcookie, stats->rcode_other
+    };
+    int n_rcodes = sizeof(rcode_names) / sizeof(rcode_names[0]);
+
+    fprintf(f, "{\"runid\":\"%"PRIu64"\",\"threadid\":%"PRIu16","
+               "\"type\":\"%s\","
+               "\"since\":%"PRIu64",\"until\":%"PRIu64","
+               "\"queries\":%"PRIu64", \"ongoing\": %"PRIu64", \"responses\":%"PRIu64","
+               "\"timeouts\":%"PRIu64","
+               "\"discarded\":%"PRIu64","
+               "\"response_rcodes\":{",
+        self->run_id, self->thread_id,
+        stat_type,
+        stats->since_ms, stats->until_ms,
+        stats->requests, stats->ongoing, stats->answers,
+        stats->latency[self->timeout_ms],
+        stats->discarded);
+
+    bool first = true;
+    for (int i = 0; i < n_rcodes; i++) {
+        if (rcode_vals[i] != 0) {
+            fprintf(f, "%s\"%s\":%"PRIu64, first ? "" : ",",
+                    rcode_names[i], rcode_vals[i]);
+            first = false;
+        }
+    }
+
+    fprintf(f, "},\"response_latency\":{\"buckets\":[");
+    fprintf(f, "%"PRIu64, stats->latency[0]);
+    for (uint64_t i = 1; i <= self->timeout_ms; i++) {
+        fprintf(f, ",%"PRIu64, stats->latency[i]);
+    }
+
+    fprintf(f, "]},"
+               "\"conn_active\":%"PRIu64","
+               "\"conn_handshakes\":%"PRIu64","
+               "\"conn_resumed\":%"PRIu64","
+               "\"conn_quic_0rtt_loaded\":%"PRIu64","
+               "\"quic_0rtt_sent\":%"PRIu64","
+               "\"quic_0rtt_answered\":%"PRIu64","
+               "\"conn_handshakes_failed\":%"PRIu64"}\n",
+        stats->conn_active,
+        stats->conn_handshakes,
+        stats->conn_resumed,
+        stats->conn_quic_0rtt_loaded,
+        stats->quic_0rtt_sent,
+        stats->quic_0rtt_answered,
+        stats->conn_handshakes_failed);
+
+    fflush(f);
+}
+
 static void _on_stats_timer_tick(uv_timer_t* handle)
 {
     uint64_t         now_ms = _now_ms();
@@ -518,11 +596,24 @@ static void _on_stats_timer_tick(uv_timer_t* handle)
     lnotice("total processed:%10ld; answers:%10ld; discarded:%10ld; ongoing:%10ld",
         self->processed, self->stats_sum->answers, self->stats_sum->discarded, self->ongoing);
 
+    self->stats_current->until_ms = now_ms;
+
+    if (self->output_file != NULL) {
+        output_dnssim_stats_t* stats = (self->stats_last_written == NULL) ? self->stats_first : self->stats_last_written;
+        while (stats != self->stats_current) {
+            if (!stats->written && now_ms >= stats->until_ms + self->timeout_ms) {
+                _output_dnssim_write_stats(self, stats, "stats_periodic");
+                stats->written = true;
+                self->stats_last_written = stats;
+            }
+            stats = stats->next;
+        }
+    }
+
     output_dnssim_stats_t* stats_next;
     lfatal_oom(stats_next = calloc(1, sizeof(output_dnssim_stats_t)));
     lfatal_oom(stats_next->latency = calloc(self->timeout_ms + 1, sizeof(uint64_t)));
 
-    self->stats_current->until_ms = now_ms;
     stats_next->since_ms          = now_ms;
     stats_next->conn_active       = self->stats_current->conn_active;
 
@@ -530,6 +621,40 @@ static void _on_stats_timer_tick(uv_timer_t* handle)
     stats_next->prev          = self->stats_current;
     self->stats_current->next = stats_next;
     self->stats_current       = stats_next;
+}
+
+int output_dnssim_open_file(output_dnssim_t* self, const char* output_file)
+{
+    mlassert_self();
+    lassert(output_file, "output_file is nil");
+
+    self->output_file = fopen(output_file, "a+");
+    if (self->output_file == NULL) {
+        lfatal("failed to open output file: %s", output_file);
+        return -1;
+    }
+    return 0;
+}
+
+void output_dnssim_close_file(output_dnssim_t* self)
+{
+    mlassert_self();
+    if (self->output_file != NULL) {
+        output_dnssim_stats_t* stats = self->stats_first;
+        while (stats != NULL) {
+            if (!stats->written && stats != self->stats_sum) {
+                _output_dnssim_write_stats(self, stats, "stats_periodic");
+                stats->written = true;
+            }
+            stats = stats->next;
+        }
+        _output_dnssim_write_stats(self, self->stats_sum, "stats_sum");
+    }
+
+    if (self->output_file != NULL) {
+        fclose(self->output_file);
+        self->output_file = NULL;
+    }
 }
 
 void output_dnssim_stats_collect(output_dnssim_t* self, uint64_t interval_ms)
