@@ -142,7 +142,24 @@ local function send_thread_main(thr)
 		running = output:run_nowait()
 	end
 
-	output:export(output_file, run_id, thread_id, generator_version, stats_interval, timeout_s)
+	local file = io.open(output_file, "w")
+	if file == nil then
+		self.obj._log:fatal("export failed: opening file failed")
+		return
+	end
+	file:write(
+		"{ ",
+		'"runid":', tonumber(run_id), ',',
+		'"type": "header",',
+		'"schema_version":', '20221207', ',',
+		'"generator": "shotgun",',
+		'"generator_version": "', tonumber(generator_version), '",',
+		'"time_units_per_sec": 1000,',
+		'"stats_interval":', tonumber(stats_interval * 1000), ',',
+		'"timeout":', tonumber(timeout_s * 1000),
+		'}\n')
+	file:close()
+	output:export(output_file, run_id, thread_id)
 end
 
 

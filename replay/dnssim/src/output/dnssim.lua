@@ -448,7 +448,7 @@ function DnsSim:stats_finish()
 end
 
 -- Export the results to a JSON file.
-function DnsSim:export(filename, run_id, thread_id, generator_version, stats_interval, timeout_s)
+function DnsSim:export(filename, run_id, thread_id)
     local file = io.open(filename, "w")
     if file == nil then
         self.obj._log:fatal("export failed: no filename")
@@ -515,18 +515,6 @@ function DnsSim:export(filename, run_id, thread_id, generator_version, stats_int
         f:write(
             "}\n")
     end
-
-    file:write(
-		"{ ",
-		'"runid":', tonumber(run_id), ',',
-		'"type": "header",',
-		'"schema_version":', '20221207', ',',
-		'"generator": "shotgun",',
-		'"generator_version": "', tonumber(generator_version), '",',
-		'"time_units_per_sec": 1000,',
-		'"stats_interval":', tonumber(stats_interval * 1000), ',',
-		'"timeout":', tonumber(timeout_s * 1000),
-		'}\n')
 
     write_stats(file, self.obj.stats_sum, "stats_sum")
 
