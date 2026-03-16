@@ -97,11 +97,11 @@ void output_dnssim_free(output_dnssim_t* self)
     _output_dnssim_source_t* first = _self->source;
     output_dnssim_stats_t*   stats_prev;
 
-    free(self->stats_sum->latency);
+    free(self->stats_sum->latency_buckets);
     free(self->stats_sum);
     do {
         stats_prev = self->stats_current->prev;
-        free(self->stats_current->latency);
+        free(self->stats_current->latency_buckets);
         free(self->stats_current);
         self->stats_current = stats_prev;
     } while (self->stats_current != NULL);
@@ -143,6 +143,8 @@ void output_dnssim_free(output_dnssim_t* self)
         gnutls_priority_deinit(*_self->tls_priority);
         free(_self->tls_priority);
     }
+
+    free(self->latency_histogram.boundaries);
 
     free(self);
 }
@@ -366,6 +368,14 @@ int output_dnssim_bind(output_dnssim_t* self, const char* ip)
     return 0;
 }
 
+void output_dnssim_latency_bucket_boundaries(output_dnssim_t* self, int* arr, int n) {
+    self->latency_histogram.boundary_count = n;
+    lfatal_oom(self->latency_histogram.boundaries = calloc(n, sizeof(uint64_t)));
+    for (int i = 0; i < n; i++) {
+        self->latency_histogram.boundaries[i] = arr[i];
+    }
+}
+
 static void handle_default_priority(const char** inout_priority,
                                     bool* out_free_priority,
                                     bool is_quic)
@@ -449,7 +459,7 @@ void output_dnssim_timeout_ms(output_dnssim_t* self, uint64_t timeout_ms)
     lassert(timeout_ms > 0, "timeout must be greater than 0");
 
     if (self->stats_sum != NULL) {
-        free(self->stats_sum->latency);
+        free(self->stats_sum->latency_buckets);
         free(self->stats_sum);
         self->stats_sum = 0;
     }
@@ -457,7 +467,7 @@ void output_dnssim_timeout_ms(output_dnssim_t* self, uint64_t timeout_ms)
         output_dnssim_stats_t* stats_prev;
         do {
             stats_prev = self->stats_current->prev;
-            free(self->stats_current->latency);
+            free(self->stats_current->latency_buckets);
             free(self->stats_current);
             self->stats_current = stats_prev;
         } while (self->stats_current != NULL);
@@ -466,10 +476,10 @@ void output_dnssim_timeout_ms(output_dnssim_t* self, uint64_t timeout_ms)
     self->timeout_ms = timeout_ms;
 
     lfatal_oom(self->stats_sum = calloc(1, sizeof(output_dnssim_stats_t)));
-    lfatal_oom(self->stats_sum->latency = calloc(self->timeout_ms + 1, sizeof(uint64_t)));
+    lfatal_oom(self->stats_sum->latency_buckets = calloc(self->latency_histogram.boundary_count + 1, sizeof(uint64_t)));
 
     lfatal_oom(self->stats_current = calloc(1, sizeof(output_dnssim_stats_t)));
-    lfatal_oom(self->stats_current->latency = calloc(self->timeout_ms + 1, sizeof(uint64_t)));
+    lfatal_oom(self->stats_current->latency_buckets = calloc(self->latency_histogram.boundary_count + 1, sizeof(uint64_t)));
 
     self->stats_first = self->stats_current;
 }
@@ -546,7 +556,7 @@ static void _output_dnssim_write_stats(output_dnssim_t* self,
         stat_type,
         stats->since_ms, stats->until_ms,
         stats->requests, stats->ongoing, stats->answers,
-        stats->latency[self->timeout_ms],
+        stats->latency_buckets[self->latency_histogram.boundary_count],
         stats->discarded);
 
     bool first = true;
@@ -558,10 +568,10 @@ static void _output_dnssim_write_stats(output_dnssim_t* self,
         }
     }
 
-    fprintf(f, "},\"response_latency\":{\"buckets\":[");
-    fprintf(f, "%"PRIu64, stats->latency[0]);
-    for (uint64_t i = 1; i <= self->timeout_ms; i++) {
-        fprintf(f, ",%"PRIu64, stats->latency[i]);
+    fprintf(f, "},\"response_latency\":{\"counts\":[");
+    fprintf(f, "%"PRIu64, stats->latency_buckets[0]);
+    for (uint64_t i = 1; i < self->latency_histogram.boundary_count + 1; i++) {
+        fprintf(f, ",%"PRIu64, stats->latency_buckets[i]);
     }
 
     fprintf(f, "]},"
@@ -612,7 +622,7 @@ static void _on_stats_timer_tick(uv_timer_t* handle)
 
     output_dnssim_stats_t* stats_next;
     lfatal_oom(stats_next = calloc(1, sizeof(output_dnssim_stats_t)));
-    lfatal_oom(stats_next->latency = calloc(self->timeout_ms + 1, sizeof(uint64_t)));
+    lfatal_oom(stats_next->latency_buckets = calloc(self->latency_histogram.boundary_count + 1, sizeof(uint64_t)));
 
     stats_next->since_ms          = now_ms;
     stats_next->conn_active       = self->stats_current->conn_active;

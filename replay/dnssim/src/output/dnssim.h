@@ -25,12 +25,18 @@ typedef enum output_dnssim_h2_method {
     OUTPUT_DNSSIM_H2_POST
 } output_dnssim_h2_method_t;
 
+typedef struct output_dnssim_latency_histogram output_dnssim_latency_histogram_t;
+struct output_dnssim_latency_histogram {
+    uint64_t boundary_count;
+    uint64_t* boundaries;
+};
+
 typedef struct output_dnssim_stats output_dnssim_stats_t;
 struct output_dnssim_stats {
     output_dnssim_stats_t* prev;
     output_dnssim_stats_t* next;
 
-    uint64_t* latency;
+    uint64_t* latency_buckets;
 
     uint64_t since_ms;
     uint64_t until_ms;
@@ -91,6 +97,8 @@ typedef struct output_dnssim {
     uint64_t processed;
     uint64_t ongoing;
 
+    output_dnssim_latency_histogram_t latency_histogram;
+
     output_dnssim_stats_t* stats_sum;
     output_dnssim_stats_t* stats_current;
     output_dnssim_stats_t* stats_first;
@@ -120,6 +128,7 @@ void output_dnssim_set_transport(output_dnssim_t* self, output_dnssim_transport_
 void output_dnssim_identifier(output_dnssim_t* self, uint64_t run_id, uint16_t thread_id);
 int  output_dnssim_target(output_dnssim_t* self, const char* ip, uint16_t port);
 int  output_dnssim_bind(output_dnssim_t* self, const char* ip);
+void output_dnssim_latency_bucket_boundaries(output_dnssim_t*, int* arr, int n);
 int  output_dnssim_tls_priority(output_dnssim_t* self, const char* priority, bool is_quic);
 int  output_dnssim_run_nowait(output_dnssim_t* self);
 void output_dnssim_timeout_ms(output_dnssim_t* self, uint64_t timeout_ms);
