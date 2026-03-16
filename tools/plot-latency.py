@@ -26,8 +26,8 @@ import mplhlpr.styles
 
 import _plot_common as pc
 
-MIN_X_EXP = -1
-MAX_X_EXP = 2
+MIN_X = 1
+MAX_X = 100
 
 
 def init_plot(title):
@@ -68,9 +68,19 @@ def get_percentile_latency(latency_data, percentile):
 
 
 def get_xy_from_histogram(latency_histogram):
-    percentiles = np.logspace(MIN_X_EXP, MAX_X_EXP, num=200)
-    y = [get_percentile_latency(latency_histogram, pctl) for pctl in percentiles]
-    return percentiles, y
+    boundaries, counts = latency_histogram
+
+    count_sum = sum(counts)
+    acc = 0
+    x_percentages = [100.0]
+
+    for count in counts:
+        acc += count
+        x_percentages.append(100 - (acc / count_sum) * 100)
+
+    y_latency_buckets = [0] + boundaries
+
+    return x_percentages, y_latency_buckets
 
 
 def merge_latency(data, since=0, until=float("+inf")):
@@ -80,7 +90,7 @@ def merge_latency(data, since=0, until=float("+inf")):
     since_ms = stats_sum["since"] + since * 1000 - 100
     until_ms = stats_sum["since"] + until * 1000 + 100
 
-    latency = []
+    latency_counts = []
     requests = 0
     start = None
     end = None
@@ -91,17 +101,20 @@ def merge_latency(data, since=0, until=float("+inf")):
             break
         requests += stats["queries"]
         end = stats["until"]
-        if not latency:
-            latency = list(stats["response_latency"]["buckets"])
+        if not latency_counts:
+            latency_counts = list(stats["response_latency"]["counts"])
             start = stats["since"]
         else:
-            assert len(stats["response_latency"]["buckets"]) == len(latency)
-            for i, _ in enumerate(stats["response_latency"]["buckets"]):
-                latency[i] += stats["response_latency"]["buckets"][i]
+            assert len(stats["response_latency"]["counts"]) == len(latency_counts)
+            for i, _ in enumerate(stats["response_latency"]["counts"]):
+                latency_counts[i] += stats["response_latency"]["counts"][i]
 
-    if not latency:
+    if not latency_counts:
         raise RuntimeError("no samples matching this interval")
 
+    boundaries = header["latency_bucket_boundaries"]
+    boundaries.append(header["timeout"])
+    latency = (boundaries, latency_counts)
     qps = requests / (end - start) * header["time_units_per_sec"]
     return latency, qps
 
@@ -228,6 +241,7 @@ def main():
 
     groups = collections.defaultdict(list)
     ax = init_plot(args.title)
+    min_x = MIN_X
 
     for json_file in args.json_file:
         logging.info("processing %s", json_file.name)
@@ -280,7 +294,16 @@ def main():
         for name_re, style in args.linestyle.items():
             if name_re.search(name):
                 linestyle = style
-        ax.plot(group_x, group_yavg, lw=2, label=label, marker="", linestyle=linestyle)
+        if len(group_x) < 15:
+            marker = "o"
+        else:
+            marker = ""
+
+        if len(group_x) >= 2:
+            last_pct = group_x[-2]
+            min_x = last_pct if 0 < last_pct < min_x else min_x
+        ax.set_xlim(left=min_x, right=MAX_X)
+        ax.plot(group_x, group_yavg, lw=2, label=label, marker=marker, linestyle=linestyle)
 
     plt.legend()
     plt.savefig(args.output)

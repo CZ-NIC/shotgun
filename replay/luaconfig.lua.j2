@@ -12,7 +12,12 @@ config.threads[{{ loop.index }}] = {
 	target_ip = "{{ thread.target_ip }}",
 	target_port = {{ thread.target_port|int }},
 	weight = {{ thread.weight }},
-	timeout_s = {{ thread.timeout_s|default(2)|int }},
+	timeout_s = {{ thread.timeout_s|int }},
+	latency_bucket_boundaries = {
+{%- for boundary in thread.latency_bucket_boundaries %}
+		{{ boundary|int }},
+{%- endfor %}
+	},
 	handshake_timeout_s = {{ thread.handshake_timeout_s|default(5)|int }},
 	idle_timeout_s = {{ thread.idle_timeout_s|default(10)|int }},
 	protocol_func = "{{ thread.protocol_func|default('udp') }}",

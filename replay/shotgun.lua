@@ -57,6 +57,14 @@ local function send_thread_main(thr)
 	local name = thr:pop()
 	local target_ip = thr:pop()
 	local target_port = thr:pop()
+
+	local n_latency_boundaries = thr:pop()
+	local latency_boundaries = {}
+
+	for i = 1, n_latency_boundaries do
+	table.insert(latency_boundaries, thr:pop())
+	end
+
 	local timeout_s = thr:pop()
 	local handshake_timeout_s = thr:pop()
 	local idle_timeout_s = thr:pop()
@@ -73,6 +81,7 @@ local function send_thread_main(thr)
 
 	output:identifier(run_id, thread_id)
 	output:target(target_ip, target_port)
+	output:latency_bucket_boundaries(latency_boundaries)
 	output:timeout(timeout_s)
 	output:handshake_timeout(handshake_timeout_s)
 	output:idle_timeout(idle_timeout_s)
@@ -120,8 +129,17 @@ local function send_thread_main(thr)
 		'"generator_params": ', generator_params, ',',
 		'"time_units_per_sec": 1000,',
 		'"stats_interval":', tonumber(stats_interval * 1000), ',',
-		'"timeout":', tonumber(timeout_s * 1000),
-		'}\n')
+		'"timeout":', tonumber(timeout_s * 1000), ',',
+		'"latency_bucket_boundaries":'
+	)
+	file:write('[')
+	for i = 1, #latency_boundaries do
+		if i > 1 then
+		file:write(',')
+		end
+		file:write(latency_boundaries[i])
+	end
+	file:write(']}\n')
 	file:close()
 	output:open_file(output_file)
 
@@ -227,6 +245,10 @@ for i, thrconf in ipairs(config.threads) do
 	threads[i]:push(thrconf.name)
 	threads[i]:push(thrconf.target_ip)
 	threads[i]:push(thrconf.target_port)
+	threads[i]:push(#thrconf.latency_bucket_boundaries)
+	for _, latency_boundary in ipairs(thrconf.latency_bucket_boundaries) do
+		threads[i]:push(latency_boundary)
+	end
 	threads[i]:push(thrconf.timeout_s)
 	threads[i]:push(thrconf.handshake_timeout_s)
 	threads[i]:push(thrconf.idle_timeout_s)

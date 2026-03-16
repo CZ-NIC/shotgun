@@ -14,6 +14,7 @@ import subprocess
 import sys
 import json
 from typing import Any, Dict, List, Optional, Set
+from itertools import takewhile
 
 from jinja2 import Environment, FileSystemLoader
 import toml
@@ -35,6 +36,8 @@ DEFAULT_TRAFFIC_FIELDS = [
     "channel_size",
     "max_clients",
     "batch_size",
+    "latency_bucket_boundaries",
+    "latency_linear"
 ]
 
 # Protocol aliases are translated into specific dnssim functions.
@@ -129,6 +132,28 @@ def bind_net_to_ips(bind_net: Optional[List[str]]) -> List[str]:
             ips.add(str(net.network_address))
     return list(ips)
 
+def bucket_boundaries():
+    pattern = [1, 2, 5]
+    scale = 1
+    while True:
+        for p in pattern:
+            yield p * scale
+        scale *= 10
+
+def make_latency_buckets(timeout: int, step: int = None, buckets: list = None) -> list[int]:
+    if step is not None and buckets is not None:
+        raise RuntimeError("latency_linear and latency_bucket_boundaries cannot be set simultaneously")
+
+    if step is not None:
+        result = list(range(step, timeout, step))
+    elif buckets is not None:
+        result = list(buckets)
+    else:
+        result = list(takewhile(lambda x: x < timeout, bucket_boundaries()))
+
+    if not result or result[-1] < timeout:
+        result.append(timeout)
+    return result
 
 def create_luaconfig(config: Dict[str, Any], threads: Dict[str, int], args: Any) -> str:
     data = {
@@ -186,6 +211,18 @@ def create_luaconfig(config: Dict[str, Any], threads: Dict[str, int], args: Any)
         thrconf["weight"] = math.ceil(
             1000 * thrconf["weight"] / count
         )  # convert to integer
+
+        if "timeout_s" not in thrconf:
+            thrconf["timeout_s"] = 2
+        timeout = thrconf["timeout_s"] * 1000
+
+        bucket_boundaries_value = thrconf.get("latency_bucket_boundaries")
+        latency_linear_value = thrconf.get("latency_linear")
+        thrconf["latency_bucket_boundaries"] = make_latency_buckets(
+            timeout,
+            buckets=bucket_boundaries_value,
+            step=latency_linear_value
+        )
 
         for i in range(count):
             instconf = copy.deepcopy(thrconf)

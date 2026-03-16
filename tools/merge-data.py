@@ -74,8 +74,8 @@ def merge_response_rcodes(iterable):
     return merged
 
 def merge_response_latency(iterable):
-    merged_data = merge_latency_data([entry["buckets"] for entry in iterable])
-    result = {"buckets": merged_data}
+    merged_data = merge_latency_data([entry["counts"] for entry in iterable])
+    result = {"counts": merged_data}
     return result
 
 DATA_STRUCTURE_STATS = {
@@ -124,7 +124,8 @@ DATA_STRUCTURE_HEADER = {
     "generator_version": same,
     "time_units_per_sec": same,
     "stats_interval": same,
-    "timeout": same
+    "timeout": same,
+    "latency_bucket_boundaries": same
 }
 
 
