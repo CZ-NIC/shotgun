@@ -75,3 +75,23 @@ $ pcap/split-clients.lua -r pellets.pcap -O output_directory -n 10
 
 Every client will be assigned to a one output file. All of client's packets
 remain intact and go into a single file.
+
+## Marking only frequent queries to be counted in statistics
+
+The least significant bit of the source port of each packet in the pellets files
+determines whether the packet will be _tracked_ during the measurements.
+All the queries are still sent but only those having the bit set are counted
+in output JSONs and charts.
+We note, that connection-oriented statistics are not affected by marking the packets as untracked;
+i.e. the number of opened connections is incremented even if they are used only for untracked queries,
+but the queries themselves are not counted anywhere.
+
+The script `extract-clients.lua` sets source port of all the queries to 53,
+so all packets are tracked by default.
+
+Use the following to preprocess pellets files
+to track only some percent of the traffic containing the most repetitive queries:
+
+```
+$ pcap/mark-frequent-queries.lua -r pellets.pcap -w pellets-10perc-tracked.pcap -p 10
+```
