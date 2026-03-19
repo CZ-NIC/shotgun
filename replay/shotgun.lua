@@ -202,6 +202,7 @@ for i, thrconf in ipairs(config.threads) do
 end
 
 copy:obj_type(object.PAYLOAD)
+copy:obj_type(object.UDP)
 copy:obj_type(object.IP6)
 copy:receiver(ipsplit)
 

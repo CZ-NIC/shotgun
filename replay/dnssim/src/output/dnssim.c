@@ -9,6 +9,7 @@
 #include <dnsjit/core/assert.h>
 #include <dnsjit/core/object/ip.h>
 #include <dnsjit/core/object/ip6.h>
+#include <dnsjit/core/object/udp.h>
 
 #include <gnutls/gnutls.h>
 #include <string.h>
@@ -177,12 +178,23 @@ static uint32_t _extract_client(const core_object_t* obj)
     return client;
 }
 
+static uint32_t _extract_tracking_flag(const core_object_t* obj)
+{
+    switch (obj->obj_type) {
+    case CORE_OBJECT_UDP:
+        return ((core_object_udp_t*)obj)->sport & 0x1;
+    default:
+        return true;  // track by default
+    }
+}
+
 static void _receive(output_dnssim_t* self, const core_object_t* obj)
 {
     mlassert_self();
     core_object_t*         current = (core_object_t*)obj;
     core_object_payload_t* payload;
     uint32_t               client;
+    bool                   track = true;
 
     self->processed++;
 
@@ -199,6 +211,21 @@ static void _receive(output_dnssim_t* self, const core_object_t* obj)
         }
         current = (core_object_t*)current->obj_prev;
     }
+
+    /* extract source port from UDP layer */
+    for (;;) {
+        if (current->obj_type == CORE_OBJECT_UDP) {
+          track = _extract_tracking_flag(current);
+          break;
+        }
+        if (current->obj_prev == NULL) {
+            self->discarded++;
+            lwarning("packet discarded (missing udp object)");
+            return;
+        }
+        current = (core_object_t*)current->obj_prev;
+    }
+    self->tracked += track;
 
     /* extract client information from IP/IP6 layer */
     for (;;) {
@@ -246,7 +273,7 @@ static void _receive(output_dnssim_t* self, const core_object_t* obj)
     }
 
     ldebug("client(c): %d", client);
-    _output_dnssim_create_request(self, &_self->client_arr[client], payload);
+    _output_dnssim_create_request(self, &_self->client_arr[client], payload, track);
 }
 
 core_receiver_t output_dnssim_receiver()
@@ -511,8 +538,8 @@ static void _on_stats_timer_tick(uv_timer_t* handle)
     lassert(self->stats_sum, "stats_sum is nil");
     lassert(self->stats_current, "stats_current is nil");
 
-    lnotice("total processed:%10ld; answers:%10ld; discarded:%10ld; ongoing:%10ld",
-        self->processed, self->stats_sum->answers, self->discarded, self->ongoing);
+    lnotice("total processed:%10ld; total tracked:%10ld; tracked answers:%10ld; discarded:%10ld; ongoing:%10ld",
+        self->processed, self->tracked, self->stats_sum->answers, self->discarded, self->ongoing);
 
     output_dnssim_stats_t* stats_next;
     lfatal_oom(stats_next = calloc(1, sizeof(output_dnssim_stats_t)));

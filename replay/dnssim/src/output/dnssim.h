@@ -82,6 +82,7 @@ typedef struct output_dnssim {
     core_log_t _log;
 
     uint64_t processed;
+    uint64_t tracked;
     uint64_t discarded;
     uint64_t ongoing;
 

@@ -65,7 +65,7 @@ int _output_dnssim_answers_request(_output_dnssim_request_t* req, core_object_dn
     return 0;
 }
 
-void _output_dnssim_create_request(output_dnssim_t* self, _output_dnssim_client_t* client, core_object_payload_t* payload)
+void _output_dnssim_create_request(output_dnssim_t* self, _output_dnssim_client_t* client, core_object_payload_t* payload, bool track)
 {
     int                       ret;
     _output_dnssim_request_t* req;
@@ -82,6 +82,7 @@ void _output_dnssim_create_request(output_dnssim_t* self, _output_dnssim_client_
     req->dnssim->ongoing++;
     req->state = _OUTPUT_DNSSIM_REQ_ONGOING;
     req->stats = self->stats_current;
+    req->track = track;
 
     ret = core_object_dns_parse_header(req->dns_q);
     if (ret != 0) {
@@ -96,8 +97,10 @@ void _output_dnssim_create_request(output_dnssim_t* self, _output_dnssim_client_
         goto failure;
     }
 
-    req->dnssim->stats_sum->requests++;
-    req->stats->requests++;
+    if (track) {
+        req->dnssim->stats_sum->requests++;
+        req->stats->requests++;
+    }
 
     switch (_self->transport) {
     case OUTPUT_DNSSIM_TRANSPORT_UDP_ONLY:
@@ -210,8 +213,10 @@ void _output_dnssim_close_request(_output_dnssim_request_t* req)
         req->ended_at = req->created_at + req->dnssim->timeout_ms;
         latency       = req->dnssim->timeout_ms;
     }
-    req->stats->latency[latency]++;
-    req->dnssim->stats_sum->latency[latency]++;
+    if (req->track) {
+      req->stats->latency[latency]++;
+      req->dnssim->stats_sum->latency[latency]++;
+    }
 
     if (req->timer != NULL) {
         uv_timer_stop(req->timer);
@@ -280,93 +285,95 @@ void _output_dnssim_request_answered(_output_dnssim_request_t* req, core_object_
     mlassert(msg, "msg is nil");
 
     req->answered = true;
-    req->dnssim->stats_sum->answers++;
-    req->stats->answers++;
-    if (is_early) {
-        req->dnssim->stats_sum->quic_0rtt_answered++;
-        req->stats->quic_0rtt_answered++;
-    }
+    if (req->track) {
+        req->dnssim->stats_sum->answers++;
+        req->stats->answers++;
+        if (is_early) {
+            req->dnssim->stats_sum->quic_0rtt_answered++;
+            req->stats->quic_0rtt_answered++;
+        }
 
-    switch (msg->rcode) {
-    case CORE_OBJECT_DNS_RCODE_NOERROR:
-        req->dnssim->stats_sum->rcode_noerror++;
-        req->stats->rcode_noerror++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_FORMERR:
-        req->dnssim->stats_sum->rcode_formerr++;
-        req->stats->rcode_formerr++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_SERVFAIL:
-        req->dnssim->stats_sum->rcode_servfail++;
-        req->stats->rcode_servfail++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_NXDOMAIN:
-        req->dnssim->stats_sum->rcode_nxdomain++;
-        req->stats->rcode_nxdomain++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_NOTIMP:
-        req->dnssim->stats_sum->rcode_notimp++;
-        req->stats->rcode_notimp++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_REFUSED:
-        req->dnssim->stats_sum->rcode_refused++;
-        req->stats->rcode_refused++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_YXDOMAIN:
-        req->dnssim->stats_sum->rcode_yxdomain++;
-        req->stats->rcode_yxdomain++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_YXRRSET:
-        req->dnssim->stats_sum->rcode_yxrrset++;
-        req->stats->rcode_yxrrset++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_NXRRSET:
-        req->dnssim->stats_sum->rcode_nxrrset++;
-        req->stats->rcode_nxrrset++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_NOTAUTH:
-        req->dnssim->stats_sum->rcode_notauth++;
-        req->stats->rcode_notauth++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_NOTZONE:
-        req->dnssim->stats_sum->rcode_notzone++;
-        req->stats->rcode_notzone++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_BADVERS:
-        req->dnssim->stats_sum->rcode_badvers++;
-        req->stats->rcode_badvers++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_BADKEY:
-        req->dnssim->stats_sum->rcode_badkey++;
-        req->stats->rcode_badkey++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_BADTIME:
-        req->dnssim->stats_sum->rcode_badtime++;
-        req->stats->rcode_badtime++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_BADMODE:
-        req->dnssim->stats_sum->rcode_badmode++;
-        req->stats->rcode_badmode++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_BADNAME:
-        req->dnssim->stats_sum->rcode_badname++;
-        req->stats->rcode_badname++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_BADALG:
-        req->dnssim->stats_sum->rcode_badalg++;
-        req->stats->rcode_badalg++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_BADTRUNC:
-        req->dnssim->stats_sum->rcode_badtrunc++;
-        req->stats->rcode_badtrunc++;
-        break;
-    case CORE_OBJECT_DNS_RCODE_BADCOOKIE:
-        req->dnssim->stats_sum->rcode_badcookie++;
-        req->stats->rcode_badcookie++;
-        break;
-    default:
-        req->dnssim->stats_sum->rcode_other++;
-        req->stats->rcode_other++;
+        switch (msg->rcode) {
+        case CORE_OBJECT_DNS_RCODE_NOERROR:
+            req->dnssim->stats_sum->rcode_noerror++;
+            req->stats->rcode_noerror++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_FORMERR:
+            req->dnssim->stats_sum->rcode_formerr++;
+            req->stats->rcode_formerr++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_SERVFAIL:
+            req->dnssim->stats_sum->rcode_servfail++;
+            req->stats->rcode_servfail++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_NXDOMAIN:
+            req->dnssim->stats_sum->rcode_nxdomain++;
+            req->stats->rcode_nxdomain++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_NOTIMP:
+            req->dnssim->stats_sum->rcode_notimp++;
+            req->stats->rcode_notimp++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_REFUSED:
+            req->dnssim->stats_sum->rcode_refused++;
+            req->stats->rcode_refused++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_YXDOMAIN:
+            req->dnssim->stats_sum->rcode_yxdomain++;
+            req->stats->rcode_yxdomain++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_YXRRSET:
+            req->dnssim->stats_sum->rcode_yxrrset++;
+            req->stats->rcode_yxrrset++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_NXRRSET:
+            req->dnssim->stats_sum->rcode_nxrrset++;
+            req->stats->rcode_nxrrset++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_NOTAUTH:
+            req->dnssim->stats_sum->rcode_notauth++;
+            req->stats->rcode_notauth++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_NOTZONE:
+            req->dnssim->stats_sum->rcode_notzone++;
+            req->stats->rcode_notzone++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_BADVERS:
+            req->dnssim->stats_sum->rcode_badvers++;
+            req->stats->rcode_badvers++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_BADKEY:
+            req->dnssim->stats_sum->rcode_badkey++;
+            req->stats->rcode_badkey++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_BADTIME:
+            req->dnssim->stats_sum->rcode_badtime++;
+            req->stats->rcode_badtime++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_BADMODE:
+            req->dnssim->stats_sum->rcode_badmode++;
+            req->stats->rcode_badmode++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_BADNAME:
+            req->dnssim->stats_sum->rcode_badname++;
+            req->stats->rcode_badname++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_BADALG:
+            req->dnssim->stats_sum->rcode_badalg++;
+            req->stats->rcode_badalg++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_BADTRUNC:
+            req->dnssim->stats_sum->rcode_badtrunc++;
+            req->stats->rcode_badtrunc++;
+            break;
+        case CORE_OBJECT_DNS_RCODE_BADCOOKIE:
+            req->dnssim->stats_sum->rcode_badcookie++;
+            req->stats->rcode_badcookie++;
+            break;
+        default:
+            req->dnssim->stats_sum->rcode_other++;
+            req->stats->rcode_other++;
+        }
     }
 
     _output_dnssim_close_request(req);
