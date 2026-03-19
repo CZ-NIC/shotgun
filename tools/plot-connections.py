@@ -121,7 +121,7 @@ def main():
                 stats_periodic,
                 label=f"Handshakes ({name})",
                 color=next(pc.COLOR_CONN_HS),
-                eval_func=lambda stats: stats["conn_handshakes"],
+                eval_func=lambda stats: stats["conn_info"]["handshakes"],
             )
         if "quic_0rtt" in args.kind:
             plot(
@@ -129,7 +129,7 @@ def main():
                 stats_periodic,
                 label=f"QUIC 0RTT ({name})",
                 color=next(pc.COLOR_QUIC_0RTT),
-                eval_func=lambda stats: stats["conn_quic_0rtt_loaded"],
+                eval_func=lambda stats: stats["conn_info"]["zero_rtt"]["loaded"],
             )
         if "quic_0rtt_sent" in args.kind:
             plot(
@@ -137,7 +137,7 @@ def main():
                 stats_periodic,
                 label=f"QUIC 0RTT sent ({name})",
                 color=next(pc.COLOR_QUIC_0RTT_SENT),
-                eval_func=lambda stats: stats["quic_0rtt_sent"],
+                eval_func=lambda stats: stats["conn_info"]["zero_rtt"]["sent"],
             )
         if "quic_0rtt_answered" in args.kind:
             plot(
@@ -145,7 +145,7 @@ def main():
                 stats_periodic,
                 label=f"QUIC 0RTT answered ({name})",
                 color=next(pc.COLOR_QUIC_0RTT_ANSWERED),
-                eval_func=lambda stats: stats["quic_0rtt_answered"],
+                eval_func=lambda stats: stats["conn_info"]["zero_rtt"]["answered"],
             )
         if "tls_resumed" in args.kind:
             plot(
@@ -153,7 +153,7 @@ def main():
                 stats_periodic,
                 label=f"TLS Resumed ({name})",
                 color=next(pc.COLOR_TLS_RESUMED),
-                eval_func=lambda stats: stats["conn_resumed"],
+                eval_func=lambda stats: stats["conn_info"]["resumption"]["established"],
             )
         if "failed_hs" in args.kind:
             plot(
@@ -161,7 +161,7 @@ def main():
                 stats_periodic,
                 label=f"Failed Handshakes ({name})",
                 color=next(pc.COLOR_FAILED_HS),
-                eval_func=lambda stats: stats["conn_handshakes_failed"],
+                eval_func=lambda stats: stats["conn_info"]["handshakes_failed"],
             )
 
     # set axis boundaries

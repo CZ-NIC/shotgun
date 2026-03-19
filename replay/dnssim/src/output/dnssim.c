@@ -521,13 +521,8 @@ void output_dnssim_h2_zero_out_msgid(output_dnssim_t* self, bool zero_out_msgid)
     }
 }
 
-static void _output_dnssim_write_stats(output_dnssim_t* self,
-                                        output_dnssim_stats_t* stats,
-                                        const char* stat_type)
+static void _output_dnssim_write_rcodes(output_dnssim_stats_t* stats, FILE* f)
 {
-    FILE* f = self->output_file;
-    if (f == NULL) return;
-
     const char* rcode_names[] = {
         "NOERROR", "FORMERR", "SERVFAIL", "NXDOMAIN", "NOTIMP",
         "REFUSED", "YXDOMAIN", "YXRRSET", "NXRRSET", "NOTAUTH",
@@ -545,20 +540,7 @@ static void _output_dnssim_write_stats(output_dnssim_t* self,
     };
     int n_rcodes = sizeof(rcode_names) / sizeof(rcode_names[0]);
 
-    fprintf(f, "{\"runid\":\"%"PRIu64"\",\"threadid\":%"PRIu16","
-               "\"type\":\"%s\","
-               "\"since\":%"PRIu64",\"until\":%"PRIu64","
-               "\"queries\":%"PRIu64", \"ongoing\": %"PRIu64", \"responses\":%"PRIu64","
-               "\"timeouts\":%"PRIu64","
-               "\"discarded\":%"PRIu64","
-               "\"response_rcodes\":{",
-        self->run_id, self->thread_id,
-        stat_type,
-        stats->since_ms, stats->until_ms,
-        stats->requests, stats->ongoing, stats->answers,
-        stats->latency_buckets[self->latency_histogram.boundary_count],
-        stats->discarded);
-
+    fprintf(f, "\"response_rcodes\":{");
     bool first = true;
     for (int i = 0; i < n_rcodes; i++) {
         if (rcode_vals[i] != 0) {
@@ -567,29 +549,96 @@ static void _output_dnssim_write_stats(output_dnssim_t* self,
             first = false;
         }
     }
+    fprintf(f, "}");
+}
 
-    fprintf(f, "},\"response_latency\":{\"counts\":[");
+static void _output_dnssim_write_transport(output_dnssim_stats_t* stats, FILE* f, output_dnssim_transport_t tr)
+{
+    fprintf(f, "\"conn_info\":{\"type\":");
+    switch (tr) {
+    case OUTPUT_DNSSIM_TRANSPORT_UDP_ONLY:
+        fprintf(f, "\"udp\"");
+        goto bracket_end;
+    case OUTPUT_DNSSIM_TRANSPORT_UDP:
+        fprintf(f, "\"udp\"");
+        goto bracket_end;
+    case OUTPUT_DNSSIM_TRANSPORT_TCP:
+        fprintf(f, "\"tcp\",");
+        goto handshakes;
+    case OUTPUT_DNSSIM_TRANSPORT_TLS:
+        fprintf(f, "\"tls_conn\",");
+        goto resumptions;
+    case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
+        fprintf(f, "\"tls_conn\",");
+        goto resumptions;
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+        fprintf(f, "\"quic_conn\",");
+        goto quic;
+    }
+
+quic:
+fprintf(f,
+        "\"zero_rtt\":{"
+        "\"loaded\":%"PRIu64","
+        "\"sent\":%"PRIu64","
+        "\"answered\":%"PRIu64"},",
+        stats->conn_quic_0rtt_loaded,
+        stats->quic_0rtt_sent,
+        stats->quic_0rtt_answered
+    );
+resumptions:
+fprintf(f,
+        "\"resumption\":{"
+        "\"established\":%"PRIu64"},",
+        stats->conn_resumed
+    );
+handshakes:
+    fprintf(f,
+        "\"handshakes\":%"PRIu64","
+        "\"handshakes_failed\":%"PRIu64,
+        stats->conn_handshakes,
+        stats->conn_handshakes_failed
+    );
+bracket_end:
+    fprintf(f, "}");
+}
+
+static void _output_dnssim_write_stats(output_dnssim_t* self,
+                                        output_dnssim_stats_t* stats,
+                                        const char* stat_type)
+{
+    FILE* f = self->output_file;
+    if (f == NULL) return;
+
+    fprintf(f, "{\"runid\":\"%"PRIu64"\",\"threadid\":%"PRIu16","
+               "\"type\":\"%s\","
+               "\"since\":%"PRIu64",\"until\":%"PRIu64","
+               "\"queries\":%"PRIu64", \"ongoing\": %"PRIu64", \"responses\":%"PRIu64","
+               "\"timeouts\":%"PRIu64","
+               "\"discarded\":%"PRIu64",",
+        self->run_id, self->thread_id,
+        stat_type,
+        stats->since_ms, stats->until_ms,
+        stats->requests, stats->ongoing, stats->answers,
+        stats->latency_buckets[self->latency_histogram.boundary_count],
+        stats->discarded);
+
+    _output_dnssim_write_rcodes(stats, f);
+
+    fprintf(f, ",\"response_latency\":{\"counts\":[");
     fprintf(f, "%"PRIu64, stats->latency_buckets[0]);
     for (uint64_t i = 1; i < self->latency_histogram.boundary_count + 1; i++) {
         fprintf(f, ",%"PRIu64, stats->latency_buckets[i]);
     }
 
     fprintf(f, "]},"
-               "\"conn_active\":%"PRIu64","
-               "\"conn_handshakes\":%"PRIu64","
-               "\"conn_resumed\":%"PRIu64","
-               "\"conn_quic_0rtt_loaded\":%"PRIu64","
-               "\"quic_0rtt_sent\":%"PRIu64","
-               "\"quic_0rtt_answered\":%"PRIu64","
-               "\"conn_handshakes_failed\":%"PRIu64"}\n",
-        stats->conn_active,
-        stats->conn_handshakes,
-        stats->conn_resumed,
-        stats->conn_quic_0rtt_loaded,
-        stats->quic_0rtt_sent,
-        stats->quic_0rtt_answered,
-        stats->conn_handshakes_failed);
+               "\"conn_active\":%"PRIu64",",
+                stats->conn_active
+    );
 
+    _output_dnssim_write_transport(stats, f, _self->transport);
+
+    fprintf(f, "}\n");
     fflush(f);
 }
 

@@ -78,6 +78,32 @@ def merge_response_latency(iterable):
     result = {"counts": merged_data}
     return result
 
+def merge_conn_info(iterable):
+    assert len(iterable) >= 1
+    merged = {}
+    for conn_info in iterable:
+        if "type" not in merged:
+            merged["type"] = conn_info.get("type")
+
+        if "handshakes" in conn_info:
+            merged["handshakes"] = merged.get("handshakes", 0) + conn_info["handshakes"]
+        if "handshakes_failed" in conn_info:
+            merged["handshakes_failed"] = merged.get("handshakes_failed", 0) + conn_info["handshakes_failed"]
+
+        if "resumption" in conn_info:
+            if "resumption" not in merged:
+                merged["resumption"] = {}
+            merged["resumption"]["established"] = merged["resumption"].get("established", 0) + conn_info["resumption"]["established"]
+
+        if "zero_rtt" in conn_info:
+            if "zero_rtt" not in merged:
+                merged["zero_rtt"] = {}
+            merged["zero_rtt"]["loaded"] = merged["zero_rtt"].get("loaded", 0) + conn_info["zero_rtt"]["loaded"]
+            merged["zero_rtt"]["sent"] = merged["zero_rtt"].get("sent", 0) + conn_info["zero_rtt"]["sent"]
+            merged["zero_rtt"]["answered"] = merged["zero_rtt"].get("answered", 0) + conn_info["zero_rtt"]["answered"]
+
+    return merged
+
 DATA_STRUCTURE_STATS = {
     "runid": same,
     "type": same,
@@ -90,15 +116,10 @@ DATA_STRUCTURE_STATS = {
     "response_rcodes": merge_response_rcodes,
     "response_latency": merge_response_latency,
     "conn_active": sum,
-    "conn_resumed": sum,
-    "conn_handshakes": sum,
-    "conn_quic_0rtt_loaded": sum,
-    "quic_0rtt_sent": sum,
-    "quic_0rtt_answered": sum,
-    "conn_handshakes_failed": sum
+    "conn_info": merge_conn_info
 }
 
-OPTIONAL_STATS_FIELDS = {"response_rcodes", "response_latency"}
+OPTIONAL_STATS_FIELDS = {"response_rcodes", "response_latency", "conn_info"}
 
 
 def merge_stats(iterable):
@@ -106,9 +127,7 @@ def merge_stats(iterable):
     for field, merge_func in DATA_STRUCTURE_STATS.items():
         field_data = [data[field] for data in iterable if field in data]
         if not field_data:
-            if field not in OPTIONAL_STATS_FIELDS:
-                raise MissingData(field)
-            continue
+            raise MissingData(field)
         try:
             out[field] = merge_func(field_data)
         except Exception as exc:
