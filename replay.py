@@ -282,6 +282,8 @@ def get_log_level(verbosity: int) -> int:
 
 def run_or_exit(args: List[str], env: Optional[collections.abc.Mapping] = None) -> None:
     try:
+        print(args)
+        print(env)
         subprocess.run(args, check=True, env=env)
     except subprocess.CalledProcessError as ex:
         if ex.returncode < 0:
