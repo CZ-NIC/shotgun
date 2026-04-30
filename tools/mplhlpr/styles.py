@@ -12,6 +12,7 @@ Load attempts are done in this order:
     2. Relative base name pointing directory with this module
     3. Matplotlib supplied style name (see matplotlib.style module)
 """
+
 from pathlib import Path
 import os
 

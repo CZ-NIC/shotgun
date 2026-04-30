@@ -17,7 +17,6 @@ from typing import Any, Dict, List, Optional, Set
 from jinja2 import Environment, FileSystemLoader
 import toml
 
-
 # [defaults.traffic] fields that will be supplied to every sender config as default if set
 DEFAULT_TRAFFIC_FIELDS = [
     "timeout_s",
