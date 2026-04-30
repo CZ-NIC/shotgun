@@ -5,6 +5,7 @@
 #include "output/dnssim.h"
 #include "output/dnssim/internal.h"
 #include "output/dnssim/ll.h"
+#include <dnsjit/core/log.h>
 
 static core_log_t _log = LOG_T_INIT("output.dnssim");
 
@@ -24,16 +25,16 @@ static int _process_udp_response(uv_udp_t* handle, ssize_t nread, const uv_buf_t
     dns_a.obj_prev = (core_object_t*)&payload;
     int ret        = core_object_dns_parse_header(&dns_a);
     if (ret != 0) {
-        mldebug("udp response malformed");
+        mlwarning("udp response malformed: err %d", ret);
         return _ERR_MALFORMED;
     }
     if (dns_a.id != req->dns_q->id) {
-        mldebug("udp response msgid mismatch %x(q) != %x(a)", req->dns_q->id, dns_a.id);
+        mlnotice("udp response msgid mismatch %x(q) != %x(a)", req->dns_q->id, dns_a.id);
         return _ERR_MSGID;
     }
     ret = _output_dnssim_answers_request(req, &dns_a);
     if (ret != 0) {
-        mlwarning("udp reponse question mismatch");
+        mlwarning("udp reponse question mismatch: err %d", ret);
         return _ERR_QUESTION;
     }
 
