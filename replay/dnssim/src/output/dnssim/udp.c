@@ -31,10 +31,6 @@ static int _process_udp_response(uv_udp_t* handle, ssize_t nread, const uv_buf_t
         mldebug("udp response msgid mismatch %x(q) != %x(a)", req->dns_q->id, dns_a.id);
         return _ERR_MSGID;
     }
-    if (dns_a.tc == 1) {
-        mldebug("udp response has TC=1");
-        return _ERR_TC;
-    }
     ret = _output_dnssim_answers_request(req, &dns_a);
     if (ret != 0) {
         mlwarning("udp reponse question mismatch");
