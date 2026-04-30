@@ -4,9 +4,10 @@ disable=
     missing-docstring,
     too-few-public-methods,
     too-many-arguments,
-    too-many-locals,
-    too-many-return-statements,
     too-many-branches,
+    too-many-locals,
+    too-many-positional-arguments,
+    too-many-return-statements,
     fixme,
     unused-import,  # checked by flake8
     line-too-long,  # checked by flake8

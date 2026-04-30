@@ -1,6 +1,6 @@
 ARG DNSJIT_VERSION
 ARG CI_REGISTRY=registry.nic.cz
-FROM $CI_REGISTRY/knot/knot-resolver/ci/debian-12:knot-3.2
+FROM $CI_REGISTRY/knot/knot-resolver-ci/debian13-knot_3_5:v20260326
 
 ENV DNSJIT_VERSION=${DNSJIT_VERSION:-1.3.0}
 
