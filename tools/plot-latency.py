@@ -132,9 +132,10 @@ class NamedGroupAction(argparse.Action):
         group_name = values[0]
         try:
             groups[group_name] = [
-                argparse.FileType()(filename) for filename in values[1:]
+                open(filename, encoding="utf-8")  # pylint: disable=consider-using-with
+                for filename in values[1:]
             ]
-        except argparse.ArgumentTypeError as ex:
+        except OSError as ex:
             raise argparse.ArgumentError(self, ex)
         setattr(namespace, self.dest, groups)
 
@@ -159,6 +160,13 @@ class LineStyleAction(argparse.Action):
         linestyles = getattr(namespace, self.dest) or {}
         linestyles[regex] = style
         setattr(namespace, self.dest, linestyles)
+
+
+def open_json_file(filename):
+    try:
+        return open(filename, encoding="utf-8")
+    except OSError as ex:
+        raise argparse.ArgumentTypeError(ex)
 
 
 def read_json(file_obj):
@@ -227,7 +235,7 @@ def parse_args():
     input_args.add_argument(
         "json_file",
         nargs="*",
-        type=argparse.FileType(),
+        type=open_json_file,
         help="JSON file(s) to plot individually",
     )
 
@@ -256,14 +264,16 @@ def main():
 
     for json_file in args.json_file:
         logging.info("processing %s", json_file.name)
-        data = read_json(json_file)
+        with json_file:
+            data = read_json(json_file)
         name = os.path.splitext(os.path.basename(os.path.normpath(json_file.name)))[0]
         groups[name].append(data)
 
     for name, group_files in args.group.items():
         for json_file in group_files:
             logging.info("processing group %s: %s", name, json_file.name)
-            data = read_json(json_file)
+            with json_file:
+                data = read_json(json_file)
             groups[name].append(data)
 
     for name, group_data in groups.items():
