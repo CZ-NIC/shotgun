@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=ubuntu:22.04
+ARG BASE_IMAGE=ubuntu:26.04
 FROM $BASE_IMAGE AS runtime_base
 MAINTAINER Petr Spacek <pspacek@isc.org>
 ENV DEBIAN_FRONTEND=noninteractive
