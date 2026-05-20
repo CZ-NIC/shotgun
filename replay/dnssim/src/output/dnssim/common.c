@@ -47,6 +47,12 @@ int _output_dnssim_answers_request(_output_dnssim_request_t* req, core_object_dn
     if (!response->have_id || !response->have_qdcount)
         return _ERR_MALFORMED;
 
+    if (!response->have_qr || response->qr != 1)
+        return _ERR_MALFORMED;
+
+    if (!response->have_opcode || response->opcode != req->dns_q->opcode)
+        return _ERR_MALFORMED;
+
     if (req->dns_q->id != response->id)
         return _ERR_MSGID;
 
