@@ -44,8 +44,14 @@ int _output_dnssim_answers_request(_output_dnssim_request_t* req, core_object_dn
     const uint8_t* question;
     ssize_t        len;
 
-    if (!response->have_id || !response->have_qdcount)
+    if (!response->have_id || !response->have_qdcount || !response->have_qr || !response->have_opcode)
         return _ERR_MALFORMED;
+
+    if (response->qr != 1)
+        return _ERR_QUESTION;
+
+    if (response->opcode != req->dns_q->opcode)
+        return _ERR_OPCODE;
 
     if (req->dns_q->id != response->id)
         return _ERR_MSGID;
