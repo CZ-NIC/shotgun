@@ -68,6 +68,23 @@ def init_plot(title):
     ax.set_ylabel("Response time [ms]")
     mplhlpr.styles.ax_set_title(ax, title)
 
+    fig_w, fig_h = ax.figure.get_size_inches()
+    ax_pos = ax.get_position()
+    ax_w_in = fig_w * ax_pos.width
+    ax_h_in = fig_h * ax_pos.height
+    arrow_len_in = min(ax_w_in, ax_h_in) * 0.15
+    dx_frac = arrow_len_in / ax_w_in
+    dy_frac = arrow_len_in / ax_h_in
+    ax.annotate(
+        "better",
+        xy=(dx_frac / 4, dy_frac / 4),
+        xycoords="axes fraction",
+        xytext=(dx_frac, dy_frac),
+        textcoords="axes fraction",
+        arrowprops={"arrowstyle": "->"},
+        ha="center",
+    )
+
     return ax
 
 
