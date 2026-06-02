@@ -88,6 +88,25 @@ def init_plot(title):
     return ax
 
 
+def hide_overlapping_ticklabels(ax):
+    fig = ax.get_figure()
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    for axis in (ax.xaxis, ax.yaxis):
+        prev_bbox = None
+        for tick in axis.get_major_ticks():
+            label = tick.label1
+            if not label.get_visible():
+                continue
+            bbox = label.get_window_extent(renderer)
+            if prev_bbox is not None and bbox.expanded(1.15, 1.15).overlaps(prev_bbox):
+                label.set_visible(False)
+                tick.tick1line.set_visible(False)
+                tick.tick2line.set_visible(False)
+            else:
+                prev_bbox = bbox
+
+
 def get_percentile_latency(latency_data, percentile):
     total = sum(latency_data)
     ipercentile = math.ceil((100 - percentile) / 100 * total - 1)
@@ -335,6 +354,7 @@ def main():
         ax.plot(group_x, group_yavg, lw=2, label=label, marker="", linestyle=linestyle)
 
     plt.legend()
+    hide_overlapping_ticklabels(ax)
     plt.savefig(args.output)
 
 
