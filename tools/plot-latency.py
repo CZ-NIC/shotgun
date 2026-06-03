@@ -68,7 +68,43 @@ def init_plot(title):
     ax.set_ylabel("Response time [ms]")
     mplhlpr.styles.ax_set_title(ax, title)
 
+    fig_w, fig_h = ax.figure.get_size_inches()
+    ax_pos = ax.get_position()
+    ax_w_in = fig_w * ax_pos.width
+    ax_h_in = fig_h * ax_pos.height
+    arrow_len_in = min(ax_w_in, ax_h_in) * 0.15
+    dx_frac = arrow_len_in / ax_w_in
+    dy_frac = arrow_len_in / ax_h_in
+    ax.annotate(
+        "better",
+        xy=(dx_frac / 4, dy_frac / 4),
+        xycoords="axes fraction",
+        xytext=(dx_frac, dy_frac),
+        textcoords="axes fraction",
+        arrowprops={"arrowstyle": "->"},
+        ha="center",
+    )
+
     return ax
+
+
+def hide_overlapping_ticklabels(ax):
+    fig = ax.get_figure()
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    for axis in (ax.xaxis, ax.yaxis):
+        prev_bbox = None
+        for tick in axis.get_major_ticks():
+            label = tick.label1
+            if not label.get_visible():
+                continue
+            bbox = label.get_window_extent(renderer)
+            if prev_bbox is not None and bbox.expanded(1.15, 1.15).overlaps(prev_bbox):
+                label.set_visible(False)
+                tick.tick1line.set_visible(False)
+                tick.tick2line.set_visible(False)
+            else:
+                prev_bbox = bbox
 
 
 def get_percentile_latency(latency_data, percentile):
@@ -318,6 +354,7 @@ def main():
         ax.plot(group_x, group_yavg, lw=2, label=label, marker="", linestyle=linestyle)
 
     plt.legend()
+    hide_overlapping_ticklabels(ax)
     plt.savefig(args.output)
 
 
