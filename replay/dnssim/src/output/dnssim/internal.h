@@ -33,6 +33,7 @@
 #define _ERR_MSGID -3
 #define _ERR_TC -4
 #define _ERR_QUESTION -5
+#define _ERR_OPCODE -6
 
 #define _MAX_URI_LEN 65536
 #define MAX_DNSMSG_SIZE 65535
