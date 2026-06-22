@@ -24,7 +24,7 @@ RCODES = {
     "BADALG",
     "BADTRUNC",
     "BADCOOKIE",
-    "other",
+    "OTHER",
 }
 
 RCODE_MARKERS = {
@@ -33,7 +33,7 @@ RCODE_MARKERS = {
     "NXDOMAIN": "n",
     "NOTIMP": "i",
     "REFUSED": "r",
-    "other": "?",
+    "OTHER": "?",
 }
 
 RCODE_COLORS = {
@@ -56,7 +56,7 @@ RCODE_COLORS = {
     "BADALG":    "#a03623",
     "BADTRUNC":  "#b7e1a1",
     "BADCOOKIE": "#0a888a",
-    "other":     "#000000",
+    "OTHER":     "#000000",
 }
 
 COLOR_ACTIVE = cycle(["royalblue", "cornflowerblue", "darkblue", "lightsteelblue"])

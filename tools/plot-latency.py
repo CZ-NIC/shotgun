@@ -266,6 +266,55 @@ def parse_args():
         )
     return args
 
+def aggregate_group(args, name, group_data, ax, min_x):
+    pos_inf = float("inf")
+    neg_inf = float("-inf")
+    group_x = []  # we use the same X coordinates for all runs
+    group_ymin = []
+    group_ymax = []
+    group_ysum = []
+    for run_data in group_data:
+        latency, qps = merge_latency(run_data, args.since, args.until)
+        label = f"{name} ({pc.siname(qps)} QPS)"
+        group_x, run_y = get_xy_from_histogram(latency)
+        if len(group_data) == 1:  # no reason to compute aggregate values
+            group_ysum = run_y
+            break
+        group_ysum = [
+            old + new
+            for old, new in itertools.zip_longest(group_ysum, run_y, fillvalue=0)
+        ]
+        group_ymin = [
+            min(old, new)
+            for old, new in itertools.zip_longest(
+                group_ymin, run_y, fillvalue=pos_inf
+            )
+        ]
+        group_ymax = [
+            max(old, new)
+            for old, new in itertools.zip_longest(
+                group_ymax, run_y, fillvalue=neg_inf
+            )
+        ]
+    if len(group_data) > 1:
+        group_yavg = [ysum / len(group_data) for ysum in group_ysum]
+        ax.fill_between(group_x, group_ymin, group_ymax, alpha=0.2)
+    else:
+        group_yavg = group_ysum
+    linestyle = "solid"
+    for name_re, style in args.linestyle.items():
+        if name_re.search(name):
+            linestyle = style
+    if len(group_x) < 15:
+        marker = "o"
+    else:
+        marker = ""
+
+    if len(group_x) >= 2:
+        last_pct = group_x[-2]
+        min_x = last_pct if 0 < last_pct < min_x else min_x
+    ax.set_xlim(left=min_x, right=MAX_X)
+    ax.plot(group_x, group_yavg, lw=2, label=label, marker=marker, linestyle=linestyle)
 
 def main():
     logging.basicConfig(
@@ -296,54 +345,7 @@ def main():
             groups[name].append([header, stats_sum, stats_periodic])
 
     for name, group_data in groups.items():
-        pos_inf = float("inf")
-        neg_inf = float("-inf")
-        group_x = []  # we use the same X coordinates for all runs
-        group_ymin = []
-        group_ymax = []
-        group_ysum = []
-        for run_data in group_data:
-            latency, qps = merge_latency(run_data, args.since, args.until)
-            label = f"{name} ({pc.siname(qps)} QPS)"
-            group_x, run_y = get_xy_from_histogram(latency)
-            if len(group_data) == 1:  # no reason to compute aggregate values
-                group_ysum = run_y
-                break
-            group_ysum = [
-                old + new
-                for old, new in itertools.zip_longest(group_ysum, run_y, fillvalue=0)
-            ]
-            group_ymin = [
-                min(old, new)
-                for old, new in itertools.zip_longest(
-                    group_ymin, run_y, fillvalue=pos_inf
-                )
-            ]
-            group_ymax = [
-                max(old, new)
-                for old, new in itertools.zip_longest(
-                    group_ymax, run_y, fillvalue=neg_inf
-                )
-            ]
-        if len(group_data) > 1:
-            group_yavg = [ysum / len(group_data) for ysum in group_ysum]
-            ax.fill_between(group_x, group_ymin, group_ymax, alpha=0.2)
-        else:
-            group_yavg = group_ysum
-        linestyle = "solid"
-        for name_re, style in args.linestyle.items():
-            if name_re.search(name):
-                linestyle = style
-        if len(group_x) < 15:
-            marker = "o"
-        else:
-            marker = ""
-
-        if len(group_x) >= 2:
-            last_pct = group_x[-2]
-            min_x = last_pct if 0 < last_pct < min_x else min_x
-        ax.set_xlim(left=min_x, right=MAX_X)
-        ax.plot(group_x, group_yavg, lw=2, label=label, marker=marker, linestyle=linestyle)
+        aggregate_group(args, name, group_data, ax, min_x)
 
     plt.legend()
     hide_overlapping_ticklabels(ax)

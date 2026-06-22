@@ -118,9 +118,6 @@ DATA_STRUCTURE_STATS = {
     "conn_info": merge_conn_info
 }
 
-OPTIONAL_STATS_FIELDS = {"response_rcodes", "response_latency", "conn_info"}
-
-
 def merge_stats(iterable):
     out = {}
     for field, merge_func in DATA_STRUCTURE_STATS.items():
@@ -161,49 +158,66 @@ def merge_headers(iterable):
     out["merged"] = True
     return out
 
+class MergeData:
+    '''
+    Note: All files are currently opened at the same time, and the merging is done in a streaming manner. This means that the memory usage
+    will be proportional to the number of files being merged. The expected use case doesn't involve a large number of files, so this is a
+    reasonable trade-off for faster merging and simpler code. To avoid the issue of too many open files, would mean a significant increase
+    in merge time complexity.
+    '''
+    def __init__(self, thread_data):
+        self.paths = thread_data
+        self.handles = []
 
-def merge_data(thread_data):
-    paths = thread_data
-    handles = [open(path, encoding="utf-8") for path in paths]
-    try:
-        yield from _merge_streams(handles)
-    finally:
+    def __enter__(self):
+        try:
+            self.handles = [open(path, encoding="utf-8") for path in self.paths]
+        except Exception:
+            self._close_all()
+            raise
+        return self._merge_streams(self.handles)
+
+    def __exit__(self, *_):
+        self._close_all()
+
+    def _close_all(self):
+        for f in self.handles:
+            try:
+                f.close()
+            except OSError:
+                pass
+
+    def _merge_streams(self, handles):
+        while True:
+            objects = self.read_next(handles)
+            if objects is None:
+                break
+
+            types = {o.get("type") for o in objects}
+            if len(types) != 1:
+                raise ThreadMismatch()
+            t = types.pop()
+            if t == "header":
+                merged_header = merge_headers(objects)
+                merged_header["merged"] = True
+                yield merged_header
+            elif t == "stats_periodic":
+                merged = merge_stats(objects)
+                yield merged
+            elif t == "stats_sum":
+                merged = merge_stats(objects)
+                yield merged
+            else:
+                raise UnexpectedType(t)
+
+    def read_next(self, handles):
+        results = []
         for f in handles:
-            f.close()
-
-
-def read_next(handles):
-    results = []
-    for f in handles:
-        line = f.readline()
-        if not line:
-            return None
-        results.append(json.loads(line.strip()))
-    return results
-
-
-def _merge_streams(handles):
-    while True:
-        objects = read_next(handles)
-        if objects is None:
-            break
-
-        types = {o.get("type") for o in objects}
-        if len(types) != 1:
-            raise ThreadMismatch()
-        t = types.pop()
-        if t == "header":
-            merged_header = merge_headers(objects)
-            merged_header["merged"] = True
-            yield merged_header
-        elif t == "stats_periodic":
-            merged = merge_stats(objects)
-            yield merged
-        elif t == "stats_sum":
-            merged = merge_stats(objects)
-            yield merged
-        else:
-            raise UnexpectedType(t)
+            line = f.readline()
+            if not line:
+                return None
+            results.append(json.loads(line.strip()))
+        return results
 
 
 def main():
@@ -225,8 +239,9 @@ def main():
 
     try:
         with open(outpath, "w", encoding="utf-8") as out:
-            for obj in merge_data(args.json_file):
-                out.write(json.dumps(obj) + "\n")
+            with MergeData(args.json_file) as to_be_merged_data:
+                for obj in to_be_merged_data:
+                    out.write(json.dumps(obj) + "\n")
         logging.info("DONE: merged shotgun results saved as %s", outpath)
     except (FileNotFoundError, UnexpectedType, ThreadMismatch) as exc:
         logging.critical("%s", exc)
