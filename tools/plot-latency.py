@@ -138,17 +138,19 @@ def merge_latency(data, since=0, until=float("+inf")):
         requests += stats["queries"]
         end = stats["until"]
         if not latency_counts:
-            latency_counts = list(stats["response_latency"]["counts"])
+            latency_counts = list(stats["response_latency"]["bucket_counts"])
             start = stats["since"]
         else:
-            assert len(stats["response_latency"]["counts"]) == len(latency_counts)
-            for i, _ in enumerate(stats["response_latency"]["counts"]):
-                latency_counts[i] += stats["response_latency"]["counts"][i]
+            assert len(stats["response_latency"]["bucket_counts"]) == len(
+                latency_counts
+            )
+            for i, _ in enumerate(stats["response_latency"]["bucket_counts"]):
+                latency_counts[i] += stats["response_latency"]["bucket_counts"][i]
 
     if not latency_counts:
         raise RuntimeError("no samples matching this interval")
 
-    boundaries = header["latency_bucket_boundaries"]
+    boundaries = header["latency_bucket_boundaries"].copy()
     boundaries.append(header["timeout"])
     latency = (boundaries, latency_counts)
     qps = requests / (end - start) * header["time_units_per_sec"]

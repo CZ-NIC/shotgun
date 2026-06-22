@@ -625,7 +625,7 @@ static void _output_dnssim_write_stats(output_dnssim_t* self,
 
     _output_dnssim_write_rcodes(stats, f);
 
-    fprintf(f, ",\"response_latency\":{\"counts\":[");
+    fprintf(f, ",\"response_latency\":{\"bucket_counts\":[");
     fprintf(f, "%"PRIu64, stats->latency_buckets[0]);
     for (uint64_t i = 1; i < self->latency_histogram.boundary_count + 1; i++) {
         fprintf(f, ",%"PRIu64, stats->latency_buckets[i]);
@@ -687,7 +687,7 @@ int output_dnssim_open_file(output_dnssim_t* self, const char* output_file)
     mlassert_self();
     lassert(output_file, "output_file is nil");
 
-    self->output_file = fopen(output_file, "a+");
+    self->output_file = fopen(output_file, "a");
     if (self->output_file == NULL) {
         lfatal("failed to open output file: %s", output_file);
         return -1;

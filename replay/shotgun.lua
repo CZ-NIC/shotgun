@@ -121,9 +121,9 @@ local function send_thread_main(thr)
 	end
 	file:write(
 		"{ ",
-		'"runid":', tonumber(run_id), ',',
+		'"runid": "', tonumber(run_id), '",',
 		'"type": "header",',
-		'"schema_version":', '20221207', ',',
+		'"schema_version":', '"20221207"', ',',
 		'"generator": "shotgun",',
 		'"generator_version": "', tonumber(generator_version), '",',
 		'"generator_params": ', generator_params_json, ',',

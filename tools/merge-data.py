@@ -75,8 +75,8 @@ def merge_response_rcodes(iterable):
 
 
 def merge_response_latency(iterable):
-    merged_data = merge_latency_data([entry["counts"] for entry in iterable])
-    result = {"counts": merged_data}
+    merged_data = merge_latency_data([entry["bucket_counts"] for entry in iterable])
+    result = {"bucket_counts": merged_data}
     return result
 
 
@@ -125,8 +125,11 @@ DATA_STRUCTURE_STATS = {
     "since": min,
     "until": max,
     "queries": sum,
+    "ongoing": sum,
     "responses": sum,
     "timeouts": sum,
+    "interrupted": sum,
+    "unexpected": sum,
     "discarded": sum,
     "response_rcodes": merge_response_rcodes,
     "response_latency": merge_response_latency,
@@ -135,11 +138,16 @@ DATA_STRUCTURE_STATS = {
 }
 
 
+OPTIONAL_STATS = {"ongoing", "interrupted", "unexpected", "conn_active"}
+
+
 def merge_stats(iterable):
     out = {}
     for field, merge_func in DATA_STRUCTURE_STATS.items():
         field_data = [data[field] for data in iterable if field in data]
         if not field_data:
+            if field in OPTIONAL_STATS:
+                continue
             raise MissingData(field)
         try:
             out[field] = merge_func(field_data)
@@ -154,6 +162,7 @@ DATA_STRUCTURE_HEADER = {
     "schema_version": same,
     "generator": same,
     "generator_version": same,
+    "generator_params": same,
     "time_units_per_sec": same,
     "stats_interval": same,
     "timeout": same,
