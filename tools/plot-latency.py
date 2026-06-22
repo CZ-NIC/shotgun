@@ -203,12 +203,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Plot query response time histogram from shotgun results"
     )
-    parser.add_argument(
-        "-t",
-        "--title",
-        default="Response Latency",
-        help="Graph title"
-    )
+    parser.add_argument("-t", "--title", default="Response Latency", help="Graph title")
     parser.add_argument(
         "-o",
         "--output",
@@ -266,6 +261,7 @@ def parse_args():
         )
     return args
 
+
 def aggregate_group(args, name, group_data, ax, min_x):
     pos_inf = float("inf")
     neg_inf = float("-inf")
@@ -286,15 +282,11 @@ def aggregate_group(args, name, group_data, ax, min_x):
         ]
         group_ymin = [
             min(old, new)
-            for old, new in itertools.zip_longest(
-                group_ymin, run_y, fillvalue=pos_inf
-            )
+            for old, new in itertools.zip_longest(group_ymin, run_y, fillvalue=pos_inf)
         ]
         group_ymax = [
             max(old, new)
-            for old, new in itertools.zip_longest(
-                group_ymax, run_y, fillvalue=neg_inf
-            )
+            for old, new in itertools.zip_longest(group_ymax, run_y, fillvalue=neg_inf)
         ]
     if len(group_data) > 1:
         group_yavg = [ysum / len(group_data) for ysum in group_ysum]
@@ -315,6 +307,7 @@ def aggregate_group(args, name, group_data, ax, min_x):
         min_x = last_pct if 0 < last_pct < min_x else min_x
     ax.set_xlim(left=min_x, right=MAX_X)
     ax.plot(group_x, group_yavg, lw=2, label=label, marker=marker, linestyle=linestyle)
+
 
 def main():
     logging.basicConfig(

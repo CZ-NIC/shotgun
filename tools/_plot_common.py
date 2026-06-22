@@ -37,26 +37,26 @@ RCODE_MARKERS = {
 }
 
 RCODE_COLORS = {
-    "NOERROR":   "tab:green",
-    "FORMERR":   "tab:brown",
-    "SERVFAIL":  "tab:red",
-    "NXDOMAIN":  "tab:blue",
-    "NOTIMP":    "tab:pink",
-    "REFUSED":   "tab:orange",
-    "YXDOMAIN":  "tab:purple",
-    "YXRRSET":   "tab:olive",
-    "NXRRSET":   "tab:cyan",
-    "NOTAUTH":   "#f0944d",
-    "NOTZONE":   "#840000",
-    "BADVERS":   "#ac7e04",
-    "BADKEY":    "#5d1451",
-    "BADTIME":   "#fdb0c0",
-    "BADMODE":   "#fd3c06",
-    "BADNAME":   "#536267",
-    "BADALG":    "#a03623",
-    "BADTRUNC":  "#b7e1a1",
+    "NOERROR": "tab:green",
+    "FORMERR": "tab:brown",
+    "SERVFAIL": "tab:red",
+    "NXDOMAIN": "tab:blue",
+    "NOTIMP": "tab:pink",
+    "REFUSED": "tab:orange",
+    "YXDOMAIN": "tab:purple",
+    "YXRRSET": "tab:olive",
+    "NXRRSET": "tab:cyan",
+    "NOTAUTH": "#f0944d",
+    "NOTZONE": "#840000",
+    "BADVERS": "#ac7e04",
+    "BADKEY": "#5d1451",
+    "BADTIME": "#fdb0c0",
+    "BADMODE": "#fd3c06",
+    "BADNAME": "#536267",
+    "BADALG": "#a03623",
+    "BADTRUNC": "#b7e1a1",
     "BADCOOKIE": "#0a888a",
-    "OTHER":     "#000000",
+    "OTHER": "#000000",
 }
 
 COLOR_ACTIVE = cycle(["royalblue", "cornflowerblue", "darkblue", "lightsteelblue"])
@@ -71,6 +71,7 @@ COLOR_FAILED_HS = cycle(["gray", "silver", "black", "gainsboro"])
 
 sinames = ["", " k", " M", " G", " T"]
 
+
 def siname(n):
     try:
         n = float(n)
@@ -82,6 +83,7 @@ def siname(n):
         min(len(sinames) - 1, int(math.floor(0 if n == 0 else math.log10(abs(n)) / 3))),
     )
     return f"{(n / 10 ** (3 * siidx)):.0f}{sinames[siidx]}"
+
 
 def load_json_lines_file(json_file):
     header = None
@@ -98,7 +100,9 @@ def load_json_lines_file(json_file):
             try:
                 obj = json.loads(line)
             except json.JSONDecodeError as exc:
-                raise RuntimeError(f"JSON parse error in {path} line {lineno}: {exc}") from exc
+                raise RuntimeError(
+                    f"JSON parse error in {path} line {lineno}: {exc}"
+                ) from exc
 
             t = obj.get("type")
             if t == "header":

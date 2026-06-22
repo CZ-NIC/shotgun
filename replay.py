@@ -36,7 +36,7 @@ DEFAULT_TRAFFIC_FIELDS = [
     "max_clients",
     "batch_size",
     "latency_bucket_boundaries",
-    "latency_linear"
+    "latency_linear",
 ]
 
 # Protocol aliases are translated into specific dnssim functions.
@@ -131,6 +131,7 @@ def bind_net_to_ips(bind_net: Optional[List[str]]) -> List[str]:
             ips.add(str(net.network_address))
     return list(ips)
 
+
 def bucket_boundaries():
     pattern = [1, 2, 5]
     scale = 1
@@ -139,9 +140,14 @@ def bucket_boundaries():
             yield p * scale
         scale *= 10
 
-def make_latency_buckets(timeout: int, step: Optional[int] = None, buckets: Optional[list] = None) -> list[int]:
+
+def make_latency_buckets(
+    timeout: int, step: Optional[int] = None, buckets: Optional[list] = None
+) -> list[int]:
     if step is not None and buckets is not None:
-        raise RuntimeError("latency_linear and latency_bucket_boundaries cannot be set simultaneously")
+        raise RuntimeError(
+            "latency_linear and latency_bucket_boundaries cannot be set simultaneously"
+        )
 
     if step is not None:
         result = list(range(step, timeout, step))
@@ -153,6 +159,7 @@ def make_latency_buckets(timeout: int, step: Optional[int] = None, buckets: Opti
     if not result or result[-1] < timeout:
         result.append(timeout)
     return result
+
 
 def build_thrconf(
     kind: str, count: int, config: Dict[str, Any], args: Any
@@ -173,7 +180,9 @@ def build_thrconf(
     thrconf.setdefault("doq_port", args.doq_port)
     thrconf["target_ip"] = thrconf["server"]
     thrconf["target_port"] = thrconf[PROTOCOL_FUNC_PORTS[thrconf["protocol_func"]]]
-    thrconf["weight"] = math.ceil(1000 * thrconf["weight"] / count)  # convert to integer
+    thrconf["weight"] = math.ceil(
+        1000 * thrconf["weight"] / count
+    )  # convert to integer
     if "timeout_s" not in thrconf:
         thrconf["timeout_s"] = 2
     timeout = thrconf["timeout_s"] * 1000
@@ -183,6 +192,7 @@ def build_thrconf(
         step=thrconf.get("latency_linear"),
     )
     return thrconf
+
 
 def create_luaconfig(config: Dict[str, Any], threads: Dict[str, int], args: Any) -> str:
     data = {
@@ -321,8 +331,10 @@ def run_or_exit(args: List[str], env: Optional[collections.abc.Mapping] = None) 
             logging.error("%s (signum %d)", signal_desc, signum)
         sys.exit(ex.returncode)
 
+
 def prepare_generator_params(params: List) -> str:
     return json.dumps(params)
+
 
 def run_shotgun(luaconfig: str, env: collections.abc.Mapping) -> None:
     run_or_exit([SHOTGUN_PATH, luaconfig, prepare_generator_params(sys.argv)], env)

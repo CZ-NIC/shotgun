@@ -30,7 +30,7 @@ class UnexpectedType(RuntimeError):
 
 class ThreadMismatch(RuntimeError):
     def __init__(self):
-        super().__init__('Thread files have different structure.')
+        super().__init__("Thread files have different structure.")
 
 
 class MissingData(RuntimeError):
@@ -65,6 +65,7 @@ def merge_latency_data(iterable):
             latency[i] += latency_data[i]
     return latency
 
+
 def merge_response_rcodes(iterable):
     merged = {}
     for rcodes in iterable:
@@ -72,10 +73,12 @@ def merge_response_rcodes(iterable):
             merged[rcode] = merged.get(rcode, 0) + count
     return merged
 
+
 def merge_response_latency(iterable):
     merged_data = merge_latency_data([entry["counts"] for entry in iterable])
     result = {"counts": merged_data}
     return result
+
 
 def merge_conn_info(iterable):
     assert len(iterable) >= 1
@@ -87,21 +90,34 @@ def merge_conn_info(iterable):
         if "handshakes" in conn_info:
             merged["handshakes"] = merged.get("handshakes", 0) + conn_info["handshakes"]
         if "handshakes_failed" in conn_info:
-            merged["handshakes_failed"] = merged.get("handshakes_failed", 0) + conn_info["handshakes_failed"]
+            merged["handshakes_failed"] = (
+                merged.get("handshakes_failed", 0) + conn_info["handshakes_failed"]
+            )
 
         if "resumption" in conn_info:
             if "resumption" not in merged:
                 merged["resumption"] = {}
-            merged["resumption"]["established"] = merged["resumption"].get("established", 0) + conn_info["resumption"]["established"]
+            merged["resumption"]["established"] = (
+                merged["resumption"].get("established", 0)
+                + conn_info["resumption"]["established"]
+            )
 
         if "zero_rtt" in conn_info:
             if "zero_rtt" not in merged:
                 merged["zero_rtt"] = {}
-            merged["zero_rtt"]["loaded"] = merged["zero_rtt"].get("loaded", 0) + conn_info["zero_rtt"]["loaded"]
-            merged["zero_rtt"]["sent"] = merged["zero_rtt"].get("sent", 0) + conn_info["zero_rtt"]["sent"]
-            merged["zero_rtt"]["answered"] = merged["zero_rtt"].get("answered", 0) + conn_info["zero_rtt"]["answered"]
+            merged["zero_rtt"]["loaded"] = (
+                merged["zero_rtt"].get("loaded", 0) + conn_info["zero_rtt"]["loaded"]
+            )
+            merged["zero_rtt"]["sent"] = (
+                merged["zero_rtt"].get("sent", 0) + conn_info["zero_rtt"]["sent"]
+            )
+            merged["zero_rtt"]["answered"] = (
+                merged["zero_rtt"].get("answered", 0)
+                + conn_info["zero_rtt"]["answered"]
+            )
 
     return merged
+
 
 DATA_STRUCTURE_STATS = {
     "runid": same,
@@ -115,8 +131,9 @@ DATA_STRUCTURE_STATS = {
     "response_rcodes": merge_response_rcodes,
     "response_latency": merge_response_latency,
     "conn_active": sum,
-    "conn_info": merge_conn_info
+    "conn_info": merge_conn_info,
 }
+
 
 def merge_stats(iterable):
     out = {}
@@ -140,7 +157,7 @@ DATA_STRUCTURE_HEADER = {
     "time_units_per_sec": same,
     "stats_interval": same,
     "timeout": same,
-    "latency_bucket_boundaries": same
+    "latency_bucket_boundaries": same,
 }
 
 
@@ -158,13 +175,15 @@ def merge_headers(iterable):
     out["merged"] = True
     return out
 
+
 class MergeData:
-    '''
+    """
     Note: All files are currently opened at the same time, and the merging is done in a streaming manner. This means that the memory usage
     will be proportional to the number of files being merged. The expected use case doesn't involve a large number of files, so this is a
     reasonable trade-off for faster merging and simpler code. To avoid the issue of too many open files, would mean a significant increase
     in merge time complexity.
-    '''
+    """
+
     def __init__(self, thread_data):
         self.paths = thread_data
         self.handles = []

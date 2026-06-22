@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 import mplhlpr.styles
 import _plot_common as pc
 
+
 def stat_field_rate(field):
     def inner(stats):
         if stats["queries"] == 0:
@@ -38,11 +39,13 @@ response_rate = stat_field_rate("responses")
 def rcode_rate(rcodes):
     if isinstance(rcodes, str):
         rcodes = [rcodes]
+
     def inner(stats):
         if stats["queries"] == 0:
             return float("nan")
         total = sum(stats.get("response_rcodes", {}).get(r, 0) for r in rcodes)
         return 100.0 * total / stats["queries"]
+
     return inner
 
 
@@ -124,21 +127,12 @@ def main():
         description="Plot response rate from shotgun experiment"
     )
 
+    parser.add_argument("json_file", nargs="+", help="Shotgun results JSON file(s)")
     parser.add_argument(
-        "json_file",
-        nargs="+",
-        help="Shotgun results JSON file(s)")
-    parser.add_argument(
-        "-t",
-        "--title",
-        default="Response Rate over Time",
-        help="Graph title"
+        "-t", "--title", default="Response Rate over Time", help="Graph title"
     )
     parser.add_argument(
-        "-o",
-        "--output",
-        default="response_rate.svg",
-        help="Output graph filename"
+        "-o", "--output", default="response_rate.svg", help="Output graph filename"
     )
     parser.add_argument(
         "-T",
@@ -170,11 +164,7 @@ def main():
         "(a single spike will cause the RCODE to show)",
     )
     parser.add_argument(
-        "-s",
-        "--sum-rcodes",
-        nargs="*",
-        type=str,
-        help="Plot sum of RCODE(s)"
+        "-s", "--sum-rcodes", nargs="*", type=str, help="Plot sum of RCODE(s)"
     )
     args = parser.parse_args()
 
@@ -201,14 +191,12 @@ def main():
 def process_file(json_path, json_color, args, ax):
     header, stats_sum, stats_periodic = pc.load_json_lines_file(json_path)
 
-    if stats_sum['discarded'] != 0:
-        proportion_all_perc = stats_sum['discarded'] / stats_sum['queries'] * 100
+    if stats_sum["discarded"] != 0:
+        proportion_all_perc = stats_sum["discarded"] / stats_sum["queries"] * 100
         proportion_one_sec_perc = (
-            stats_sum['discarded']
+            stats_sum["discarded"]
             / min(
-                sample["queries"]
-                for sample in stats_periodic
-                if sample["queries"] > 0
+                sample["queries"] for sample in stats_periodic if sample["queries"] > 0
             )
             * 100
         )
@@ -216,7 +204,7 @@ def process_file(json_path, json_color, args, ax):
             "%d discarded packets may skew results! Discarded %.1f %% of all "
             "requests; theoretical worst case %.1f %% loss if all discarded packets "
             "happened to be in one %d ms sample",
-            stats_sum['discarded'],
+            stats_sum["discarded"],
             proportion_all_perc,
             proportion_one_sec_perc,
             header["stats_interval"],
@@ -229,12 +217,14 @@ def process_file(json_path, json_color, args, ax):
     min_timespan = header.get("stats_interval", 1000) / 2
 
     if not args.skip_total:
-        plot_response_rate(ax, stats_periodic, label, min_timespan=min_timespan, color=json_color)
+        plot_response_rate(
+            ax, stats_periodic, label, min_timespan=min_timespan, color=json_color
+        )
 
     draw_rcodes = set(args.rcode or [])
     sum_rcodes = set(args.sum_rcodes or [])
     if args.rcodes_above_pct is not None:
-        threshold = stats_sum['responses'] * args.rcodes_above_pct / 100
+        threshold = stats_sum["responses"] * args.rcodes_above_pct / 100
         rcodes_above_limit = set(
             rcode
             for rcode, cnt in stats_sum.get("response_rcodes", {}).items()

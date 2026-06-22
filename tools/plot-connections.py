@@ -103,7 +103,9 @@ def main():
             sys.exit(1)
 
         if stats_sum["discarded"] != 0:
-            logging.warning("%d discarded packets may skew results!", stats_sum["discarded"])
+            logging.warning(
+                "%d discarded packets may skew results!", stats_sum["discarded"]
+            )
 
         name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
 
