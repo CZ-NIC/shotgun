@@ -191,7 +191,7 @@ def main():
 def process_file(json_path, json_color, args, ax):
     header, stats_sum, stats_periodic = pc.load_json_lines_file(json_path)
 
-    if stats_sum["discarded"] != 0:
+    if "discarded" in stats_sum and stats_sum["discarded"] != 0:
         proportion_all_perc = stats_sum["discarded"] / stats_sum["queries"] * 100
         proportion_one_sec_perc = (
             stats_sum["discarded"]
