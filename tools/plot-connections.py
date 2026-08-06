@@ -91,16 +91,7 @@ def main():
     ax = init_plot(args.title)
 
     for json_path in args.json_file:
-        header, stats_sum, stats_periodic = pc.load_json_lines_file(json_path)
-
-        try:
-            assert header["schema_version"] == pc.SUPPORTED_SCHEMA_VERSION
-        except (KeyError, AssertionError):
-            logging.critical(
-                "Older formats of JSON data aren't supported. "
-                "Use older tooling or re-run the tests with newer shotgun."
-            )
-            sys.exit(1)
+        _, stats_sum, stats_periodic = pc.load_json_lines_file(json_path)
 
         if stats_sum["discarded"] != 0:
             logging.warning(
