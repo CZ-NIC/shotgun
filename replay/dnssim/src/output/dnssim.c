@@ -564,7 +564,7 @@ static void _output_dnssim_write_transport(output_dnssim_stats_t* stats, FILE* f
         goto bracket_end;
     case OUTPUT_DNSSIM_TRANSPORT_TCP:
         fprintf(f, "\"tcp\",");
-        goto handshakes;
+        goto resumptions;
     case OUTPUT_DNSSIM_TRANSPORT_TLS:
         fprintf(f, "\"tls_conn\",");
         goto resumptions;
@@ -589,13 +589,10 @@ fprintf(f,
 resumptions:
 fprintf(f,
         "\"resumption\":{"
-        "\"established\":%"PRIu64"},",
-        stats->conn_resumed
-    );
-handshakes:
-    fprintf(f,
+        "\"established\":%"PRIu64"},"
         "\"handshakes\":%"PRIu64","
         "\"handshakes_failed\":%"PRIu64,
+        stats->conn_resumed,
         stats->conn_handshakes,
         stats->conn_handshakes_failed
     );
