@@ -75,7 +75,18 @@ local function send_thread_main(thr)
 	local output_file = thr:pop()
 	local batch_size = thr:pop()
 
+	local generator_version = thr:pop()
+	local stats_interval = thr:pop()
+
 	local output = require("shotgun.output.dnssim").new(max_clients)
+
+	local nbind = thr:pop()
+	for _ = 1, nbind do
+		output:bind(thr:pop())
+	end
+
+	local generator_params_json = thr:pop()
+
 	-- luacheck: ignore log
 	local log = output:log(name)
 
@@ -101,18 +112,8 @@ local function send_thread_main(thr)
 		log:fatal("unknown protocol_func: " .. protocol_func)
 	end
 
-	local generator_version = thr:pop()
-	local stats_interval = thr:pop()
-
 	output:stats_collect(stats_interval)
 	output:free_after_use(true)
-
-	local nbind = thr:pop()
-	for _ = 1, nbind do
-		output:bind(thr:pop())
-	end
-
-	local generator_params_json = thr:pop()
 
 	local file = io.open(output_file, "w")
 	if file == nil then
