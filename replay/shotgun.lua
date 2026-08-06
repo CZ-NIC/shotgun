@@ -228,7 +228,7 @@ local threads = {}
 local channels = {}
 
 local socket = require("socket")
-local runid = socket.gettime()
+local runid = socket.gettime() * 1000
 
 ---- initialize send threads
 for i, thrconf in ipairs(config.threads) do
