@@ -3,7 +3,7 @@ import json
 import math
 from itertools import cycle
 
-SUPPORTED_SCHEMA_VERSION = 20221207
+SUPPORTED_SCHEMA_VERSION = "20221207"
 
 RCODES = {
     "NOERROR",
@@ -118,9 +118,8 @@ def load_json_lines_file(json_file):
             "Missing header line. Use newer shotgun or re-run the tests."
         )
     if header.get("schema_version") != SUPPORTED_SCHEMA_VERSION:
-        print(
-            f"Warning: Unsupported schema_version {header.get('schema_version')}. "
-            "It is advisable to use older tooling or re-run the tests with newer shotgun.",
-            file=sys.stderr,
+        raise NotImplementedError(
+            f"Unsupported schema_version {header.get('schema_version')}. "
+            "Use older tooling or re-run the tests with newer shotgun."
         )
     return header, stats_sum, stats_periodic
