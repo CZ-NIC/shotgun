@@ -132,21 +132,13 @@ def bind_net_to_ips(bind_net: Optional[List[str]]) -> List[str]:
     return list(ips)
 
 
-def bucket_boundaries():
-    pattern = [1, 2, 5]
-    scale = 1
-    while True:
-        for p in pattern:
-            yield p * scale
-        scale *= 10
-
-
 def make_latency_buckets(
     timeout: int, step: Optional[int] = None, buckets: Optional[list] = None
 ) -> list[int]:
-    if step is not None and buckets is not None:
+    set_opts = sum(x is not None for x in (step, buckets))
+    if set_opts > 1:
         raise RuntimeError(
-            "latency_linear and latency_bucket_boundaries cannot be set simultaneously"
+            "Only one of latency_linear, latency_bucket_boundaries, or latency_log_count can be set."
         )
 
     if step is not None:
@@ -154,7 +146,7 @@ def make_latency_buckets(
     elif buckets is not None:
         result = list(buckets)
     else:
-        result = list(takewhile(lambda x: x < timeout, bucket_boundaries()))
+        result = list(range(10, timeout, 10))
 
     if not result or result[-1] < timeout:
         result.append(timeout)
