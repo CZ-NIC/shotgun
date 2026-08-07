@@ -7,15 +7,16 @@ import os
 import sys
 import traceback
 
-JSON_VERSION = 20200527
+SUPPORTED_SCHEMA_VERSION = "20221207"
 DEFAULT_FILENAME = "shotgun-all.json"
 
 
 class VersionError(RuntimeError):
-    def __init__(self):
+    def __init__(self, field):
         super().__init__(
-            "Older formats of JSON data aren't supported. "
-            "Use older tooling or re-run the tests with newer shotgun."
+            f"The schema_version {field} is not supported. "
+            "Use older tooling or re-run the tests with newer shotgun. "
+            f"(Currently supported version: {SUPPORTED_SCHEMA_VERSION})"
         )
 
 
@@ -52,6 +53,15 @@ def same(iterable):
     assert len(iterable) >= 1
     if not all(val == iterable[0] for val in iterable):
         raise MismatchData
+    return iterable[0]
+
+
+def version(iterable):
+    assert len(iterable) >= 1
+    if not all(val == iterable[0] for val in iterable):
+        raise MismatchData
+    if iterable[0] != SUPPORTED_SCHEMA_VERSION:
+        raise VersionError(iterable[0])
     return iterable[0]
 
 
@@ -155,7 +165,7 @@ def merge_stats(iterable):
 DATA_STRUCTURE_HEADER = {
     "runid": first,
     "type": same,
-    "schema_version": same,
+    "schema_version": version,
     "generator": same,
     "generator_version": same,
     "generator_params": same,
@@ -175,6 +185,9 @@ def merge_headers(iterable):
             raise MissingData(field) from exc
         try:
             out[field] = merge_func(field_data)
+        except VersionError as exc:
+            logging.critical("%s", exc)
+            sys.exit(1)
         except Exception as exc:
             raise MergeFailed(field) from exc
     out["merged"] = True
