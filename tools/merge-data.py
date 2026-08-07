@@ -71,8 +71,7 @@ def merge_latency_data(iterable):
     for latency_data in iterable[1:]:
         if len(latency_data) != len(latency):
             raise MismatchData
-        for i, _ in enumerate(latency_data):
-            latency[i] += latency_data[i]
+        latency = [sum(pair) for pair in zip(latency, latency_data)]
     return latency
 
 
