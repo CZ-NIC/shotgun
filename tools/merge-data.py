@@ -235,13 +235,13 @@ class MergeData:
                 raise UnexpectedType(t)
 
     def read_next(self, handles):
-        results = []
-        for f in handles:
-            line = f.readline()
-            if not line:
-                return None
-            results.append(json.loads(line.strip()))
-        return results
+        lines = [f.readline() for f in handles]
+        ended = [not line for line in lines]
+        if any(ended):
+            if not all(ended):
+                raise ThreadMismatch()
+            return None
+        return [json.loads(line.strip()) for line in lines]
 
 
 def main():
