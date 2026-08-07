@@ -81,40 +81,36 @@ def merge_response_latency(iterable):
 
 
 def merge_conn_info(iterable):
+    def nested_merge_sum(k):
+        if k[0] not in conn_info:
+            return
+        if len(k) == 1:
+            merged[k[0]] = merged.get(k[0], 0) + conn_info[k[0]]
+        elif len(k) == 2:
+            if k[0] not in merged:
+                merged[k[0]] = {}
+            merged[k[0]][k[1]] = merged[k[0]].get(k[1], 0) + conn_info[k[0]][k[1]]
+        else:
+            raise ValueError(f"unsupported key depth: {len(k)} ({k})")
+
     assert len(iterable) >= 1
     merged = {}
+
+    conn_keys = [
+        ["handshakes"],
+        ["handshakes_failed"],
+        ["resumption", "established"],
+        ["zero_rtt", "loaded"],
+        ["zero_rtt", "sent"],
+        ["zero_rtt", "answered"],
+    ]
+
     for conn_info in iterable:
         if "type" not in merged:
             merged["type"] = conn_info.get("type")
 
-        if "handshakes" in conn_info:
-            merged["handshakes"] = merged.get("handshakes", 0) + conn_info["handshakes"]
-        if "handshakes_failed" in conn_info:
-            merged["handshakes_failed"] = (
-                merged.get("handshakes_failed", 0) + conn_info["handshakes_failed"]
-            )
-
-        if "resumption" in conn_info:
-            if "resumption" not in merged:
-                merged["resumption"] = {}
-            merged["resumption"]["established"] = (
-                merged["resumption"].get("established", 0)
-                + conn_info["resumption"]["established"]
-            )
-
-        if "zero_rtt" in conn_info:
-            if "zero_rtt" not in merged:
-                merged["zero_rtt"] = {}
-            merged["zero_rtt"]["loaded"] = (
-                merged["zero_rtt"].get("loaded", 0) + conn_info["zero_rtt"]["loaded"]
-            )
-            merged["zero_rtt"]["sent"] = (
-                merged["zero_rtt"].get("sent", 0) + conn_info["zero_rtt"]["sent"]
-            )
-            merged["zero_rtt"]["answered"] = (
-                merged["zero_rtt"].get("answered", 0)
-                + conn_info["zero_rtt"]["answered"]
-            )
+        for keys in conn_keys:
+            nested_merge_sum(keys)
 
     return merged
 
