@@ -15,6 +15,7 @@ instruction words:
 - "idmismatch"    - send back a random message ID that doesn't match the query
 - "qcasemismatch" - flip the case of a random subset of QNAME letters in the
                      echoed question section
+- "qr0"           - clear the QR bit in the response
 
 Example: "rcode3-tc1-delay500.test." sets RCODE=3, TC=1, and delays the
 response by 500 ms.
@@ -80,6 +81,7 @@ class QnameInstructionHandler(DomainHandler):
         timeout = False
         idmismatch = False
         qcasemismatch = False
+        qr0 = False
         delay_ms = 0
 
         for token in instructions.split("-"):
@@ -91,6 +93,8 @@ class QnameInstructionHandler(DomainHandler):
                 idmismatch = True
             elif token == "qcasemismatch":
                 qcasemismatch = True
+            elif token == "qr0":
+                qr0 = True
             elif match := self._RCODE_RE.match(token):
                 rcode = int(match.group(1))
             elif match := self._DELAY_RE.match(token):
@@ -116,6 +120,8 @@ class QnameInstructionHandler(DomainHandler):
             original_name = qctx.response.question[0].name
             flipped_text = _flip_case_subset(original_name.to_text())
             qctx.response.question[0].name = dns.name.from_text(flipped_text)
+        if qr0:
+            qctx.response.flags &= ~dns.flags.QR
 
         yield DnsResponseSend(qctx.response, delay=delay_ms / 1000.0)
 
