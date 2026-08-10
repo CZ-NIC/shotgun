@@ -19,6 +19,7 @@ response by 500 ms.
 
 from collections.abc import Iterator
 import contextlib
+import os
 import re
 import socket
 import subprocess
@@ -37,7 +38,14 @@ from asyncserver import (
     DomainHandler,
     QueryContext,
     ResponseDrop,
+    ResponseHandler,
 )
+
+
+def _exit_on_unrecognized_query(qctx: QueryContext) -> None:
+    """Print query and kill process; an unrecognized query means a fixture bug."""
+    print(f"Unrecognized query, exiting:\n{qctx.query}", file=sys.stderr)
+    os._exit(1)
 
 
 class QnameInstructionHandler(DomainHandler):
@@ -70,7 +78,7 @@ class QnameInstructionHandler(DomainHandler):
             elif match := self._DELAY_RE.match(token):
                 delay_ms = int(match.group(1))
             else:
-                raise ValueError(f"Unrecognized QNAME instruction token: {token}")
+                _exit_on_unrecognized_query(qctx)
 
         if timeout:
             yield ResponseDrop()
@@ -84,9 +92,21 @@ class QnameInstructionHandler(DomainHandler):
         yield DnsResponseSend(qctx.response, delay=delay_ms / 1000.0)
 
 
+class UnrecognizedQueryHandler(ResponseHandler):
+    """
+    Catch-all fallback for any query not matched by QnameInstructionHandler
+    (i.e. not under the "test." domain).
+    """
+
+    async def get_responses(self, qctx: QueryContext):
+        _exit_on_unrecognized_query(qctx)
+        yield ResponseDrop()  # unreachable; keeps this an async generator
+
+
 def make_server() -> AsyncDnsServer:
     server = AsyncDnsServer()
     server.install_response_handler(QnameInstructionHandler())
+    server.install_response_handler(UnrecognizedQueryHandler())
     return server
 
 
