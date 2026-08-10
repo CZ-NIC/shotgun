@@ -15,6 +15,7 @@ import sys
 import json
 from typing import Any, Dict, List, Optional, Set
 from itertools import takewhile
+import numpy as np
 
 from jinja2 import Environment, FileSystemLoader
 import toml
@@ -133,20 +134,25 @@ def bind_net_to_ips(bind_net: Optional[List[str]]) -> List[str]:
 
 
 def make_latency_buckets(
-    timeout: int, step: Optional[int] = None, buckets: Optional[list] = None
+    timeout: int,
+    step: Optional[int] = None,
+    buckets: Optional[list] = None,
+    geom_count: Optional[int] = None,
 ) -> list[int]:
-    set_opts = sum(x is not None for x in (step, buckets))
+    set_opts = sum(x is not None for x in (step, buckets, geom_count))
     if set_opts > 1:
         raise RuntimeError(
-            "Only one of latency_linear, latency_bucket_boundaries, or latency_log_count can be set."
+            "Only one of latency_linear, latency_bucket_boundaries, or latency_geom_count can be set."
         )
 
     if step is not None:
         result = list(range(step, timeout, step))
     elif buckets is not None:
         result = list(buckets)
+    elif geom_count is not None:
+        result = np.geomspace(start=1, stop=timeout, num=geom_count).tolist()
     else:
-        result = list(range(10, timeout, 10))
+        result = np.geomspace(start=1, stop=timeout, num=200).tolist()
 
     if not result or result[-1] < timeout:
         result.append(timeout)
@@ -182,6 +188,7 @@ def build_thrconf(
         timeout,
         buckets=thrconf.get("latency_bucket_boundaries"),
         step=thrconf.get("latency_linear"),
+        geom_count=thrconf.get("latency_geom_count"),
     )
     return thrconf
 
