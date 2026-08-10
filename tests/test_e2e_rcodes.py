@@ -5,14 +5,18 @@ total); checks per-RCODE counts in replay.py's JSON. TC=1 doesn't change the
 expected RCODE bucket: UDP transport has no TCP fallback, so a truncated
 response is still counted by its own RCODE, not retried.
 
-One "idmismatch" query is also inserted after each RCODE's block: ans.py
-answers with a random, non-matching message ID, which dnssim silently
-drops (source: output/dnssim/udp.c and connection.c both discard on ID
-mismatch without recording an answer), so the query just times out.
+One ignored-response query is also inserted after each RCODE's block, cycling
+IGNORED_RESPONSE_MODIFIERS in random order (all get exercised). Each makes
+dnssim reject the response without recording an answer -> query times out.
+
+"cutshort" excluded: over TCP it makes dnssim close the whole connection
+(connection.c:671), killing other pending queries too -- caused flaky counts.
 """
 import glob
+import itertools
 import json
 import pathlib
+import random
 import subprocess
 import sys
 
@@ -32,6 +36,16 @@ STANDARD_RCODES = range(0, 11)
 OTHER_RCODES = [12]
 ALL_RCODES = list(STANDARD_RCODES) + OTHER_RCODES
 
+# ans.py instructions -> ignored response -> timeout (see docstring re: cutshort)
+IGNORED_RESPONSE_MODIFIERS = [
+    "idmismatch",
+    "opcodemismatch",
+    "qtypemismatch",
+    "qcasemismatch",
+    "qdcountmismatch",
+    "qr0",
+]
+
 
 def _rcode_bucket_name(rcode: int) -> str:
     return dns.rcode.to_text(rcode) if rcode in STANDARD_RCODES else "OTHER"
@@ -39,17 +53,25 @@ def _rcode_bucket_name(rcode: int) -> str:
 
 @pytest.mark.parametrize("protocol", ["udp", "tcp"])
 def test_replay_rcodes(protocol, tmp_path):
+    modifiers = IGNORED_RESPONSE_MODIFIERS.copy()
+    random.shuffle(modifiers)
+    modifier_cycle = itertools.cycle(modifiers)
+
     qnames = []
+    used_modifiers = set()
     for rcode in ALL_RCODES:
         for suffix in ("", "-tc1"):
             qnames += [f"rcode{rcode}{suffix}.test."] * (rcode + 1)
-        qnames.append(f"rcode{rcode}-idmismatch.test.")
+        modifier = next(modifier_cycle)
+        used_modifiers.add(modifier)
+        qnames.append(f"rcode{rcode}-{modifier}.test.")
+    assert used_modifiers == set(IGNORED_RESPONSE_MODIFIERS)
 
     expected_counts: dict[str, int] = {}
     for rcode in ALL_RCODES:
         bucket = _rcode_bucket_name(rcode)
         expected_counts[bucket] = expected_counts.get(bucket, 0) + 2 * (rcode + 1)
-    expected_timeouts = len(ALL_RCODES)  # one idmismatch query per RCODE
+    expected_timeouts = len(ALL_RCODES)  # one ignored-response query per RCODE
     total_queries = sum(expected_counts.values()) + expected_timeouts
 
     tcpdns_path = tmp_path / "queries.tcpdns"
