@@ -35,14 +35,17 @@ def _rcode_bucket_name(rcode: int) -> str:
 def test_replay_rcodes(protocol, tmp_path):
     qnames = []
     expected_counts = Counter()
+    expected_timeouts = 0
     for rcode in ALL_RCODES:
         bucket = _rcode_bucket_name(rcode)
         count = rcode + 1
         for suffix in ("", "-tc1"):
             qnames += [f"rcode{rcode}{suffix}.test."] * count
             expected_counts[bucket] += count
+        qnames.append(f"rcode{rcode}-idmismatch.test.")
+        expected_timeouts += 1  # one idmismatch query per RCODE
 
-    total_queries = sum(expected_counts.values())
+    total_queries = sum(expected_counts.values()) + expected_timeouts
 
     tcpdns_path = tmp_path / "queries.tcpdns"
     tcpdns_path.write_bytes(build_tcpdns_stream(qnames))
@@ -104,7 +107,7 @@ def test_replay_rcodes(protocol, tmp_path):
     stats_sum = stats_sum[0]
 
     assert stats_sum["queries"] == total_queries
-    assert stats_sum["responses"] == total_queries
-    assert stats_sum["timeouts"] == 0
+    assert stats_sum["responses"] == total_queries - expected_timeouts
+    assert stats_sum["timeouts"] == expected_timeouts
     assert stats_sum["discarded"] == 0
     assert stats_sum["response_rcodes"] == expected_counts
