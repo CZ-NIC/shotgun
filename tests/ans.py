@@ -16,6 +16,7 @@ instruction words:
 - "qcasemismatch" - flip the case of a random subset of QNAME letters in the
                      echoed question section
 - "qr0"           - clear the QR bit in the response
+- "opcodemismatch" - send back a random opcode that doesn't match the query
 
 Example: "rcode3-tc1-delay500.test." sets RCODE=3, TC=1, and delays the
 response by 500 ms.
@@ -36,6 +37,7 @@ import dns.message
 import dns.query
 import dns.flags
 import dns.name
+import dns.opcode
 import dns.rcode
 
 from asyncserver import (
@@ -76,6 +78,7 @@ class QnameInstructionHandler(DomainHandler):
     _DELAY_RE = re.compile(r"^delay(\d+)$")
 
     async def get_responses(self, qctx: QueryContext):
+        # pylint: disable=too-many-statements
         instructions = (
             qctx.qname.relativize(self.matched_domain).labels[0].decode("ascii")
         )
@@ -86,6 +89,7 @@ class QnameInstructionHandler(DomainHandler):
         idmismatch = False
         qcasemismatch = False
         qr0 = False
+        opcodemismatch = False
         delay_ms = 0
 
         for token in instructions.split("-"):
@@ -99,6 +103,8 @@ class QnameInstructionHandler(DomainHandler):
                 qcasemismatch = True
             elif token == "qr0":
                 qr0 = True
+            elif token == "opcodemismatch":
+                opcodemismatch = True
             elif match := self._RCODE_RE.match(token):
                 rcode = dns.rcode.Rcode(int(match.group(1)))
             elif match := self._DELAY_RE.match(token):
@@ -126,6 +132,14 @@ class QnameInstructionHandler(DomainHandler):
             qctx.response.question[0].name = dns.name.from_text(flipped_text)
         if qr0:
             qctx.response.flags &= ~dns.flags.QR
+        if opcodemismatch:
+            original_opcode = qctx.response.opcode()
+            new_opcode = original_opcode
+            while new_opcode == original_opcode:
+                new_opcode = random.randint(0, 15)
+            qctx.response.flags = (qctx.response.flags & ~0x7800) | dns.opcode.to_flags(
+                new_opcode
+            )
 
         yield DnsResponseSend(qctx.response, delay=delay_ms / 1000.0)
 
