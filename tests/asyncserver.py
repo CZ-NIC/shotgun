@@ -1257,6 +1257,9 @@ class AsyncDnsServer(AsyncServer):
         except AttributeError:
             # Python < 3.7
             pass
+        except ConnectionError as exc:
+            # A pending write failure can surface here after the peer disconnects.
+            logging.debug("TCP connection from %s closed with %r", peer, exc)
 
     async def _read_tcp_query(
         self, reader: asyncio.StreamReader, peer: Peer
