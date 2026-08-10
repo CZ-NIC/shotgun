@@ -1265,6 +1265,12 @@ class AsyncDnsServer(AsyncServer):
         except AttributeError:
             # Python < 3.7
             pass
+        except ConnectionError as exc:
+            # A response dispatched before the client disconnected may have
+            # been written into a socket the peer had already closed; the
+            # transport then fails asynchronously and reports the error here.
+            # That is the peer's doing, not a server bug.
+            logging.debug("TCP connection from %s closed with %r", peer, exc)
 
     async def _read_tcp_query(
         self, reader: asyncio.StreamReader, peer: Peer
