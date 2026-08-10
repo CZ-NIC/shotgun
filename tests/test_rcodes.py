@@ -1,4 +1,4 @@
-"""per-RCODE response accounting."""
+"""per-RCODE accounting, including TC=1 without TCP fallback."""
 
 from collections import Counter
 
@@ -38,8 +38,9 @@ def test_replay_rcodes(protocol, tmp_path):
     for rcode in ALL_RCODES:
         bucket = _rcode_bucket_name(rcode)
         count = rcode + 1
-        qnames += [f"rcode{rcode}.test."] * count
-        expected_counts[bucket] += count
+        for suffix in ("", "-tc1"):
+            qnames += [f"rcode{rcode}{suffix}.test."] * count
+            expected_counts[bucket] += count
 
     total_queries = sum(expected_counts.values())
 
