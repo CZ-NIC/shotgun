@@ -8,11 +8,13 @@ handled specially: the response is synthesized according to the
 "-"-separated instruction words found in the first label. Recognized
 instruction words:
 
-- "rcodeN"     - set RCODE to N (default 0/NOERROR if not present)
-- "tc1"        - set the TC bit in the response
-- "timeout"    - send no response at all (simulate a timeout)
-- "delayN"     - delay the response by N milliseconds
-- "idmismatch" - send back a random message ID that doesn't match the query
+- "rcodeN"        - set RCODE to N (default 0/NOERROR if not present)
+- "tc1"           - set the TC bit in the response
+- "timeout"       - send no response at all (simulate a timeout)
+- "delayN"        - delay the response by N milliseconds
+- "idmismatch"    - send back a random message ID that doesn't match the query
+- "qcasemismatch" - flip the case of a random subset of QNAME letters in the
+                     echoed question section
 
 Example: "rcode3-tc1-delay500.test." sets RCODE=3, TC=1, and delays the
 response by 500 ms.
@@ -28,6 +30,7 @@ import sys
 import time
 
 import dns.flags
+import dns.name
 import dns.rcode
 
 from asyncserver import (
@@ -38,6 +41,17 @@ from asyncserver import (
     ResponseDrop,
     ResponseHandler,
 )
+
+
+def _flip_case_subset(text: str) -> str:
+    """Flip a random non-empty subset of the letters in `text`; result always differs."""
+    alpha_indices = [i for i, c in enumerate(text) if c.isalpha()]
+    assert alpha_indices, f"no letters to flip case on: {text!r}"
+    chosen = random.sample(alpha_indices, random.randint(1, len(alpha_indices)))
+    chars = list(text)
+    for i in chosen:
+        chars[i] = chars[i].swapcase()
+    return "".join(chars)
 
 
 def _exit_on_unrecognized_query(qctx: QueryContext) -> None:
@@ -65,6 +79,7 @@ class QnameInstructionHandler(DomainHandler):
         tc = False
         timeout = False
         idmismatch = False
+        qcasemismatch = False
         delay_ms = 0
 
         for token in instructions.split("-"):
@@ -74,6 +89,8 @@ class QnameInstructionHandler(DomainHandler):
                 timeout = True
             elif token == "idmismatch":
                 idmismatch = True
+            elif token == "qcasemismatch":
+                qcasemismatch = True
             elif match := self._RCODE_RE.match(token):
                 rcode = int(match.group(1))
             elif match := self._DELAY_RE.match(token):
@@ -95,6 +112,10 @@ class QnameInstructionHandler(DomainHandler):
             while new_id == original_id:
                 new_id = random.randint(0, 65535)
             qctx.response.id = new_id
+        if qcasemismatch:
+            original_name = qctx.response.question[0].name
+            flipped_text = _flip_case_subset(original_name.to_text())
+            qctx.response.question[0].name = dns.name.from_text(flipped_text)
 
         yield DnsResponseSend(qctx.response, delay=delay_ms / 1000.0)
 
