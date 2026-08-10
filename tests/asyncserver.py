@@ -1236,8 +1236,18 @@ class AsyncDnsServer(AsyncServer):
             logging.error("TCP connection from %s reset by peer", peer)
             return
         finally:
-            if pending_responses:
-                await asyncio.gather(*pending_responses, return_exceptions=True)
+            # Drain all pending responses before propagating unexpected failures.
+            for result in await asyncio.gather(
+                *pending_responses, return_exceptions=True
+            ):
+                if not isinstance(result, BaseException):
+                    continue
+                if isinstance(result, (asyncio.CancelledError, ConnectionError)):
+                    logging.debug(
+                        "Response to %s ended with %s", peer, type(result).__name__
+                    )
+                    continue
+                raise result
 
         logging.debug("Closing TCP connection from %s", peer)
         writer.close()
