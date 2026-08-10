@@ -4,6 +4,11 @@ each also with TC=1. RCODE N gets N+1 queries per TC variant (so 2*(N+1)
 total); checks per-RCODE counts in replay.py's JSON. TC=1 doesn't change the
 expected RCODE bucket: UDP transport has no TCP fallback, so a truncated
 response is still counted by its own RCODE, not retried.
+
+One "idmismatch" query is also inserted after each RCODE's block: ans.py
+answers with a random, non-matching message ID, which dnssim silently
+drops (source: output/dnssim/udp.c and connection.c both discard on ID
+mismatch without recording an answer), so the query just times out.
 """
 import glob
 import json
@@ -34,17 +39,18 @@ def _rcode_bucket_name(rcode: int) -> str:
 
 @pytest.mark.parametrize("protocol", ["udp", "tcp"])
 def test_replay_rcodes(protocol, tmp_path):
-    qnames = [
-        f"rcode{rcode}{suffix}.test."
-        for rcode in ALL_RCODES
-        for suffix in ("", "-tc1")
-        for _ in range(rcode + 1)
-    ]
+    qnames = []
+    for rcode in ALL_RCODES:
+        for suffix in ("", "-tc1"):
+            qnames += [f"rcode{rcode}{suffix}.test."] * (rcode + 1)
+        qnames.append(f"rcode{rcode}-idmismatch.test.")
+
     expected_counts: dict[str, int] = {}
     for rcode in ALL_RCODES:
         bucket = _rcode_bucket_name(rcode)
         expected_counts[bucket] = expected_counts.get(bucket, 0) + 2 * (rcode + 1)
-    total_queries = sum(expected_counts.values())
+    expected_timeouts = len(ALL_RCODES)  # one idmismatch query per RCODE
+    total_queries = sum(expected_counts.values()) + expected_timeouts
 
     tcpdns_path = tmp_path / "queries.tcpdns"
     tcpdns_path.write_bytes(build_tcpdns_stream(qnames))
@@ -105,7 +111,7 @@ def test_replay_rcodes(protocol, tmp_path):
     stats_sum = stats_sum[0]
 
     assert stats_sum["queries"] == total_queries
-    assert stats_sum["responses"] == total_queries
-    assert stats_sum["timeouts"] == 0
+    assert stats_sum["responses"] == total_queries - expected_timeouts
+    assert stats_sum["timeouts"] == expected_timeouts
     assert stats_sum["discarded"] == 0
     assert stats_sum["response_rcodes"] == expected_counts
