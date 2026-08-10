@@ -15,14 +15,25 @@ from gen_tcpdns import build_tcpdns_stream
 TESTS_DIR = pathlib.Path(__file__).parent
 REPO_ROOT = TESTS_DIR.parent
 
+# RCODE 12 exercises OTHER without EDNS.
 STANDARD_RCODES = range(0, 11)
+OTHER_RCODES = [12]
+ALL_RCODES = list(STANDARD_RCODES) + OTHER_RCODES
+
+
+def _rcode_bucket_name(rcode: int) -> str:
+    return (
+        dns.rcode.to_text(dns.rcode.Rcode(rcode))
+        if rcode in STANDARD_RCODES
+        else "OTHER"
+    )
 
 
 def test_replay_udp_rcodes(tmp_path):
     qnames = []
     expected_counts = Counter()
-    for rcode in STANDARD_RCODES:
-        bucket = dns.rcode.to_text(rcode)
+    for rcode in ALL_RCODES:
+        bucket = _rcode_bucket_name(rcode)
         count = rcode + 1
         qnames += [f"rcode{rcode}.test."] * count
         expected_counts[bucket] += count
