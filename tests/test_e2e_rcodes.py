@@ -1,10 +1,6 @@
 """
-Minimal e2e test: replay.py over UDP against ans.py (QnameInstructionHandler),
-exercising every standard RCODE and checking that the number of queries per
-RCODE reported in replay.py's JSON output matches what was sent.
-
-For RCODE N, N+1 queries encoding "rcodeN" are sent (so RCODE=0 gets 1 query,
-RCODE=1 gets 2, ..., RCODE=10 gets 11).
+e2e: replay.py over UDP vs ans.py, all RCODEs 0-10 plus non-standard 12.
+RCODE N gets N+1 queries; checks per-RCODE counts in replay.py's JSON.
 """
 import json
 import pathlib
@@ -20,21 +16,25 @@ from gen_tcpdns import build_tcpdns_stream  # noqa: E402
 TESTS_DIR = pathlib.Path(__file__).parent
 REPO_ROOT = TESTS_DIR.parent
 
-# RCODEs 0-10 are the only ones with well-known names on both ends (ans.py's
-# QnameInstructionHandler and dnssim's hardcoded rcode_names table); higher
-# values require EDNS extended-RCODE encoding and are out of scope here.
+# 0-10: named in dnssim's rcode table. 11-15: unassigned 4-bit values, no
+# dedicated name -> counted as "OTHER" (replay/dnssim/src/output/dnssim.c).
 STANDARD_RCODES = range(0, 11)
+OTHER_RCODES = [12]
+ALL_RCODES = list(STANDARD_RCODES) + OTHER_RCODES
+
+
+def _rcode_bucket_name(rcode: int) -> str:
+    return dns.rcode.to_text(rcode) if rcode in STANDARD_RCODES else "OTHER"
 
 
 def test_replay_udp_rcodes(tmp_path):
     qnames = [
-        f"rcode{rcode}.test."
-        for rcode in STANDARD_RCODES
-        for _ in range(rcode + 1)
+        f"rcode{rcode}.test." for rcode in ALL_RCODES for _ in range(rcode + 1)
     ]
-    expected_counts = {
-        dns.rcode.to_text(rcode): rcode + 1 for rcode in STANDARD_RCODES
-    }
+    expected_counts: dict[str, int] = {}
+    for rcode in ALL_RCODES:
+        bucket = _rcode_bucket_name(rcode)
+        expected_counts[bucket] = expected_counts.get(bucket, 0) + (rcode + 1)
     total_queries = sum(expected_counts.values())
 
     tcpdns_path = tmp_path / "queries.tcpdns"

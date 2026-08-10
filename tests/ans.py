@@ -39,12 +39,7 @@ from asyncserver import (
 
 
 def _exit_on_unrecognized_query(qctx: QueryContext) -> None:
-    """
-    Print the offending query and kill the process. Any query ans.py cannot
-    make sense of signals a bug in the test fixtures that generated it, so
-    fail loudly and immediately rather than sending back some default
-    response that would silently mask the bug.
-    """
+    """Print query and kill process; an unrecognized query means a fixture bug."""
     print(f"Unrecognized query, exiting:\n{qctx.query}", file=sys.stderr)
     os._exit(1)
 
@@ -133,11 +128,9 @@ def _wait_for_udp_port(port: int, timeout: float) -> None:
 @contextlib.contextmanager
 def run_in_subprocess(timeout: float = 5.0):
     """
-    Launch this module as a subprocess on a free port and wait until it is
-    accepting UDP datagrams. Yields the port it is listening on.
-
-    AsyncServer.run() installs signal handlers via loop.add_signal_handler(),
-    which only works on the main thread of the process.
+    Launch this module as a subprocess on a free port, wait until it accepts
+    UDP, yield the port. Out-of-process: AsyncServer.run() installs signal
+    handlers via loop.add_signal_handler(), main-thread only.
     """
     port = _free_port()
     proc = subprocess.Popen([sys.executable, __file__, str(port)])
