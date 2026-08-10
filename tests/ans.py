@@ -17,6 +17,8 @@ instruction words:
                      echoed question section
 - "qr0"           - clear the QR bit in the response
 - "opcodemismatch" - send back a random opcode that doesn't match the query
+- "qtypemismatch" - send back a random QTYPE in the echoed question section
+                     that doesn't match the query
 
 Example: "rcode3-tc1-delay500.test." sets RCODE=3, TC=1, and delays the
 response by 500 ms.
@@ -35,6 +37,7 @@ import dns.flags
 import dns.name
 import dns.opcode
 import dns.rcode
+import dns.rdatatype
 
 from asyncserver import (
     AsyncDnsServer,
@@ -85,6 +88,7 @@ class QnameInstructionHandler(DomainHandler):
         qcasemismatch = False
         qr0 = False
         opcodemismatch = False
+        qtypemismatch = False
         delay_ms = 0
 
         for token in instructions.split("-"):
@@ -100,6 +104,8 @@ class QnameInstructionHandler(DomainHandler):
                 qr0 = True
             elif token == "opcodemismatch":
                 opcodemismatch = True
+            elif token == "qtypemismatch":
+                qtypemismatch = True
             elif match := self._RCODE_RE.match(token):
                 rcode = int(match.group(1))
             elif match := self._DELAY_RE.match(token):
@@ -135,6 +141,12 @@ class QnameInstructionHandler(DomainHandler):
             qctx.response.flags = (qctx.response.flags & ~0x7800) | dns.opcode.to_flags(
                 new_opcode
             )
+        if qtypemismatch:
+            original_rdtype = qctx.response.question[0].rdtype
+            new_rdtype = original_rdtype
+            while new_rdtype == original_rdtype:
+                new_rdtype = random.randint(1, 65535)
+            qctx.response.question[0].rdtype = new_rdtype
 
         yield DnsResponseSend(qctx.response, delay=delay_ms / 1000.0)
 
