@@ -15,6 +15,7 @@ dnssim reject the response without recording an answer -> query times out.
 import glob
 import itertools
 import json
+import os
 import pathlib
 import random
 import subprocess
@@ -53,8 +54,12 @@ def _rcode_bucket_name(rcode: int) -> str:
 
 @pytest.mark.parametrize("protocol", ["udp", "tcp"])
 def test_replay_rcodes(protocol, tmp_path):
+    seed = int(os.environ.get("SEED", random.randrange(2**32)))
+    print(f"seed={seed}")  # rerun a failure with SEED=<seed> pytest ... -s
+    rng = random.Random(seed)
+
     modifiers = IGNORED_RESPONSE_MODIFIERS.copy()
-    random.shuffle(modifiers)
+    rng.shuffle(modifiers)
     modifier_cycle = itertools.cycle(modifiers)
 
     qnames = []
