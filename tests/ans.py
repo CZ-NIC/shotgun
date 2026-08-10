@@ -21,6 +21,7 @@ instruction words:
                      that doesn't match the query
 - "qdcountmismatch" - either drop the question section entirely, or repeat
                        it 1-10 extra times, giving QDCOUNT 0 or 2-11
+- "cutshort"      - truncate the response wire format at a random offset
 
 Example: "rcode3-tc1-delay500.test." sets RCODE=3, TC=1, and delays the
 response by 500 ms.
@@ -43,6 +44,7 @@ import dns.rdatatype
 
 from asyncserver import (
     AsyncDnsServer,
+    BytesResponseSend,
     DnsResponseSend,
     DomainHandler,
     QueryContext,
@@ -92,6 +94,7 @@ class QnameInstructionHandler(DomainHandler):
         opcodemismatch = False
         qtypemismatch = False
         qdcountmismatch = False
+        cutshort = False
         delay_ms = 0
 
         for token in instructions.split("-"):
@@ -111,6 +114,8 @@ class QnameInstructionHandler(DomainHandler):
                 qtypemismatch = True
             elif token == "qdcountmismatch":
                 qdcountmismatch = True
+            elif token == "cutshort":
+                cutshort = True
             elif match := self._RCODE_RE.match(token):
                 rcode = int(match.group(1))
             elif match := self._DELAY_RE.match(token):
@@ -157,6 +162,12 @@ class QnameInstructionHandler(DomainHandler):
                 qctx.response.question = []
             else:
                 qctx.response.question *= 1 + random.randint(1, 10)
+
+        if cutshort:
+            wire = qctx.response.to_wire(max_size=65535)
+            cut_at = random.randint(0, len(wire) - 1)
+            yield BytesResponseSend(wire[:cut_at], delay=delay_ms / 1000.0)
+            return
 
         yield DnsResponseSend(qctx.response, delay=delay_ms / 1000.0)
 
