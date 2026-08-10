@@ -17,8 +17,17 @@ Example: "rcode3-tc1-delay500.test." sets RCODE=3, TC=1, and delays the
 response by 500 ms.
 """
 
+from collections.abc import Iterator
+import contextlib
 import re
+import socket
+import subprocess
+import sys
+import time
 
+import dns.exception
+import dns.message
+import dns.query
 import dns.flags
 import dns.rcode
 
@@ -75,7 +84,42 @@ class QnameInstructionHandler(DomainHandler):
         yield DnsResponseSend(qctx.response, delay=delay_ms / 1000.0)
 
 
-if __name__ == "__main__":
+def make_server() -> AsyncDnsServer:
     server = AsyncDnsServer()
     server.install_response_handler(QnameInstructionHandler())
-    server.run()
+    return server
+
+
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as s:
+        s.bind(("::1", 0))
+        return s.getsockname()[1]
+
+
+def _wait_for_dns_answer_over_udp(port: int, timeout: float) -> None:
+    query = dns.message.make_query("rcode0.test.", "A")
+    deadline = time.monotonic() + timeout
+    while (remaining := deadline - time.monotonic()) > 0:
+        try:
+            dns.query.udp(query, "::1", port=port, timeout=min(0.1, remaining))
+            return
+        except (OSError, dns.exception.Timeout):
+            time.sleep(min(0.1, max(0, deadline - time.monotonic())))
+    raise TimeoutError(f"ans.py did not start listening on port {port}")
+
+
+@contextlib.contextmanager
+def run_in_subprocess(timeout: float = 5.0) -> Iterator[int]:
+    """Launch the server on a free port and yield that port."""
+    port = _free_port()
+    proc = subprocess.Popen([sys.executable, __file__, str(port)])
+    try:
+        _wait_for_dns_answer_over_udp(port, timeout)
+        yield port
+    finally:
+        proc.terminate()
+        proc.wait(timeout=timeout)
+
+
+if __name__ == "__main__":
+    make_server().run()
