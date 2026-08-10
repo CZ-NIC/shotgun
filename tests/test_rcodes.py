@@ -3,8 +3,10 @@
 from collections import Counter
 
 import glob
+import itertools
 import json
 import pathlib
+import random
 import subprocess
 import sys
 
@@ -22,6 +24,17 @@ STANDARD_RCODES = range(0, 11)
 OTHER_RCODES = [12]
 ALL_RCODES = list(STANDARD_RCODES) + OTHER_RCODES
 
+# Exclude cutshort: a malformed TCP response can close the connection
+# and disrupt unrelated queries.
+IGNORED_RESPONSE_MODIFIERS = [
+    "idmismatch",
+    "opcodemismatch",
+    "qtypemismatch",
+    "qcasemismatch",
+    "qdcountmismatch",
+    "qr0",
+]
+
 
 def _rcode_bucket_name(rcode: int) -> str:
     return (
@@ -33,17 +46,25 @@ def _rcode_bucket_name(rcode: int) -> str:
 
 @pytest.mark.parametrize("protocol", ["udp", "tcp"])
 def test_replay_rcodes(protocol, tmp_path):
+    modifiers = IGNORED_RESPONSE_MODIFIERS.copy()
+    random.shuffle(modifiers)
+    modifier_cycle = itertools.cycle(modifiers)
+
     qnames = []
     expected_counts = Counter()
     expected_timeouts = 0
+    used_modifiers = set()
     for rcode in ALL_RCODES:
         bucket = _rcode_bucket_name(rcode)
         count = rcode + 1
         for suffix in ("", "-tc1"):
             qnames += [f"rcode{rcode}{suffix}.test."] * count
             expected_counts[bucket] += count
-        qnames.append(f"rcode{rcode}-idmismatch.test.")
-        expected_timeouts += 1  # one idmismatch query per RCODE
+        modifier = next(modifier_cycle)
+        used_modifiers.add(modifier)
+        qnames.append(f"rcode{rcode}-{modifier}.test.")
+        expected_timeouts += 1  # one ignored-response query per RCODE
+    assert used_modifiers == set(IGNORED_RESPONSE_MODIFIERS)
 
     total_queries = sum(expected_counts.values()) + expected_timeouts
 
