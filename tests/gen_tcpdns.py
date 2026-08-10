@@ -9,6 +9,22 @@ import sys
 
 import dns.message
 
+
+def build_tcpdns_stream(qnames):
+    """
+    Build a raw DNS-TCP-framed (RFC1035 4.2.2) stream of A/IN queries, one
+    per QNAME in `qnames`, with sequential message IDs starting at 1.
+    """
+    buf = bytearray()
+    for i, qname in enumerate(qnames, start=1):
+        q = dns.message.make_query(qname, "A", "IN")
+        q.id = i
+        wire = q.to_wire()
+        buf += struct.pack("!H", len(wire))
+        buf += wire
+    return bytes(buf)
+
+
 def main():
     outpath = sys.argv[1]
     count = int(sys.argv[2]) if len(sys.argv) > 2 else 150
@@ -21,12 +37,7 @@ def main():
         )
 
     with open(outpath, "wb") as f:
-        for i in range(1, count + 1):
-            q = dns.message.make_query("t1.", "A", "IN")
-            q.id = i
-            wire = q.to_wire()
-            f.write(struct.pack("!H", len(wire)))
-            f.write(wire)
+        f.write(build_tcpdns_stream(["t1."] * count))
 
     print(f"wrote {count} DNS query messages to {outpath}")
 

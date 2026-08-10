@@ -16,7 +16,14 @@ instruction words:
 Example: "rcode3-tc1-delay500.test." sets RCODE=3, TC=1, and delays the
 response by 500 ms.
 """
+
+import contextlib
+import os
 import re
+import socket
+import subprocess
+import sys
+import time
 
 import dns.flags
 import dns.rcode
@@ -27,7 +34,19 @@ from asyncserver import (
     DomainHandler,
     QueryContext,
     ResponseDrop,
+    ResponseHandler,
 )
+
+
+def _exit_on_unrecognized_query(qctx: QueryContext) -> None:
+    """
+    Print the offending query and kill the process. Any query ans.py cannot
+    make sense of signals a bug in the test fixtures that generated it, so
+    fail loudly and immediately rather than sending back some default
+    response that would silently mask the bug.
+    """
+    print(f"Unrecognized query, exiting:\n{qctx.query}", file=sys.stderr)
+    os._exit(1)
 
 
 class QnameInstructionHandler(DomainHandler):
@@ -41,8 +60,8 @@ class QnameInstructionHandler(DomainHandler):
     _DELAY_RE = re.compile(r"^delay(\d+)$")
 
     async def get_responses(self, qctx: QueryContext):
-        instructions = qctx.qname.relativize(self.matched_domain).labels[0].decode(
-            "ascii"
+        instructions = (
+            qctx.qname.relativize(self.matched_domain).labels[0].decode("ascii")
         )
 
         rcode = dns.rcode.NOERROR
@@ -60,7 +79,7 @@ class QnameInstructionHandler(DomainHandler):
             elif match := self._DELAY_RE.match(token):
                 delay_ms = int(match.group(1))
             else:
-                raise ValueError(f"Unrecognized QNAME instruction token: {token}")
+                _exit_on_unrecognized_query(qctx)
 
         if timeout:
             yield ResponseDrop()
@@ -74,7 +93,61 @@ class QnameInstructionHandler(DomainHandler):
         yield DnsResponseSend(qctx.response, delay=delay_ms / 1000.0)
 
 
-if __name__ == "__main__":
+class UnrecognizedQueryHandler(ResponseHandler):
+    """
+    Catch-all fallback for any query not matched by QnameInstructionHandler
+    (i.e. not under the "test." domain).
+    """
+
+    async def get_responses(self, qctx: QueryContext):
+        _exit_on_unrecognized_query(qctx)
+        yield ResponseDrop()  # unreachable; keeps this an async generator
+
+
+def make_server() -> AsyncDnsServer:
     server = AsyncDnsServer()
     server.install_response_handler(QnameInstructionHandler())
-    server.run()
+    server.install_response_handler(UnrecognizedQueryHandler())
+    return server
+
+
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as s:
+        s.bind(("::1", 0))
+        return s.getsockname()[1]
+
+
+def _wait_for_udp_port(port: int, timeout: float) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as s:
+            try:
+                s.connect(("::1", port))
+                s.send(b"")
+                return
+            except OSError:
+                time.sleep(0.1)
+    raise TimeoutError(f"ans.py did not start listening on port {port}")
+
+
+@contextlib.contextmanager
+def run_in_subprocess(timeout: float = 5.0):
+    """
+    Launch this module as a subprocess on a free port and wait until it is
+    accepting UDP datagrams. Yields the port it is listening on.
+
+    AsyncServer.run() installs signal handlers via loop.add_signal_handler(),
+    which only works on the main thread of the process.
+    """
+    port = _free_port()
+    proc = subprocess.Popen([sys.executable, __file__, str(port)])
+    try:
+        _wait_for_udp_port(port, timeout)
+        yield port
+    finally:
+        proc.terminate()
+        proc.wait(timeout=timeout)
+
+
+if __name__ == "__main__":
+    make_server().run()
