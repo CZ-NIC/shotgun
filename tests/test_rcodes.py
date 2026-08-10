@@ -2,6 +2,7 @@
 
 from collections import Counter
 
+import glob
 import json
 import pathlib
 import subprocess
@@ -55,6 +56,7 @@ def test_replay_rcodes(protocol, tmp_path):
             cwd=TESTS_DIR,
         )
 
+    # -T4 creates 3 sender threads; 1 source IP sends all queries to one thread.
     outdir = tmp_path / "out"
     with run_in_subprocess() as port:
         subprocess.run(
@@ -70,7 +72,7 @@ def test_replay_rcodes(protocol, tmp_path):
                 "--dns-port",
                 str(port),
                 "-T",
-                "2",
+                "4",
                 "-O",
                 str(outdir),
                 "-f",
@@ -80,8 +82,22 @@ def test_replay_rcodes(protocol, tmp_path):
         )
 
     sender = protocol.upper()
-    json_path = outdir / "data" / sender / f"{sender}-01.json"
-    records = [json.loads(line) for line in json_path.read_text().splitlines()]
+    thread_jsons = sorted(glob.glob(str(outdir / "data" / sender / f"{sender}-*.json")))
+    assert len(thread_jsons) == 3  # -T4 = 1 main + 3 sender threads (1 sender)
+
+    merged_path = tmp_path / "merged.json"
+    subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "tools" / "merge-data.py"),
+            *thread_jsons,
+            "-o",
+            str(merged_path),
+        ],
+        check=True,
+    )
+
+    records = [json.loads(line) for line in merged_path.read_text().splitlines()]
     stats_sum = [r for r in records if r["type"] == "stats_sum"]
     assert len(stats_sum) == 1
     stats_sum = stats_sum[0]
