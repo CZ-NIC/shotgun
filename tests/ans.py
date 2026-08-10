@@ -8,10 +8,11 @@ handled specially: the response is synthesized according to the
 "-"-separated instruction words found in the first label. Recognized
 instruction words:
 
-- "rcodeN"  - set RCODE to N (default 0/NOERROR if not present)
-- "tc1"     - set the TC bit in the response
-- "timeout" - send no response at all (simulate a timeout)
-- "delayN"  - delay the response by N milliseconds
+- "rcodeN"     - set RCODE to N (default 0/NOERROR if not present)
+- "tc1"        - set the TC bit in the response
+- "timeout"    - send no response at all (simulate a timeout)
+- "delayN"     - delay the response by N milliseconds
+- "idmismatch" - send back a random message ID that doesn't match the query
 
 Example: "rcode3-tc1-delay500.test." sets RCODE=3, TC=1, and delays the
 response by 500 ms.
@@ -20,6 +21,7 @@ response by 500 ms.
 from collections.abc import Iterator
 import contextlib
 import os
+import random
 import re
 import socket
 import subprocess
@@ -66,6 +68,7 @@ class QnameInstructionHandler(DomainHandler):
         rcode = dns.rcode.NOERROR
         tc = False
         timeout = False
+        idmismatch = False
         delay_ms = 0
 
         for token in instructions.split("-"):
@@ -73,6 +76,8 @@ class QnameInstructionHandler(DomainHandler):
                 tc = True
             elif token == "timeout":
                 timeout = True
+            elif token == "idmismatch":
+                idmismatch = True
             elif match := self._RCODE_RE.match(token):
                 rcode = dns.rcode.Rcode(int(match.group(1)))
             elif match := self._DELAY_RE.match(token):
@@ -88,6 +93,12 @@ class QnameInstructionHandler(DomainHandler):
         qctx.response.set_rcode(rcode)
         if tc:
             qctx.response.flags |= dns.flags.TC
+        if idmismatch:
+            original_id = qctx.response.id
+            new_id = original_id
+            while new_id == original_id:
+                new_id = random.randint(0, 65535)
+            qctx.response.id = new_id
 
         yield DnsResponseSend(qctx.response, delay=delay_ms / 1000.0)
 
