@@ -19,6 +19,8 @@ instruction words:
 - "opcodemismatch" - send back a random opcode that doesn't match the query
 - "qtypemismatch" - send back a random QTYPE in the echoed question section
                      that doesn't match the query
+- "qdcountmismatch" - either drop the question section entirely, or repeat
+                       it 1-10 extra times, giving QDCOUNT 0 or 2-11
 
 Example: "rcode3-tc1-delay500.test." sets RCODE=3, TC=1, and delays the
 response by 500 ms.
@@ -89,6 +91,7 @@ class QnameInstructionHandler(DomainHandler):
         qr0 = False
         opcodemismatch = False
         qtypemismatch = False
+        qdcountmismatch = False
         delay_ms = 0
 
         for token in instructions.split("-"):
@@ -106,6 +109,8 @@ class QnameInstructionHandler(DomainHandler):
                 opcodemismatch = True
             elif token == "qtypemismatch":
                 qtypemismatch = True
+            elif token == "qdcountmismatch":
+                qdcountmismatch = True
             elif match := self._RCODE_RE.match(token):
                 rcode = int(match.group(1))
             elif match := self._DELAY_RE.match(token):
@@ -147,6 +152,11 @@ class QnameInstructionHandler(DomainHandler):
             while new_rdtype == original_rdtype:
                 new_rdtype = random.randint(1, 65535)
             qctx.response.question[0].rdtype = new_rdtype
+        if qdcountmismatch:
+            if random.random() < 0.5:
+                qctx.response.question = []
+            else:
+                qctx.response.question *= 1 + random.randint(1, 10)
 
         yield DnsResponseSend(qctx.response, delay=delay_ms / 1000.0)
 
