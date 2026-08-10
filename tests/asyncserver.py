@@ -1221,13 +1221,6 @@ class AsyncDnsServer(AsyncServer):
         # responses to finish before closing the connection below.
         pending_responses: set[asyncio.Task] = set()
 
-        def _dispatch_response(wire: bytes) -> None:
-            task = asyncio.create_task(
-                self._send_tcp_response(writer, peer, wire, pending_responses)
-            )
-            pending_responses.add(task)
-            task.add_done_callback(pending_responses.discard)
-
         try:
             if self._connection_handler:
                 await self._connection_handler.handle(reader, writer, peer)
@@ -1235,15 +1228,34 @@ class AsyncDnsServer(AsyncServer):
                 wire = await self._read_tcp_query(reader, peer)
                 if not wire:
                     break
-                _dispatch_response(wire)
+                task = asyncio.create_task(
+                    self._send_tcp_response(writer, peer, wire, pending_responses)
+                )
+                pending_responses.add(task)
+                task.add_done_callback(pending_responses.discard)
         except _ConnectionTeardownRequested:
             pass
         except ConnectionResetError:
             logging.error("TCP connection from %s reset by peer", peer)
             return
         finally:
-            if pending_responses:
-                await asyncio.gather(*pending_responses, return_exceptions=True)
+            # Wait for in-flight responses without letting one failure abort
+            # the others, then re-raise anything unexpected so that handler
+            # bugs still take the server down loudly, like they did when
+            # responses were awaited inline.  Cancellations are expected
+            # during teardown and connection errors are the peer's doing,
+            # so neither is worth crashing over.
+            for result in await asyncio.gather(
+                *pending_responses, return_exceptions=True
+            ):
+                if not isinstance(result, BaseException):
+                    continue
+                if isinstance(result, (asyncio.CancelledError, ConnectionError)):
+                    logging.debug(
+                        "Response to %s ended with %s", peer, type(result).__name__
+                    )
+                    continue
+                raise result
 
         logging.debug("Closing TCP connection from %s", peer)
         writer.close()
@@ -1316,7 +1328,7 @@ class AsyncDnsServer(AsyncServer):
         writer: asyncio.StreamWriter,
         peer: Peer,
         wire: bytes,
-        pending_responses: "set[asyncio.Task]",
+        pending_responses: set[asyncio.Task],
     ) -> None:
         socket_info = writer.get_extra_info("sockname")
         socket = Peer(socket_info[0], socket_info[1])
