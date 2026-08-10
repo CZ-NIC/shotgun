@@ -1,5 +1,5 @@
 """
-e2e: replay.py over UDP vs ans.py, all RCODEs 0-10 plus non-standard 12.
+e2e: replay.py over UDP/TCP vs ans.py, all RCODEs 0-10 plus non-standard 12.
 RCODE N gets N+1 queries; checks per-RCODE counts in replay.py's JSON.
 """
 import json
@@ -8,6 +8,7 @@ import subprocess
 import sys
 
 import dns.rcode
+import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from ans import run_in_subprocess  # noqa: E402
@@ -27,7 +28,8 @@ def _rcode_bucket_name(rcode: int) -> str:
     return dns.rcode.to_text(rcode) if rcode in STANDARD_RCODES else "OTHER"
 
 
-def test_replay_udp_rcodes(tmp_path):
+@pytest.mark.parametrize("protocol", ["udp", "tcp"])
+def test_replay_rcodes(protocol, tmp_path):
     qnames = [
         f"rcode{rcode}.test." for rcode in ALL_RCODES for _ in range(rcode + 1)
     ]
@@ -57,7 +59,7 @@ def test_replay_udp_rcodes(tmp_path):
                 sys.executable,
                 "replay.py",
                 "-c",
-                "udp",
+                protocol.lower(),
                 "-r",
                 str(pcap_path),
                 "-s",
@@ -74,7 +76,8 @@ def test_replay_udp_rcodes(tmp_path):
             check=True,
         )
 
-    json_path = outdir / "data" / "UDP" / "UDP-01.json"
+    sender = protocol.upper()
+    json_path = outdir / "data" / sender / f"{sender}-01.json"
     records = [json.loads(line) for line in json_path.read_text().splitlines()]
     stats_sum = [r for r in records if r["type"] == "stats_sum"]
     assert len(stats_sum) == 1
