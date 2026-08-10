@@ -64,6 +64,19 @@ and compiling the dnssim module isn't required.
 - Python dependencies from [requirements.txt](https://gitlab.nic.cz/knot/shotgun/-/blob/master/requirements.txt)
 - (optional) tshark/wireshark for some PCAP pre-processing
 
+### Tests
+
+To install the optional Python test dependencies and run the tests from the
+source directory:
+
+```bash
+python3 -m pip install -r requirements-tests.txt
+python3 -m pytest tests
+```
+
+The end-to-end tests also require dnsjit and the compiled dnssim module as
+described above.
+
 ## Documentation
 
 **The latest documentation can be found at
