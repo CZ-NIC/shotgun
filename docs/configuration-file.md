@@ -92,16 +92,17 @@ Integer. Defaults to 2 seconds.
     Increasing the query timeout can negatively impact DNS Shotgun's
     performance and is not recommended.
 
-### latency_linear & latency_bucket_boundaries
+### latency_linear & latency_bucket_boundaries & latency_geom_count
 
 Controls how query response times are categorized into statistical histogram buckets (in milliseconds) up to the duration of `timeout_s`.
 
 Only **one** of the following mutually exclusive options can be specified at a time:
 
-* `latency_linear`: Defines a fixed step size (integer) in milliseconds for uniform linear buckets up to the timeout.
-* `latency_bucket_boundaries`: An explicit list of integers defining custom millisecond upper bounds for each histogram bucket.
+- `latency_linear`: Defines a fixed step size (integer) in milliseconds for uniform linear buckets up to the timeout.
+- `latency_bucket_boundaries`: An explicit list of integers defining custom millisecond upper bounds for each histogram bucket.
+- `latency_geom_count`: Defines the number of boundaries spaced evenly on a log scale (a geometric progression) with.
 
-If neither option is specified, DNS Shotgun defaults to `latency_linear` with a value of 10 ([10, 20, 30, ..., timeout]).
+If neither option is specified, DNS Shotgun defaults to `latency_geom_count` with a value of 200.
 
 ```toml
 # Example 1: Linear spacing (50ms intervals up to a 2s timeout)
@@ -111,7 +112,11 @@ or
 ```toml
 # Example 2: Explicit custom bucket boundaries (in milliseconds)
 latency_bucket_boundaries = [5, 10, 25, 50, 100, 250, 500, 1000]
-
+```
+or
+```toml
+# Example 3: Log spacing with 10 boundaries total
+latency_geom_count = 10
 ```
 
 !!! note
