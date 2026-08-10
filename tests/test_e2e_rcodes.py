@@ -1,6 +1,9 @@
 """
-e2e: replay.py over UDP/TCP vs ans.py, all RCODEs 0-10 plus non-standard 12.
-RCODE N gets N+1 queries; checks per-RCODE counts in replay.py's JSON.
+e2e: replay.py over UDP/TCP vs ans.py, all RCODEs 0-10 plus non-standard 12,
+each also with TC=1. RCODE N gets N+1 queries per TC variant (so 2*(N+1)
+total); checks per-RCODE counts in replay.py's JSON. TC=1 doesn't change the
+expected RCODE bucket: UDP transport has no TCP fallback, so a truncated
+response is still counted by its own RCODE, not retried.
 """
 import glob
 import json
@@ -32,12 +35,15 @@ def _rcode_bucket_name(rcode: int) -> str:
 @pytest.mark.parametrize("protocol", ["udp", "tcp"])
 def test_replay_rcodes(protocol, tmp_path):
     qnames = [
-        f"rcode{rcode}.test." for rcode in ALL_RCODES for _ in range(rcode + 1)
+        f"rcode{rcode}{suffix}.test."
+        for rcode in ALL_RCODES
+        for suffix in ("", "-tc1")
+        for _ in range(rcode + 1)
     ]
     expected_counts: dict[str, int] = {}
     for rcode in ALL_RCODES:
         bucket = _rcode_bucket_name(rcode)
-        expected_counts[bucket] = expected_counts.get(bucket, 0) + (rcode + 1)
+        expected_counts[bucket] = expected_counts.get(bucket, 0) + 2 * (rcode + 1)
     total_queries = sum(expected_counts.values())
 
     tcpdns_path = tmp_path / "queries.tcpdns"
