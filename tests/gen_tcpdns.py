@@ -2,7 +2,7 @@
 """Generate a raw DNS-TCP-framed (RFC1035 4.2.2) stream of query messages.
 
 Each message is preceded by a 2-byte big-endian length prefix, no other
-framing. Used as input to tcpdns2pcap.lua.
+framing. Used as input to tcpdns2pcap.py.
 """
 import struct
 import sys

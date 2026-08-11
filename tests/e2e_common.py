@@ -21,7 +21,7 @@ def build_pcap(qnames, tmp_path, spacing_us=1000):
     pcap_path = tmp_path / "queries.pcap"
     with open(tcpdns_path, "rb") as stdin_f, open(pcap_path, "wb") as stdout_f:
         subprocess.run(
-            ["dnsjit", str(TESTS_DIR / "tcpdns2pcap.lua"), str(spacing_us)],
+            [sys.executable, str(TESTS_DIR / "tcpdns2pcap.py"), str(spacing_us)],
             stdin=stdin_f,
             stdout=stdout_f,
             check=True,
