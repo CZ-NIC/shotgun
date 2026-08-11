@@ -9,6 +9,7 @@ import pytest
 
 from ans import run_in_subprocess
 from common import (
+    PACING_BATCH,
     get_stats_periodic,
     merge_stats,
     read_records,
@@ -17,7 +18,8 @@ from common import (
 from testconfigs import PROFILES, make_config
 from tcpdns2pcap import pcap_global_header, write_packet_record
 
-FILLER_PACKETS = 127  # dnsjit batch size (128) minus query A
+PERIOD1_FILLERS = PACING_BATCH - 2  # minus query A and timeout query T1
+PERIOD2_FILLERS = PACING_BATCH - 1  # minus timeout query T2
 
 # the "latency" profile bucket indices
 (
@@ -73,16 +75,22 @@ def _build_pcap(tmp_path) -> tuple[pathlib.Path, list[dict]]:
                 expected["responses"] += 1
                 expected["response_rcodes"]["NOERROR"] += 1
 
-        # Period 1: A responds during period 2.
+        # Period 1: A responds during period 2; T1 remains unanswered.
+        expected_periods[0]["ongoing"] = 0
         add_query(0, 0, delay_ms=1250)  # query 1 (A)
-        for i in range(FILLER_PACKETS):  # queries 2-128: immediate responses
+        add_query(0, 5_000, delay_ms=2000)  # query 2 (T1)
+        for i in range(PERIOD1_FILLERS):  # queries 3-128: immediate responses
             add_query(0, 10_000 + i, delay_ms=0)
-        # A is still ongoing at the start of period 2.
-        expected_periods[1]["ongoing"] = 1
-        # Period 3 is empty and A has completed.
-        expected_periods[2]["ongoing"] = 0
-        # Send B late in period 4, with a margin before replay finishes.
-        add_query(3, 900_000, delay_ms=0)  # query 129 (B)
+
+        # A and T1 are still ongoing at the start of period 2.
+        expected_periods[1]["ongoing"] = 2
+        add_query(1, 500_000, delay_ms=2000)  # query 129 (T2): no response
+        for i in range(PERIOD2_FILLERS):  # queries 130-256: immediate responses
+            add_query(1, 510_000 + i, delay_ms=0)
+
+        # Period 3 is empty. Omit ongoing because T1's timeout races its start.
+        # Send C late in period 4, with a margin before replay finishes.
+        add_query(3, 900_000, delay_ms=0)  # query 257 (C)
 
     return pcap_path, expected_periods[:3]
 

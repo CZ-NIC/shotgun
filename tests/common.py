@@ -16,6 +16,11 @@ from gen_tcpdns import build_tcpdns_stream
 TESTS_DIR = pathlib.Path(__file__).parent
 REPO_ROOT = TESTS_DIR.parent
 
+# dnsjit sends the first batch immediately, then paces each batch from its
+# first packet's timestamp relative to the first PCAP packet. Packet position
+# therefore matters; timestamps within a batch do not introduce delays.
+PACING_BATCH = 128
+
 
 def seeded_rng() -> random.Random:
     """
