@@ -1215,6 +1215,9 @@ class AsyncDnsServer(AsyncServer):
         peer = Peer(peer_info[0], peer_info[1])
         logging.debug("Accepted TCP connection from %s", peer)
 
+        # Retain pending responses so a half-closed client can still receive them.
+        pending_responses: set[asyncio.Task] = set()
+
         try:
             if self._connection_handler:
                 await self._connection_handler.handle(reader, writer, peer)
@@ -1222,12 +1225,19 @@ class AsyncDnsServer(AsyncServer):
                 wire = await self._read_tcp_query(reader, peer)
                 if not wire:
                     break
-                await self._send_tcp_response(writer, peer, wire)
+                task = asyncio.create_task(
+                    self._send_tcp_response(writer, peer, wire, pending_responses)
+                )
+                pending_responses.add(task)
+                task.add_done_callback(pending_responses.discard)
         except _ConnectionTeardownRequested:
             pass
         except ConnectionResetError:
             logging.error("TCP connection from %s reset by peer", peer)
             return
+        finally:
+            if pending_responses:
+                await asyncio.gather(*pending_responses, return_exceptions=True)
 
         logging.debug("Closing TCP connection from %s", peer)
         writer.close()
@@ -1296,15 +1306,26 @@ class AsyncDnsServer(AsyncServer):
         return buffer
 
     async def _send_tcp_response(
-        self, writer: asyncio.StreamWriter, peer: Peer, wire: bytes
+        self,
+        writer: asyncio.StreamWriter,
+        peer: Peer,
+        wire: bytes,
+        pending_responses: set[asyncio.Task],
     ) -> None:
         socket_info = writer.get_extra_info("sockname")
         socket = Peer(socket_info[0], socket_info[1])
-        responses = self._handle_query(wire, socket, peer, DnsProtocol.TCP)
-        async for response in responses:
-            logging.debug("Sending TCP response: %s", response.hex())
-            writer.write(response)
-            await writer.drain()
+        try:
+            responses = self._handle_query(wire, socket, peer, DnsProtocol.TCP)
+            async for response in responses:
+                logging.debug("Sending TCP response: %s", response.hex())
+                writer.write(response)
+                await writer.drain()
+        except _ConnectionTeardownRequested:
+            # Closing the writer also wakes the connection's read loop.
+            for task in list(pending_responses):
+                if task is not asyncio.current_task():
+                    task.cancel()
+            writer.close()
 
     def _log_query(self, qctx: QueryContext) -> None:
         logging.info(
