@@ -66,7 +66,8 @@ def run_replay(config, pcap_path, port, outdir, threads=4):
     )
 
 
-def merge_stats_sum(outdir, sender, tmp_path, expected_threads=3):
+def merge_stats(outdir, sender, tmp_path, expected_threads=3):
+    """Run tools/merge-data.py on the per-thread JSON, return the merged file's path."""
     thread_jsons = sorted(glob.glob(str(outdir / "data" / sender / f"{sender}-*.json")))
     assert len(thread_jsons) == expected_threads
 
@@ -81,8 +82,18 @@ def merge_stats_sum(outdir, sender, tmp_path, expected_threads=3):
         ],
         check=True,
     )
+    return merged_path
 
-    records = [json.loads(line) for line in merged_path.read_text().splitlines()]
-    stats_sum = [r for r in records if r["type"] == "stats_sum"]
-    assert len(stats_sum) == 1
-    return stats_sum[0]
+
+def read_records(merged_path):
+    return [json.loads(line) for line in merged_path.read_text().splitlines()]
+
+
+def get_stats_sum(records):
+    matches = [r for r in records if r["type"] == "stats_sum"]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def get_stats_periodic(records):
+    return [r for r in records if r["type"] == "stats_periodic"]

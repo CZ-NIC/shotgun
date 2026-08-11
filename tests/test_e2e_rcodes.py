@@ -21,7 +21,14 @@ import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from ans import run_in_subprocess  # noqa: E402
-from e2e_common import build_pcap, merge_stats_sum, run_replay, seeded_rng  # noqa: E402
+from e2e_common import (  # noqa: E402
+    build_pcap,
+    get_stats_sum,
+    merge_stats,
+    read_records,
+    run_replay,
+    seeded_rng,
+)
 
 # 0-10: named in dnssim's rcode table. 11-15: unassigned 4-bit values, no
 # dedicated name -> counted as "OTHER" (replay/dnssim/src/output/dnssim.c).
@@ -76,7 +83,9 @@ def test_replay_rcodes(protocol, tmp_path):
         run_replay(protocol.lower(), pcap_path, port, outdir)
 
     sender = protocol.upper()
-    stats_sum = merge_stats_sum(outdir, sender, tmp_path)
+    merged_path = merge_stats(outdir, sender, tmp_path)
+    records = read_records(merged_path)
+    stats_sum = get_stats_sum(records)
 
     assert stats_sum["queries"] == total_queries
     assert stats_sum["responses"] == total_queries - expected_timeouts

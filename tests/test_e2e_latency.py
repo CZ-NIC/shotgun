@@ -37,7 +37,9 @@ from ans import run_in_subprocess  # noqa: E402
 from e2e_common import (  # noqa: E402
     TESTS_DIR,
     build_pcap,
-    merge_stats_sum,
+    get_stats_sum,
+    merge_stats,
+    read_records,
     run_replay,
     seeded_rng,
 )
@@ -71,7 +73,9 @@ def test_replay_latency_buckets(protocol, tmp_path):
         run_replay(config, pcap_path, port, outdir)
 
     sender = protocol.upper()
-    stats_sum = merge_stats_sum(outdir, sender, tmp_path)
+    merged_path = merge_stats(outdir, sender, tmp_path)
+    records = read_records(merged_path)
+    stats_sum = get_stats_sum(records)
 
     assert stats_sum["queries"] == total_queries
     assert stats_sum["responses"] == expected_responses
