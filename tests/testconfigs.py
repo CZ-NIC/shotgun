@@ -27,6 +27,11 @@ PROFILES: Dict[str, Dict[str, Dict[str, Any]]] = {
             "latency_bucket_boundaries": [100, 300, 600, 1000, 1500, 2000],
         },
     },
+    "sigint": {
+        # A period is write-eligible only at period_end + timeout_s,
+        # so this bounds how long that takes.
+        "*": {"timeout_s": 1},
+    },
 }
 
 
