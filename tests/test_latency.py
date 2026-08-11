@@ -12,6 +12,7 @@ from common import (
     merge_stats,
     read_records,
     run_replay,
+    seeded_rng,
     select_expected_fields,
 )
 from testconfigs import PROFILES, make_config
@@ -22,6 +23,8 @@ BUCKET_TARGETS = [50, 200, 450, 800, 1250, 1750, 2000]
 
 @pytest.mark.parametrize("protocol", ["udp", "tcp"])
 def test_replay_latency_buckets(protocol, tmp_path):
+    rng = seeded_rng()
+
     qnames = []
     boundaries = PROFILES["latency"]["*"]["latency_bucket_boundaries"]
     expected = {
@@ -49,6 +52,7 @@ def test_replay_latency_buckets(protocol, tmp_path):
     for i, delay_ms in enumerate(BUCKET_TARGETS):
         add_queries(delay_ms, i + 1)
     assert all(expected["response_latency"]["bucket_counts"])
+    rng.shuffle(qnames)
 
     pcap_path = build_pcap(qnames, tmp_path)
 
