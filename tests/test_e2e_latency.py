@@ -15,8 +15,10 @@ ans.py's "timeout" instruction (no response at all) instead of a delay near
 (replay/dnssim/src/output/dnssim/common.c:227-229), so this is fully
 deterministic with zero timing risk, unlike timing a delay at the edge.
 
-No randomization: unlike test_e2e_rcodes.py's modifier cycling, there's no
-equivalent "which variant" choice here, so this stays fully deterministic.
+Query order is shuffled (seed printed, override with SEED env var, same as
+test_e2e_rcodes.py) -- final per-bucket counts don't depend on order, and
+this exercises that responses aren't mismatched/misattributed by interleaving
+different buckets' delays on the same connection.
 
 This test relies on ans.py/asyncserver.py dispatching TCP responses
 concurrently per connection (AsyncDnsServer._handle_tcp) -- otherwise
@@ -32,7 +34,13 @@ import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from ans import run_in_subprocess  # noqa: E402
-from e2e_common import TESTS_DIR, build_pcap, merge_stats_sum, run_replay  # noqa: E402
+from e2e_common import (  # noqa: E402
+    TESTS_DIR,
+    build_pcap,
+    merge_stats_sum,
+    run_replay,
+    seeded_rng,
+)
 
 # (target delay in ms, None for the "timeout" instruction), one per bucket,
 # in the same order as latency.toml's latency_bucket_boundaries plus the
@@ -42,10 +50,13 @@ BUCKET_TARGETS = [50, 200, 450, 800, 1250, 1750, None]
 
 @pytest.mark.parametrize("protocol", ["udp", "tcp"])
 def test_replay_latency_buckets(protocol, tmp_path):
+    rng = seeded_rng()
+
     qnames = []
     for i, target in enumerate(BUCKET_TARGETS):
         instruction = "timeout" if target is None else f"delay{target}"
         qnames += [f"{instruction}.test."] * (i + 1)
+    rng.shuffle(qnames)
 
     expected_bucket_counts = [i + 1 for i in range(len(BUCKET_TARGETS))]
     expected_timeouts = expected_bucket_counts[-1]
