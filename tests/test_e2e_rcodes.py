@@ -12,13 +12,10 @@ dnssim reject the response without recording an answer -> query times out.
 "cutshort" excluded: over TCP it makes dnssim close the whole connection
 (connection.c:671), killing other pending queries too -- caused flaky counts.
 """
-import glob
 import itertools
-import json
 import os
 import pathlib
 import random
-import subprocess
 import sys
 
 import dns.rcode
@@ -26,10 +23,7 @@ import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from ans import run_in_subprocess  # noqa: E402
-from gen_tcpdns import build_tcpdns_stream  # noqa: E402
-
-TESTS_DIR = pathlib.Path(__file__).parent
-REPO_ROOT = TESTS_DIR.parent
+from e2e_common import build_pcap, merge_stats_sum, run_replay  # noqa: E402
 
 # 0-10: named in dnssim's rcode table. 11-15: unassigned 4-bit values, no
 # dedicated name -> counted as "OTHER" (replay/dnssim/src/output/dnssim.c).
@@ -79,63 +73,14 @@ def test_replay_rcodes(protocol, tmp_path):
     expected_timeouts = len(ALL_RCODES)  # one ignored-response query per RCODE
     total_queries = sum(expected_counts.values()) + expected_timeouts
 
-    tcpdns_path = tmp_path / "queries.tcpdns"
-    tcpdns_path.write_bytes(build_tcpdns_stream(qnames))
-
-    pcap_path = tmp_path / "queries.pcap"
-    with open(tcpdns_path, "rb") as stdin_f, open(pcap_path, "wb") as stdout_f:
-        subprocess.run(
-            ["dnsjit", str(TESTS_DIR / "tcpdns2pcap.lua"), "1000"],
-            stdin=stdin_f,
-            stdout=stdout_f,
-            check=True,
-            cwd=TESTS_DIR,
-        )
+    pcap_path = build_pcap(qnames, tmp_path)
 
     outdir = tmp_path / "out"
     with run_in_subprocess() as port:
-        subprocess.run(
-            [
-                sys.executable,
-                "replay.py",
-                "-c",
-                protocol.lower(),
-                "-r",
-                str(pcap_path),
-                "-s",
-                "::1",
-                "--dns-port",
-                str(port),
-                "-T",
-                "4",
-                "-O",
-                str(outdir),
-                "-f",
-            ],
-            cwd=REPO_ROOT,
-            check=True,
-        )
+        run_replay(protocol.lower(), pcap_path, port, outdir)
 
     sender = protocol.upper()
-    thread_jsons = sorted(glob.glob(str(outdir / "data" / sender / f"{sender}-*.json")))
-    assert len(thread_jsons) == 3  # -T4 = 1 main + 3 sender threads (1 sender)
-
-    merged_path = tmp_path / "merged.json"
-    subprocess.run(
-        [
-            sys.executable,
-            str(REPO_ROOT / "tools" / "merge-data.py"),
-            *thread_jsons,
-            "-o",
-            str(merged_path),
-        ],
-        check=True,
-    )
-
-    records = [json.loads(line) for line in merged_path.read_text().splitlines()]
-    stats_sum = [r for r in records if r["type"] == "stats_sum"]
-    assert len(stats_sum) == 1
-    stats_sum = stats_sum[0]
+    stats_sum = merge_stats_sum(outdir, sender, tmp_path)
 
     assert stats_sum["queries"] == total_queries
     assert stats_sum["responses"] == total_queries - expected_timeouts
