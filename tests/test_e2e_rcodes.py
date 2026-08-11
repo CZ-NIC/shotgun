@@ -13,9 +13,7 @@ dnssim reject the response without recording an answer -> query times out.
 (connection.c:671), killing other pending queries too -- caused flaky counts.
 """
 import itertools
-import os
 import pathlib
-import random
 import sys
 
 import dns.rcode
@@ -23,7 +21,7 @@ import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from ans import run_in_subprocess  # noqa: E402
-from e2e_common import build_pcap, merge_stats_sum, run_replay  # noqa: E402
+from e2e_common import build_pcap, merge_stats_sum, run_replay, seeded_rng  # noqa: E402
 
 # 0-10: named in dnssim's rcode table. 11-15: unassigned 4-bit values, no
 # dedicated name -> counted as "OTHER" (replay/dnssim/src/output/dnssim.c).
@@ -48,9 +46,7 @@ def _rcode_bucket_name(rcode: int) -> str:
 
 @pytest.mark.parametrize("protocol", ["udp", "tcp"])
 def test_replay_rcodes(protocol, tmp_path):
-    seed = int(os.environ.get("SEED", random.randrange(2**32)))
-    print(f"seed={seed}")  # rerun a failure with SEED=<seed> pytest ... -s
-    rng = random.Random(seed)
+    rng = seeded_rng()
 
     modifiers = IGNORED_RESPONSE_MODIFIERS.copy()
     rng.shuffle(modifiers)

@@ -4,7 +4,9 @@ build a PCAP from QNAMEs, run replay.py, merge per-thread JSON output.
 """
 import glob
 import json
+import os
 import pathlib
+import random
 import subprocess
 import sys
 
@@ -12,6 +14,16 @@ from gen_tcpdns import build_tcpdns_stream
 
 TESTS_DIR = pathlib.Path(__file__).parent
 REPO_ROOT = TESTS_DIR.parent
+
+
+def seeded_rng() -> random.Random:
+    """
+    A random.Random seeded from the SEED env var, or a fresh random seed
+    (printed, so a failure can be rerun with SEED=<seed> pytest ... -s).
+    """
+    seed = int(os.environ.get("SEED", random.randrange(2**32)))
+    print(f"seed={seed}")
+    return random.Random(seed)
 
 
 def build_pcap(qnames, tmp_path, spacing_us=1000):
