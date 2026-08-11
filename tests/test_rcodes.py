@@ -2,23 +2,20 @@
 
 from collections import Counter
 
-import glob
 import itertools
-import json
-import os
-import pathlib
-import random
-import subprocess
-import sys
 
 import dns.rcode
 import pytest
 
 from ans import run_in_subprocess
-from gen_tcpdns import build_tcpdns_stream
-
-TESTS_DIR = pathlib.Path(__file__).parent
-REPO_ROOT = TESTS_DIR.parent
+from common import (
+    build_pcap,
+    get_stats_sum,
+    merge_stats,
+    read_records,
+    run_replay,
+    seeded_rng,
+)
 
 # RCODE 12 exercises OTHER without EDNS.
 STANDARD_RCODES = range(0, 11)
@@ -47,9 +44,7 @@ def _rcode_bucket_name(rcode: int) -> str:
 
 @pytest.mark.parametrize("protocol", ["udp", "tcp"])
 def test_replay_rcodes(protocol, tmp_path):
-    seed = int(os.environ.get("SEED", random.randrange(2**32)))
-    print(f"seed={seed}")  # rerun a failure with SEED=<seed> pytest ... -s
-    rng = random.Random(seed)
+    rng = seeded_rng()
 
     modifiers = IGNORED_RESPONSE_MODIFIERS.copy()
     rng.shuffle(modifiers)
@@ -73,64 +68,17 @@ def test_replay_rcodes(protocol, tmp_path):
 
     total_queries = sum(expected_counts.values()) + expected_timeouts
 
-    tcpdns_path = tmp_path / "queries.tcpdns"
-    tcpdns_path.write_bytes(build_tcpdns_stream(qnames))
-
-    pcap_path = tmp_path / "queries.pcap"
-    with open(tcpdns_path, "rb") as stdin_f, open(pcap_path, "wb") as stdout_f:
-        subprocess.run(
-            [sys.executable, str(TESTS_DIR / "tcpdns2pcap.py"), "1000"],
-            stdin=stdin_f,
-            stdout=stdout_f,
-            check=True,
-            cwd=TESTS_DIR,
-        )
+    pcap_path = build_pcap(qnames, tmp_path)
 
     # -T4 creates 3 sender threads; 1 source IP sends all queries to one thread.
     outdir = tmp_path / "out"
     with run_in_subprocess() as port:
-        subprocess.run(
-            [
-                sys.executable,
-                "replay.py",
-                "-c",
-                protocol.lower(),
-                "-r",
-                str(pcap_path),
-                "-s",
-                "::1",
-                "--dns-port",
-                str(port),
-                "-T",
-                "4",
-                "-O",
-                str(outdir),
-                "-f",
-            ],
-            cwd=REPO_ROOT,
-            check=True,
-        )
+        run_replay(protocol.lower(), pcap_path, port, outdir)
 
     sender = protocol.upper()
-    thread_jsons = sorted(glob.glob(str(outdir / "data" / sender / f"{sender}-*.json")))
-    assert len(thread_jsons) == 3  # -T4 = 1 main + 3 sender threads (1 sender)
-
-    merged_path = tmp_path / "merged.json"
-    subprocess.run(
-        [
-            sys.executable,
-            str(REPO_ROOT / "tools" / "merge-data.py"),
-            *thread_jsons,
-            "-o",
-            str(merged_path),
-        ],
-        check=True,
-    )
-
-    records = [json.loads(line) for line in merged_path.read_text().splitlines()]
-    stats_sum = [r for r in records if r["type"] == "stats_sum"]
-    assert len(stats_sum) == 1
-    stats_sum = stats_sum[0]
+    merged_path = merge_stats(outdir, sender, tmp_path)
+    records = read_records(merged_path)
+    stats_sum = get_stats_sum(records)
 
     assert stats_sum["queries"] == total_queries
     assert stats_sum["responses"] == total_queries - expected_timeouts
