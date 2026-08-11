@@ -98,7 +98,6 @@ class AsyncServer:  # pylint: disable=too-many-instance-attributes
         self,
         udp_handler: _UdpHandler | None,
         tcp_handler: _TcpHandler | None,
-        pidfile: str | None = None,
     ) -> None:
         logging.basicConfig(
             format="%(asctime)s %(levelname)8s  %(message)s",
@@ -115,7 +114,6 @@ class AsyncServer:  # pylint: disable=too-many-instance-attributes
         self._port: int = port
         self._udp_handler: _UdpHandler | None = udp_handler
         self._tcp_handler: _TcpHandler | None = tcp_handler
-        self._pidfile: str | None = pidfile
         self._work_done: asyncio.Future | None = None
 
     def run(self) -> None:
@@ -137,9 +135,7 @@ class AsyncServer:  # pylint: disable=too-many-instance-attributes
         assert self._work_done
         await self._listen_udp()
         await self._listen_tcp()
-        self._write_pidfile()
         await self._work_done
-        self._cleanup_pidfile()
 
     def _get_asyncio_loop(self) -> asyncio.AbstractEventLoop:
         try:
@@ -194,19 +190,6 @@ class AsyncServer:  # pylint: disable=too-many-instance-attributes
             await asyncio.start_server(
                 self._tcp_handler, host=ip_address, port=self._port
             )
-
-    def _write_pidfile(self) -> None:
-        if not self._pidfile:
-            return
-        logging.info("Writing PID to %s", self._pidfile)
-        with open(self._pidfile, "w", encoding="ascii") as pidfile:
-            print(f"{os.getpid()}", file=pidfile)
-
-    def _cleanup_pidfile(self) -> None:
-        if not self._pidfile:
-            return
-        logging.info("Removing %s", self._pidfile)
-        os.unlink(self._pidfile)
 
 
 class DnsProtocol(enum.Enum):
@@ -1084,7 +1067,7 @@ class AsyncDnsServer(AsyncServer):
         ) = _NoKeyringType(),
         acknowledge_manual_dname_handling: bool = False,
     ) -> None:
-        super().__init__(self._handle_udp, self._handle_tcp, "ans.pid")
+        super().__init__(self._handle_udp, self._handle_tcp)
 
         self._zone_tree: _ZoneTree = _ZoneTree()
         self._connection_handler: ConnectionHandler | None = None
