@@ -20,13 +20,14 @@ import dns.rcode
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from ans import run_in_subprocess  # noqa: E402
 from e2e_common import (  # noqa: E402
+    TESTS_DIR,
     build_pcap,
     get_stats_sum,
     merge_stats,
     read_records,
     run_replay,
+    run_server,
     seeded_rng,
 )
 
@@ -51,7 +52,7 @@ def _rcode_bucket_name(rcode: int) -> str:
     return dns.rcode.to_text(rcode) if rcode in STANDARD_RCODES else "OTHER"
 
 
-@pytest.mark.parametrize("protocol", ["udp", "tcp"])
+@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot"])
 def test_replay_rcodes(protocol, tmp_path):
     rng = seeded_rng()
 
@@ -77,10 +78,14 @@ def test_replay_rcodes(protocol, tmp_path):
     total_queries = sum(expected_counts.values()) + expected_timeouts
 
     pcap_path = build_pcap(qnames, tmp_path)
+    # udp/tcp reuse replay.py's built-in default configs (bare protocol
+    # name); dot needs its own (see rcodes_dot.toml) since the built-in
+    # configs/dot.toml uses section name DoT, not DOT.
+    config = TESTS_DIR / "rcodes_dot.toml" if protocol == "dot" else protocol.lower()
 
     outdir = tmp_path / "out"
-    with run_in_subprocess() as port:
-        run_replay(protocol.lower(), pcap_path, port, outdir)
+    with run_server(protocol, tmp_path) as (port, dot_port):
+        run_replay(config, pcap_path, port, outdir, dot_port=dot_port)
 
     sender = protocol.upper()
     merged_path = merge_stats(outdir, sender, tmp_path)

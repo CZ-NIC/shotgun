@@ -2,6 +2,7 @@
 Shared plumbing for e2e tests that drive replay.py against ans.py:
 build a PCAP from QNAMEs, run replay.py, merge per-thread JSON output.
 """
+import contextlib
 import glob
 import json
 import os
@@ -10,6 +11,7 @@ import random
 import subprocess
 import sys
 
+from ans import run_in_subprocess
 from gen_tcpdns import build_tcpdns_stream
 
 TESTS_DIR = pathlib.Path(__file__).parent
@@ -42,28 +44,50 @@ def build_pcap(qnames, tmp_path, spacing_us=1000):
     return pcap_path
 
 
-def run_replay(config, pcap_path, port, outdir, threads=4):
+def replay_args(config, pcap_path, port, outdir, threads=4, dot_port=None):
+    args = [
+        sys.executable,
+        "replay.py",
+        "-c",
+        str(config),
+        "-r",
+        str(pcap_path),
+        "-s",
+        "::1",
+        "--dns-port",
+        str(port),
+        "-T",
+        str(threads),
+        "-O",
+        str(outdir),
+        "-f",
+    ]
+    if dot_port is not None:
+        args += ["--dot-port", str(dot_port)]
+    return args
+
+
+def run_replay(config, pcap_path, port, outdir, threads=4, dot_port=None):
     subprocess.run(
-        [
-            sys.executable,
-            "replay.py",
-            "-c",
-            str(config),
-            "-r",
-            str(pcap_path),
-            "-s",
-            "::1",
-            "--dns-port",
-            str(port),
-            "-T",
-            str(threads),
-            "-O",
-            str(outdir),
-            "-f",
-        ],
+        replay_args(config, pcap_path, port, outdir, threads, dot_port),
         cwd=REPO_ROOT,
         check=True,
     )
+
+
+@contextlib.contextmanager
+def run_server(protocol, tmp_path):
+    """
+    ans.run_in_subprocess(), yielding (port, dot_port) -- dot_port is None
+    unless protocol == "dot", in which case a TLS listener with an ephemeral
+    cert is also set up (see tls_cert.py).
+    """
+    if protocol == "dot":
+        with run_in_subprocess(cert_dir=tmp_path) as (port, dot_port):
+            yield port, dot_port
+    else:
+        with run_in_subprocess() as port:
+            yield port, None
 
 
 def merge_stats(outdir, sender, tmp_path, expected_threads=3):

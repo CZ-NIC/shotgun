@@ -1,0 +1,8 @@
+# Test-only config for tests/test_e2e_rcodes.py.
+#
+# Section name DOT (not the built-in configs/dot.toml's DoT), matching the
+# protocol.upper() sender-name convention shared by udp/tcp in this test.
+[traffic]
+
+[traffic.DOT]
+protocol = "dot"

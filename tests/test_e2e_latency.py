@@ -33,7 +33,6 @@ import sys
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from ans import run_in_subprocess  # noqa: E402
 from e2e_common import (  # noqa: E402
     TESTS_DIR,
     build_pcap,
@@ -41,6 +40,7 @@ from e2e_common import (  # noqa: E402
     merge_stats,
     read_records,
     run_replay,
+    run_server,
     seeded_rng,
 )
 
@@ -50,7 +50,7 @@ from e2e_common import (  # noqa: E402
 BUCKET_TARGETS = [50, 200, 450, 800, 1250, 1750, None]
 
 
-@pytest.mark.parametrize("protocol", ["udp", "tcp"])
+@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot"])
 def test_replay_latency_buckets(protocol, tmp_path):
     rng = seeded_rng()
 
@@ -69,8 +69,8 @@ def test_replay_latency_buckets(protocol, tmp_path):
 
     outdir = tmp_path / "out"
     config = TESTS_DIR / f"latency_{protocol.lower()}.toml"
-    with run_in_subprocess() as port:
-        run_replay(config, pcap_path, port, outdir)
+    with run_server(protocol, tmp_path) as (port, dot_port):
+        run_replay(config, pcap_path, port, outdir, dot_port=dot_port)
 
     sender = protocol.upper()
     merged_path = merge_stats(outdir, sender, tmp_path)

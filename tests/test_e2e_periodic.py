@@ -14,13 +14,13 @@ import dns.message
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from ans import run_in_subprocess  # noqa: E402
 from e2e_common import (  # noqa: E402
     TESTS_DIR,
     get_stats_periodic,
     merge_stats,
     read_records,
     run_replay,
+    run_server,
 )
 from tcpdns2pcap import pcap_global_header, write_packet_record  # noqa: E402
 
@@ -72,14 +72,14 @@ def _build_pcap(tmp_path) -> pathlib.Path:
     return pcap_path
 
 
-@pytest.mark.parametrize("protocol", ["udp", "tcp"])
+@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot"])
 def test_replay_periods(protocol, tmp_path):
     pcap_path = _build_pcap(tmp_path)
 
     config = TESTS_DIR / f"latency_{protocol.lower()}.toml"
     outdir = tmp_path / "out"
-    with run_in_subprocess() as port:
-        run_replay(config, pcap_path, port, outdir)
+    with run_server(protocol, tmp_path) as (port, dot_port):
+        run_replay(config, pcap_path, port, outdir, dot_port=dot_port)
 
     sender = protocol.upper()
     merged_path = merge_stats(outdir, sender, tmp_path)

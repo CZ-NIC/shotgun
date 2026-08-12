@@ -20,8 +20,13 @@ import dns.message
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from ans import run_in_subprocess  # noqa: E402
-from e2e_common import REPO_ROOT, TESTS_DIR, read_records  # noqa: E402
+from e2e_common import (  # noqa: E402
+    REPO_ROOT,
+    TESTS_DIR,
+    read_records,
+    replay_args,
+    run_server,
+)
 from tcpdns2pcap import pcap_global_header, write_packet_record  # noqa: E402
 
 QPS = 128
@@ -46,27 +51,11 @@ def _build_pcap(tmp_path) -> pathlib.Path:
     return pcap_path
 
 
-def _run_replay_and_interrupt(config, pcap_path, port, outdir):
+def _run_replay_and_interrupt(config, pcap_path, port, outdir, dot_port=None):
     # start_new_session so SIGINT hits replay.py + dnsjit child, like a real
     # terminal Ctrl+C would (both are in the foreground process group).
     proc = subprocess.Popen(
-        [
-            sys.executable,
-            "replay.py",
-            "-c",
-            str(config),
-            "-r",
-            str(pcap_path),
-            "-s",
-            "::1",
-            "--dns-port",
-            str(port),
-            "-T",
-            "4",
-            "-O",
-            str(outdir),
-            "-f",
-        ],
+        replay_args(config, pcap_path, port, outdir, dot_port=dot_port),
         cwd=REPO_ROOT,
         start_new_session=True,
     )
@@ -76,14 +65,14 @@ def _run_replay_and_interrupt(config, pcap_path, port, outdir):
     return proc.returncode
 
 
-@pytest.mark.parametrize("protocol", ["udp", "tcp"])
+@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot"])
 def test_sigint_partial_results(protocol, tmp_path):
     pcap_path = _build_pcap(tmp_path)
     config = TESTS_DIR / f"sigint_{protocol}.toml"
     outdir = tmp_path / "out"
 
-    with run_in_subprocess() as port:
-        returncode = _run_replay_and_interrupt(config, pcap_path, port, outdir)
+    with run_server(protocol, tmp_path) as (port, dot_port):
+        returncode = _run_replay_and_interrupt(config, pcap_path, port, outdir, dot_port)
 
     assert returncode != 0  # killed, not a clean exit
 
