@@ -12,3 +12,6 @@ __pycache__/
 
 # Built docs
 site/
+
+# LSP tooling
+compile_commands.json
