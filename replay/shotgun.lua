@@ -112,7 +112,10 @@ local function send_thread_main(thr)
 		log:fatal("unknown protocol_func: " .. protocol_func)
 	end
 
-	output:stats_collect(stats_interval)
+	-- blocks until the main thread has seen the first packet (or exhausted
+	-- the PCAP), so all threads' stats periods share the same reference
+	local since_ms = thr:pop()
+	output:stats_collect(stats_interval, since_ms)
 	output:free_after_use(true)
 
 	local file = io.open(output_file, "w")
@@ -277,9 +280,21 @@ copy:receiver(ipsplit)
 -- process PCAP
 local prod, pctx = layer:produce()
 local recv, rctx = copy:receive()
+local since_ms_pushed = false
+local function push_since_ms()
+	-- shared stats-period reference for all threads (see send_thread_main);
+	-- also unblocks threads on an empty PCAP, called once after the loop
+	if since_ms_pushed then return end
+	since_ms_pushed = true
+	local since_ms = math.floor(socket.gettime() * 1000)
+	for i, _ in ipairs(config.threads) do
+		threads[i]:push(since_ms)
+	end
+end
 while true do
 	local obj = prod(pctx)
 	if obj == nil then break end
+	push_since_ms()
 	if config.stop_after_s then
 		local obj_pcap_in = obj:cast_to(object.PCAP)
 		if obj_pcap_in.ts.sec >= config.stop_after_s then
@@ -288,6 +303,7 @@ while true do
 	end
 	recv(rctx, obj)
 end
+push_since_ms()
 log.notice('processed %.0f packets from input PCAP', input:packets())
 
 -- teardown

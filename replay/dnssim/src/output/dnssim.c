@@ -724,7 +724,7 @@ void output_dnssim_close_file(output_dnssim_t* self)
     }
 }
 
-void output_dnssim_stats_collect(output_dnssim_t* self, uint64_t interval_ms)
+void output_dnssim_stats_collect(output_dnssim_t* self, uint64_t interval_ms, uint64_t since_ms)
 {
     uint64_t now_ms = _now_ms();
     mlassert_self();
@@ -736,12 +736,17 @@ void output_dnssim_stats_collect(output_dnssim_t* self, uint64_t interval_ms)
     }
     self->stats_interval_ms = interval_ms;
 
-    self->stats_sum->since_ms     = now_ms;
-    self->stats_current->since_ms = now_ms;
+    self->stats_sum->since_ms     = since_ms;
+    self->stats_current->since_ms = since_ms;
 
     _self->stats_timer.data = (void*)self;
     uv_timer_init(&_self->loop, &_self->stats_timer);
-    uv_timer_start(&_self->stats_timer, _on_stats_timer_tick, interval_ms, interval_ms);
+    /* Anchor the first tick to the caller-supplied since_ms (shared across
+     * all threads) instead of "now", so periods align even though each
+     * thread calls this at a slightly different real moment. */
+    uint64_t first_boundary = since_ms + interval_ms;
+    uint64_t first_delay_ms = (first_boundary > now_ms) ? (first_boundary - now_ms) : 0;
+    uv_timer_start(&_self->stats_timer, _on_stats_timer_tick, first_delay_ms, interval_ms);
 }
 
 void output_dnssim_stats_finish(output_dnssim_t* self)

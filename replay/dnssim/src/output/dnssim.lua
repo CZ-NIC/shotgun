@@ -170,7 +170,7 @@ void output_dnssim_h2_method(output_dnssim_t* self, const char* method);
 void output_dnssim_h2_zero_out_msgid(output_dnssim_t* self, bool zero_out_msgid);
 int output_dnssim_open_file(output_dnssim_t* self, const char* output_file);
 void output_dnssim_close_file(output_dnssim_t* self);
-void output_dnssim_stats_collect(output_dnssim_t* self, uint64_t interval_ms);
+void output_dnssim_stats_collect(output_dnssim_t* self, uint64_t interval_ms, uint64_t since_ms);
 void output_dnssim_stats_finish(output_dnssim_t* self);
 
 core_receiver_t output_dnssim_receiver();
@@ -474,13 +474,18 @@ function DnsSim:noerror()
     return tonumber(self.obj.stats_sum.rcode_noerror)
 end
 
--- Configure statistics to be collected every N seconds.
-function DnsSim:stats_collect(seconds)
+-- Configure statistics to be collected every N seconds, with period
+-- boundaries anchored to since_ms (a caller-supplied reference time in ms,
+-- shared across threads so their periods align).
+function DnsSim:stats_collect(seconds, since_ms)
     if seconds == nil then
         self.obj._log:fatal("number of seconds must be set for stats_collect()")
     end
+    if since_ms == nil then
+        self.obj._log:fatal("since_ms must be set for stats_collect()")
+    end
     local interval_ms = math.floor(seconds * 1000)
-    C.output_dnssim_stats_collect(self.obj, interval_ms)
+    C.output_dnssim_stats_collect(self.obj, interval_ms, since_ms)
 end
 
 -- Stop the collection of statistics.
