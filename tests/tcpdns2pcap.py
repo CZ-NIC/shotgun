@@ -7,9 +7,10 @@ packets on stdout.
 Writes a classic (non-nanosecond) PCAP file directly (LINKTYPE_RAW=101,
 raw IP packets, no link-layer header).
 
-Always uses ::1 and port 53 on both ends.
+Always uses port 53 on both ends; dest is always ::1. Source is ::1 too
+unless --unique-ips.
 
-usage: tcpdns2pcap.py [spacing_us] < in.tcpdns > out.pcap
+usage: tcpdns2pcap.py [spacing_us] [--unique-ips] < in.tcpdns > out.pcap
 """
 
 import argparse
@@ -88,7 +89,13 @@ def main() -> None:
         default=300000,
         help="spacing between packets in us (default: 300 000)",
     )
-    spacing_us = parser.parse_args().spacing_us
+    parser.add_argument(
+        "--unique-ips",
+        action="store_true",
+        help="give each message its own source IP",
+    )
+    args = parser.parse_args()
+    spacing_us = args.spacing_us
 
     stdin = sys.stdin.buffer
     stdout = sys.stdout.buffer
@@ -103,7 +110,10 @@ def main() -> None:
         if msg is None:
             break
 
-        write_packet_record(stdout, msg, ts_sec, ts_usec)
+        client_id = 1
+        if args.unique_ips:
+            client_id = count + 1
+        write_packet_record(stdout, msg, ts_sec, ts_usec, client_id)
 
         ts_usec += spacing_us
         while ts_usec >= 1000000:
