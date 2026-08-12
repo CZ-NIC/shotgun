@@ -15,3 +15,5 @@ site/
 
 # LSP tooling
 compile_commands.json
+
+.claude/
