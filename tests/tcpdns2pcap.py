@@ -24,7 +24,7 @@ IP6_LOOPBACK = b"\x00" * 15 + b"\x01"  # ::1
 LINKTYPE_RAW = 101  # tcpdump.org registry value, portable (not OS-local DLT_RAW)
 
 
-def build_packet(dns_wire: bytes) -> bytes:
+def build_packet(dns_wire: bytes, client_id: int = 1) -> bytes:
     udp_len = 2 + 2 + 2 + 2 + len(dns_wire)
 
     udp_hdr = struct.pack(
@@ -36,8 +36,8 @@ def build_packet(dns_wire: bytes) -> bytes:
         + struct.pack("!H", udp_len)  # payload length
         + bytes([17])  # next header = UDP
         + bytes([64])  # hop limit
-        + IP6_LOOPBACK  # source address
-        + IP6_LOOPBACK  # dest address
+        + client_id.to_bytes(16, "big")  # source address; ipsplit's client key
+        + IP6_LOOPBACK  # dest address; ipsplit rewrites this regardless
     )
 
     return ip6_hdr + udp_hdr + dns_wire
@@ -70,8 +70,10 @@ def read_next_message(stdin) -> bytes | None:
     return msg
 
 
-def write_packet_record(stdout, dns_wire: bytes, ts_sec: int, ts_usec: int) -> None:
-    packet = build_packet(dns_wire)
+def write_packet_record(
+    stdout, dns_wire: bytes, ts_sec: int, ts_usec: int, client_id: int = 1
+) -> None:
+    packet = build_packet(dns_wire, client_id)
     rec = struct.pack("!IIII", ts_sec, ts_usec, len(packet), len(packet))
     stdout.write(rec)
     stdout.write(packet)
