@@ -163,6 +163,60 @@ def test_conn_reuse_idle0_handshake_failed(tmp_path):
     assert stats_sum["conn_active"] == 0
 
 
+def test_conn_recover(tmp_path):
+    pcap_path = tmp_path / "queries.pcap"
+    with open(pcap_path, "wb") as f:
+        f.write(pcap_global_header())
+
+        qid = 1
+
+        def add_query(qname, ts_sec, ts_usec, client_id):
+            nonlocal qid
+            q = dns.message.make_query(qname, "A")
+            q.id = qid
+            write_packet_record(f, q.to_wire(), ts_sec, ts_usec, client_id)
+            qid += 1
+
+        for i in range(BATCH):  # t=0s: opens conn1
+            add_query("rcode0.test.", 0, i, client_id=1)
+        # t=2s: freezes the server for 3s, incl. its own accept().
+        # idle_timeout_s=8 (config) survives this 2s gap since t=0.
+        add_query("block3000.test.", 2, 0, client_id=1)
+        for i in range(BATCH - 1):  # fillers sharing conn1
+            add_query("rcode0.test.", 2, 1 + i, client_id=1)
+        # t=2.3s, while frozen: fills backlog=0's one slot, succeeds at
+        # kernel level regardless of freeze (connect() completes on
+        # SYN-ACK, independent of the peer's accept()).
+        for i in range(BATCH):
+            add_query("rcode0.test.", 2, 300_000 + i, client_id=2)
+        # t=2.6s: backlog slot already taken by the previous connect,
+        # stalls; handshake_timeout_s=1 (config) gives up before freeze ends.
+        for i in range(BATCH):
+            add_query("rcode0.test.", 2, 600_000 + i, client_id=3)
+        # t=10s (same source IP as above): reconnects, succeeds.
+        for i in range(BATCH):
+            add_query("rcode0.test.", 10, i, client_id=3)
+
+    config = TESTS_DIR / "conn_reuse_block_backlog.toml"
+
+    outdir = tmp_path / "out"
+    with run_in_subprocess() as port:
+        run_replay(config, pcap_path, port, outdir)
+
+    merged_path = merge_stats(outdir, "TCP", tmp_path)
+    stats_sum = get_stats_sum(read_records(merged_path))
+
+    total = 5 * BATCH
+    assert stats_sum["queries"] == total
+    assert stats_sum["responses"] == 4 * BATCH  # everyone but client3's 1st attempt
+    assert stats_sum["timeouts"] == BATCH  # client3's 1st-attempt queries, never sent
+    assert stats_sum["discarded"] == 0
+    assert stats_sum["conn_info"]["type"] == "tcp"
+    assert stats_sum["conn_info"]["handshakes"] == 4
+    assert stats_sum["conn_info"]["handshakes_failed"] == 1  # client3
+    assert stats_sum["conn_active"] == 0
+
+
 def test_conn_reuse_idle10(tmp_path):
     pcap_path = _build_pcap(tmp_path)
     config = TESTS_DIR / "conn_reuse_idle10.toml"

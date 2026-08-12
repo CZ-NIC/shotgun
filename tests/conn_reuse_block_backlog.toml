@@ -1,0 +1,19 @@
+# Test-only config for tests/test_e2e_conn_reuse.py.
+#
+# idle_timeout_s high enough that client1's one connection survives the
+# whole test (its two batches are 2s apart), with margin for scheduling
+# jitter under a loaded machine (e.g. the full test suite running
+# concurrently). handshake_timeout_s short relative to blockN so a connect
+# attempt stuck behind an exhausted backlog=0 (asyncserver.py) gets a
+# deterministic handshakes_failed instead of depending on OS-level SYN-retry
+# timing, but not so short that it risks firing under load before the
+# attempt even reaches the kernel. timeout_s raised so a query answered late
+# (after a blockN pause) doesn't get counted as a client-side timeout.
+[traffic]
+
+[traffic.TCP]
+protocol = "tcp"
+idle_timeout_s = 8
+handshake_timeout_s = 1
+timeout_s = 6
+batch_size = 128
