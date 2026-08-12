@@ -22,6 +22,7 @@ import enum
 import logging
 import os
 import signal
+import ssl
 import sys
 
 import dns.exception
@@ -79,6 +80,9 @@ class AsyncServer:
         self,
         udp_handler: _UdpHandler,
         tcp_handler: _TcpHandler,
+        tls_port: int | None = None,
+        tls_certfile: str | None = None,
+        tls_keyfile: str | None = None,
     ) -> None:
         logging.basicConfig(
             format="%(asctime)s %(levelname)8s  %(message)s",
@@ -95,6 +99,9 @@ class AsyncServer:
         self._port: int = port
         self._udp_handler: _UdpHandler = udp_handler
         self._tcp_handler: _TcpHandler = tcp_handler
+        self._tls_port: int | None = tls_port
+        self._tls_certfile: str | None = tls_certfile
+        self._tls_keyfile: str | None = tls_keyfile
         self._work_done: asyncio.Future | None = None
 
     def run(self) -> None:
@@ -109,6 +116,7 @@ class AsyncServer:
         assert self._work_done
         await self._listen_udp()
         await self._listen_tcp()
+        await self._listen_tls()
         await self._work_done
 
     def _setup_exception_handler(self) -> None:
@@ -150,6 +158,21 @@ class AsyncServer:
         for ip_address in self._ip_addresses:
             await asyncio.start_server(
                 self._tcp_handler, host=ip_address, port=self._port, backlog=0
+            )
+
+    async def _listen_tls(self) -> None:
+        if not self._tls_port:
+            return
+        assert self._tls_certfile and self._tls_keyfile
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(self._tls_certfile, self._tls_keyfile)
+        for ip_address in self._ip_addresses:
+            await asyncio.start_server(
+                self._tcp_handler,
+                host=ip_address,
+                port=self._tls_port,
+                ssl=ctx,
+                backlog=0,
             )
 
 
@@ -417,8 +440,19 @@ class AsyncDnsServer(AsyncServer):
 
     _DEFAULT_RCODE = dns.rcode.REFUSED
 
-    def __init__(self) -> None:
-        super().__init__(self._handle_udp, self._handle_tcp)
+    def __init__(
+        self,
+        tls_port: int | None = None,
+        tls_certfile: str | None = None,
+        tls_keyfile: str | None = None,
+    ) -> None:
+        super().__init__(
+            self._handle_udp,
+            self._handle_tcp,
+            tls_port=tls_port,
+            tls_certfile=tls_certfile,
+            tls_keyfile=tls_keyfile,
+        )
 
         self._response_handlers: list[ResponseHandler] = []
 

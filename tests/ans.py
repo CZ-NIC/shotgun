@@ -35,6 +35,7 @@ response by 500 ms.
 
 import contextlib
 import os
+import pathlib
 import random
 import re
 import socket
@@ -56,6 +57,7 @@ from asyncserver import (
     ResponseDrop,
     ResponseHandler,
 )
+from tls_cert import generate_cert
 
 
 def _flip_case_subset(text: str) -> str:
@@ -198,43 +200,76 @@ class UnrecognizedQueryHandler(ResponseHandler):
 
 
 def make_server() -> AsyncDnsServer:
-    server = AsyncDnsServer()
+    tls_port = os.environ.get("TLS_PORT")
+    server = AsyncDnsServer(
+        tls_port=int(tls_port) if tls_port else None,
+        tls_certfile=os.environ.get("TLS_CERTFILE"),
+        tls_keyfile=os.environ.get("TLS_KEYFILE"),
+    )
     server.install_response_handler(QnameInstructionHandler())
     server.install_response_handler(UnrecognizedQueryHandler())
     return server
 
 
 def _free_port() -> int:
-    with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as s:
-        s.bind(("::1", 0))
-        return s.getsockname()[1]
+    return _free_ports(1)[0]
 
 
-def _wait_for_udp_port(port: int, timeout: float) -> None:
+def _free_ports(n: int) -> list[int]:
+    # Bind all sockets before closing any, so the OS can't hand back a port
+    # still held by an earlier one in this same call.
+    socks = [socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) for _ in range(n)]
+    try:
+        for s in socks:
+            s.bind(("::1", 0))
+        return [s.getsockname()[1] for s in socks]
+    finally:
+        for s in socks:
+            s.close()
+
+
+def _wait_for_tcp_port(port: int, timeout: float) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as s:
-            try:
-                s.connect(("::1", port))
-                s.send(b"")
+        try:
+            with socket.create_connection(("::1", port), timeout=0.1):
                 return
-            except OSError:
-                time.sleep(0.1)
+        except OSError:
+            time.sleep(0.1)
     raise TimeoutError(f"ans.py did not start listening on port {port}")
 
 
 @contextlib.contextmanager
-def run_in_subprocess(timeout: float = 5.0):
+def run_in_subprocess(timeout: float = 5.0, cert_dir: pathlib.Path | None = None):
     """
     Launch this module as a subprocess on a free port, wait until it accepts
-    UDP, yield the port. Out-of-process: AsyncServer.run() installs signal
+    TCP, yield the port. Out-of-process: AsyncServer.run() installs signal
     handlers via loop.add_signal_handler(), main-thread only.
+
+    With cert_dir given, also sets up a DoT listener on a second free port
+    with an ephemeral cert (see tls_cert.py) generated into cert_dir, and
+    yields (port, tls_port) instead.
     """
-    port = _free_port()
-    proc = subprocess.Popen([sys.executable, __file__, str(port)])
+    tls_port: int | None = None
+    env = os.environ.copy()
+
+    if cert_dir is not None:
+        port, tls_port = _free_ports(2)
+        cert, key = generate_cert(cert_dir)
+        env["TLS_PORT"] = str(tls_port)
+        env["TLS_CERTFILE"] = str(cert)
+        env["TLS_KEYFILE"] = str(key)
+    else:
+        port = _free_port()
+
+    proc = subprocess.Popen([sys.executable, __file__, str(port)], env=env)
     try:
-        _wait_for_udp_port(port, timeout)
-        yield port
+        _wait_for_tcp_port(port, timeout)
+        if tls_port is not None:
+            _wait_for_tcp_port(tls_port, timeout)
+            yield port, tls_port
+        else:
+            yield port
     finally:
         proc.terminate()
         proc.wait(timeout=timeout)
