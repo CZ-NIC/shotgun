@@ -46,7 +46,6 @@ import dns.flags
 import dns.name
 import dns.opcode
 import dns.rcode
-import dns.rdatatype
 
 from asyncserver import (
     AsyncDnsServer,
@@ -142,7 +141,7 @@ class QnameInstructionHandler(DomainHandler):
             yield ResponseDrop()
             return
 
-        qctx.prepare_new_response(with_zone_data=False)
+        qctx.prepare_new_response()
         qctx.response.set_rcode(rcode)
         if tc:
             qctx.response.flags |= dns.flags.TC
