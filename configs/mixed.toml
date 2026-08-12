@@ -23,7 +23,8 @@ weight = 60
 protocol = "tcp"
 weight = 5
 
-# Aggressive DNS-over-TCP clients.
+# Aggressive DNS-over-TCP clients that close a connection as soon as it has
+# no outstanding queries.
 [traffic.TCP-no_idle]
 protocol = "tcp"
 weight = 5
