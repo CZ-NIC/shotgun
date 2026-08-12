@@ -11,7 +11,11 @@ instruction words:
 - "rcodeN"        - set RCODE to N (default 0/NOERROR if not present)
 - "tc1"           - set the TC bit in the response
 - "timeout"       - send no response at all (simulate a timeout)
-- "delayN"        - delay the response by N milliseconds
+- "delayN"        - delay the response by N milliseconds (this query only;
+                     other connections keep being served meanwhile)
+- "blockN"        - synchronously block the whole server process for N
+                     milliseconds: no new connections accepted, no other
+                     pending response sent, until it returns
 - "idmismatch"    - send back a random message ID that doesn't match the query
 - "qcasemismatch" - flip the case of a random subset of QNAME letters in the
                      echoed question section
@@ -81,6 +85,7 @@ class QnameInstructionHandler(DomainHandler):
 
     _RCODE_RE = re.compile(r"^rcode(\d+)$")
     _DELAY_RE = re.compile(r"^delay(\d+)$")
+    _BLOCK_RE = re.compile(r"^block(\d+)$")
 
     async def get_responses(self, qctx: QueryContext):
         instructions = (
@@ -126,6 +131,10 @@ class QnameInstructionHandler(DomainHandler):
                 rcode = int(match.group(1))
             elif match := self._DELAY_RE.match(token):
                 delay_ms = int(match.group(1))
+            elif match := self._BLOCK_RE.match(token):
+                # time.sleep, not asyncio.sleep: blocks the whole event loop
+                # thread, not just this response's task.
+                time.sleep(int(match.group(1)) / 1000)
             else:
                 _exit_on_unrecognized_query(qctx)
 
