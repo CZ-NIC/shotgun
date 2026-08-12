@@ -113,13 +113,9 @@ def test_sigint_partial_results(protocol, tmp_path):
     assert len(periodic) == 2  # period1, period2 write-eligible; period3 not yet
     assert summed == []  # close_file() never reached on abrupt kill
 
-    period1, period2 = periodic
-    # dnsjit's realtime filter sends the first 128-packet batch instantly
-    # (no pacing yet), so period1 absorbs 2 batches before real-time
-    # throttling settles in; period2 sees the steady-state QPS.
-    for period, expected in ((period1, 2 * QPS), (period2, QPS)):
-        assert period["queries"] == expected
-        assert period["responses"] == expected
+    for period in periodic:
+        assert period["queries"] == QPS
+        assert period["responses"] == QPS
         assert period["timeouts"] == 0
         assert period["discarded"] == 0
-        assert period["response_rcodes"] == {"NOERROR": expected}
+        assert period["response_rcodes"] == {"NOERROR": QPS}
