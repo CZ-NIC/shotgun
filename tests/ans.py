@@ -22,6 +22,8 @@ instruction words:
 - "qdcountmismatch" - either drop the question section entirely, or repeat
                        it 1-10 extra times, giving QDCOUNT 0 or 2-11
 - "cutshort"      - truncate the response wire format at a random offset
+- "terminate"     - exit the server process immediately (os._exit), forcibly
+                     closing all connections and dropping all pending queries
 
 Example: "rcode3-tc1-delay500.test." sets RCODE=3, TC=1, and delays the
 response by 500 ms.
@@ -116,6 +118,10 @@ class QnameInstructionHandler(DomainHandler):
                 qdcountmismatch = True
             elif token == "cutshort":
                 cutshort = True
+            elif token == "terminate":
+                # os._exit, not sys.exit: skips asyncio/event-loop cleanup,
+                # so open connections drop instead of closing gracefully.
+                os._exit(0)
             elif match := self._RCODE_RE.match(token):
                 rcode = int(match.group(1))
             elif match := self._DELAY_RE.match(token):
