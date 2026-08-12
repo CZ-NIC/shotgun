@@ -186,7 +186,7 @@ class AsyncServer:
             return
         for ip_address in self._ip_addresses:
             await asyncio.start_server(
-                self._tcp_handler, host=ip_address, port=self._port
+                self._tcp_handler, host=ip_address, port=self._port, backlog=0
             )
 
 
