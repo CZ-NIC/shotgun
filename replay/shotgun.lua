@@ -228,8 +228,10 @@ local channel = require("dnsjit.core.channel")
 local threads = {}
 local channels = {}
 
-local socket = require("socket")
-local runid = socket.gettime() * 1000
+local f = assert(io.open("/dev/urandom", "rb"))
+local bytes = f:read(4); f:close()
+local runid = 0
+for i = 1, 4 do runid = runid * 256 + bytes:byte(i) end
 
 ---- initialize send threads
 for i, thrconf in ipairs(config.threads) do
