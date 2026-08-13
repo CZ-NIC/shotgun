@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import itertools
 import json
 import logging
 import os
@@ -195,10 +196,9 @@ def merge_headers(iterable):
 
 class MergeData:
     """
-    Note: All files are currently opened at the same time, and the merging is done in a streaming manner. This means that the memory usage
-    will be proportional to the number of files being merged. The expected use case doesn't involve a large number of files, so this is a
-    reasonable trade-off for faster merging and simpler code. To avoid the issue of too many open files, would mean a significant increase
-    in merge time complexity.
+    Note: All files are opened at the same time and read in full, so the memory usage will be proportional to the size of the files being
+    merged. The expected use case doesn't involve a large number of files, so this is a reasonable trade-off for faster merging and simpler
+    code. To avoid the issue of too many open files, would mean a significant increase in merge time complexity.
     """
 
     def __init__(self, thread_data):
@@ -224,36 +224,52 @@ class MergeData:
                 pass
 
     def _merge_streams(self, handles):
-        while True:
-            objects = self.read_next(handles)
-            if objects is None:
-                break
+        headers, periodic, sums = self._read_by_type(handles)
+        if len(headers) != len(handles):
+            raise ThreadMismatch()
 
-            types = {o.get("type") for o in objects}
-            if len(types) != 1:
-                raise ThreadMismatch()
-            t = types.pop()
-            if t == "header":
-                merged_header = merge_headers(objects)
-                merged_header["merged"] = True
-                yield merged_header
-            elif t == "stats_periodic":
-                merged = merge_stats(objects)
-                yield merged
-            elif t == "stats_sum":
-                merged = merge_stats(objects)
-                yield merged
-            else:
-                raise UnexpectedType(t)
+        merged_header = merge_headers(headers)
+        merged_header["merged"] = True
+        yield merged_header
 
-    def read_next(self, handles):
-        lines = [f.readline() for f in handles]
-        ended = [not line for line in lines]
-        if any(ended):
-            if not all(ended):
+        # Merged period by period rather than line by line: threads tick on
+        # their own timers, so one can write a period the others never got to
+        # -- a partial one at close, or a whole one when the run is killed
+        # abruptly. A period only some threads reached is merged from those
+        # threads alone; demanding equal record counts would fail the merge
+        # outright over a millisecond of drift.
+        for objects in itertools.zip_longest(*periodic):
+            yield merge_stats([o for o in objects if o is not None])
+
+        # A summary is only written on clean shutdown. Merging a subset of
+        # them would silently understate the totals, so it's all or nothing.
+        if sums:
+            if len(sums) != len(handles):
                 raise ThreadMismatch()
-            return None
-        return [json.loads(line.strip()) for line in lines]
+            yield merge_stats(sums)
+
+    def _read_by_type(self, handles):
+        headers = []
+        periodic = []
+        sums = []
+        for handle in handles:
+            thread_periodic = []
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                record = json.loads(line)
+                record_type = record.get("type")
+                if record_type == "header":
+                    headers.append(record)
+                elif record_type == "stats_periodic":
+                    thread_periodic.append(record)
+                elif record_type == "stats_sum":
+                    sums.append(record)
+                else:
+                    raise UnexpectedType(record_type)
+            periodic.append(thread_periodic)
+        return headers, periodic, sums
 
 
 def main():
