@@ -297,12 +297,13 @@ struct _output_dnssim_connection {
      * closing the connection when clearing this flag. */
     bool prevent_close;
 
-    /* Set when stream congestion clears while inside a transport library
-     * callback: the query write path calls nghttp2_session_send() /
-     * ngtcp2_conn_writev_stream(), which must never be called from the
-     * respective library's callbacks. Consumed (and cleared) by the
-     * transport's input/timer processing once it is outside callback
-     * context. */
+    /* Set when queries in client->pending may have become sendable while
+     * inside a transport library callback -- stream congestion cleared or
+     * the connection activated: the query write path calls
+     * nghttp2_session_send() / ngtcp2_conn_writev_stream(), which must never
+     * be called from the respective library's callbacks. Consumed (and
+     * cleared) by the transport's input/timer processing once it is outside
+     * callback context. */
     bool resume_pending;
 };
 
@@ -411,7 +412,9 @@ void _output_dnssim_conn_move_query_to_pending(_output_dnssim_query_stream_t* qr
 void _output_dnssim_conn_move_queries_to_pending(_output_dnssim_query_stream_t** qry_list);
 int  _output_dnssim_handle_pending_queries(_output_dnssim_client_t* client);
 void _output_dnssim_conn_early_data(_output_dnssim_connection_t* conn);
+void _output_dnssim_conn_early_data_deferred(_output_dnssim_connection_t* conn);
 void _output_dnssim_conn_activate(_output_dnssim_connection_t* conn);
+void _output_dnssim_conn_activate_deferred(_output_dnssim_connection_t* conn);
 void _output_dnssim_conn_maybe_free(_output_dnssim_connection_t* conn);
 void _output_dnssim_read_dns_stream(_output_dnssim_connection_t* conn, size_t len, const char* data, int64_t stream_id);
 void _output_dnssim_read_dnsmsg(_output_dnssim_connection_t* conn, size_t len, const char* data);

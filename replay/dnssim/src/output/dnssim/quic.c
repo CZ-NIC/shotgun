@@ -57,6 +57,7 @@ static int quic_send_data(_output_dnssim_connection_t *conn,
 static uint64_t quic_timestamp(void);
 static void quic_update_expiry_timer(_output_dnssim_connection_t *conn);
 static void quic_check_max_streams(_output_dnssim_connection_t* conn);
+static void quic_consume_resume_pending(_output_dnssim_connection_t* conn);
 static void quic_store_0rtt(_output_dnssim_connection_t* conn);
 
 
@@ -91,15 +92,7 @@ static void udp_recv_cb(uv_udp_t* udp, ssize_t nread, const uv_buf_t* buf,
 end:
     quic_check_max_streams(conn);
     quic_update_expiry_timer(conn);
-
-    /* Outside ngtcp2 callback context, flush queries stranded by congestion
-     * that cleared during the processing above. Skip the flush when the
-     * connection is no longer usable (re-congested or closing). */
-    if (conn->resume_pending) {
-        conn->resume_pending = false;
-        if (conn->state == _OUTPUT_DNSSIM_CONN_ACTIVE)
-            _output_dnssim_handle_pending_queries(conn->client);
-    }
+    quic_consume_resume_pending(conn);
 
     if (buf)
         free(buf->base);
@@ -139,11 +132,7 @@ static void expiry_timer_cb(uv_timer_t *timer)
     if (ret && ret != 1)
         lwarning("could not send quic data in expiry timer: %s", ngtcp2_strerror(ret));
 
-    if (conn->resume_pending) {
-        conn->resume_pending = false;
-        if (conn->state == _OUTPUT_DNSSIM_CONN_ACTIVE)
-            _output_dnssim_handle_pending_queries(conn->client);
-    }
+    quic_consume_resume_pending(conn);
 }
 
 static void handshake_timer_cb(uv_timer_t* handle)
@@ -232,8 +221,9 @@ static int handshake_completed_cb(ngtcp2_conn *qconn, void *user_data)
     }
 
     if (conn->tls->has_ticket) {
-        // Send 1-RTT data (if 0-RTT was not already active)
-        _output_dnssim_conn_early_data(conn);
+        // Send 1-RTT data (if 0-RTT was not already active); deferred -
+        // we are inside an ngtcp2 callback
+        _output_dnssim_conn_early_data_deferred(conn);
     }
     quic_check_max_streams(conn);
     return 0;
@@ -251,7 +241,8 @@ static int handshake_confirmed_cb(ngtcp2_conn *qconn, void *user_data)
     conn->is_0rtt = false;
 
     quic_store_0rtt(conn);
-    _output_dnssim_conn_activate(conn);
+    /* Deferred - we are inside an ngtcp2 callback. */
+    _output_dnssim_conn_activate_deferred(conn);
     return 0;
 }
 
@@ -600,6 +591,33 @@ static void quic_check_max_streams(_output_dnssim_connection_t* conn)
         default:
             break;
         }
+    }
+}
+
+/** Consumes conn->resume_pending outside ngtcp2 callback context: flushes
+ * client->pending queries that became sendable during event processing
+ * (connection activated or congestion cleared). Skipped when the connection
+ * is not in a sendable state (still congested or closing). */
+static void quic_consume_resume_pending(_output_dnssim_connection_t* conn)
+{
+    if (!conn->resume_pending)
+        return;
+    conn->resume_pending = false;
+
+    switch (conn->state) {
+    case _OUTPUT_DNSSIM_CONN_ACTIVE:
+        _output_dnssim_handle_pending_queries(conn->client);
+        /* Deferred tail of _output_dnssim_conn_activate(); harmless no-op
+         * when the connection has queries in flight. Skipped if the flush
+         * closed or re-congested the connection. */
+        if (conn->state == _OUTPUT_DNSSIM_CONN_ACTIVE)
+            _output_dnssim_conn_idle(conn);
+        break;
+    case _OUTPUT_DNSSIM_CONN_EARLY_DATA:
+        _output_dnssim_handle_pending_queries(conn->client);
+        break;
+    default:
+        break;
     }
 }
 
