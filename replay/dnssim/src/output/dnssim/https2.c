@@ -118,8 +118,20 @@ static void _http2_check_max_streams(_output_dnssim_connection_t* conn)
         }
         break;
     case _OUTPUT_DNSSIM_CONN_CONGESTED:
-        if (conn->http2->open_streams < conn->http2->max_concurrent_streams)
+        if (conn->http2->open_streams < conn->http2->max_concurrent_streams) {
             conn->state = _OUTPUT_DNSSIM_CONN_ACTIVE;
+            /* Unlike _output_dnssim_conn_activate()/_conn_early_data(), this
+             * ACTIVE transition doesn't flush client->pending on its own --
+             * queries deferred by congestion would stay stranded until an
+             * unrelated later query for this client happens to trigger
+             * _output_dnssim_handle_pending_queries(). We can't call it here
+             * directly: this function runs from nghttp2 callbacks (e.g.
+             * on_stream_close), and the write path calls
+             * nghttp2_session_send(), which must never be called from nghttp2
+             * callbacks (submitting the requests alone would be legal).
+             * Defer to the end of _output_dnssim_https2_process_input_data(). */
+            conn->http2->resume_pending = true;
+        }
         break;
     default:
         break;
@@ -303,6 +315,15 @@ void _output_dnssim_https2_process_input_data(_output_dnssim_connection_t* conn,
         mlwarning("failed nghttp2_session_send: %s", nghttp2_strerror(ret));
         _output_dnssim_conn_close(conn);
         return;
+    }
+
+    /* The flush must be the last use of the nghttp2 session in this function:
+     * it can close the connection (e.g. on GOAWAY or TLS write failure),
+     * which frees the session. Running it after nghttp2_session_send() also
+     * catches a resume_pending set by a stream close during that send. */
+    if (conn->http2->resume_pending) {
+        conn->http2->resume_pending = false;
+        _output_dnssim_handle_pending_queries(conn->client);
     }
 }
 
