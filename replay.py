@@ -14,8 +14,6 @@ import subprocess
 import sys
 import json
 from typing import Any, Dict, List, Optional, Set
-from itertools import takewhile
-import numpy as np
 
 from jinja2 import Environment, FileSystemLoader
 import toml
