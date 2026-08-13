@@ -6,27 +6,10 @@ Not randomized: correctness depends on exact packet position. Query B
 (packet #129) targets period4, not period3, so periods 2-3 -- expected
 empty -- exist with margin before the process could shut down.
 
-No doh here (unlike test_e2e_{rcodes,latency,sigint}.py): dnsjit's pacing
-clock only re-checks every 128 packets *of the whole pcap*, not per period
--- period1 must therefore be exactly 128 packets for packet #129 to fall on
-a fresh recheck and get correctly delayed to period2's real time. But
-dnssim's http2 output assumes SETTINGS_MAX_CONCURRENT_STREAMS=100 until it
-reads an updated value from the server, and submits an entire pacing
-batch's queries in one synchronous burst without reading the socket in
-between (confirmed empirically) -- so a 128-query burst always hits that
-assumed 100-stream cap regardless of server speed, and dnssim never
-resumes the resulting congested streams on its own (connection.c's
-_send_pending_queries loop just exits when state flips to CONGESTED;
-nothing re-enters it until an unrelated *later* query for the same client
-triggers a fresh dispatch). Shrinking period1 below 128 packets to dodge
-the cap doesn't work either: packets past the shrunk period1 are then
-still within the *same* fixed 128-packet recheck window, so they dispatch
-instantly alongside period1 instead of waiting for period2's real
-timestamp, corrupting period attribution the same way (confirmed
-empirically: shrinking period1 to 90 packets caused period1 to absorb 128
-queries total instead of 90, because packets 91-128 rode along with it).
-The two constraints (exactly 128 packets for correct pacing, at most ~100
-for DoH to avoid congestion) are mutually exclusive for this test.
+doh included: period1's 128-query burst exceeds HTTP/2's default stream
+limit, but a query's period is fixed at dnssim packet dequeueing time
+regardless of when its response arrives, so the resulting delay doesn't
+corrupt attribution.
 """
 
 import pathlib
@@ -94,7 +77,7 @@ def _build_pcap(tmp_path) -> pathlib.Path:
     return pcap_path
 
 
-@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot"])
+@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot", "doh"])
 def test_replay_periods(protocol, tmp_path):
     pcap_path = _build_pcap(tmp_path)
 
