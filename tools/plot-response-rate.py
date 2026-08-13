@@ -20,6 +20,15 @@ import mplhlpr.styles
 import _plot_common as pc
 
 
+def rcode_type(value):
+    upper_value = value.upper()
+    if upper_value not in pc.RCODES:
+        raise argparse.ArgumentTypeError(
+            f"unsupported RCODE {value!r} (supported: {', '.join(sorted(pc.RCODES))})"
+        )
+    return upper_value
+
+
 def stat_field_rate(field):
     def inner(stats):
         if stats["queries"] == 0:
@@ -145,7 +154,7 @@ def main():
         "-r",
         "--rcode",
         nargs="*",
-        type=str,
+        type=rcode_type,
         help="RCODE(s) to plot in addition to answer rate",
     )
     parser.add_argument(
@@ -164,7 +173,7 @@ def main():
         "(a single spike will cause the RCODE to show)",
     )
     parser.add_argument(
-        "-s", "--sum-rcodes", nargs="*", type=str, help="Plot sum of RCODE(s)"
+        "-s", "--sum-rcodes", nargs="*", type=rcode_type, help="Plot sum of RCODE(s)"
     )
     args = parser.parse_args()
 
@@ -240,9 +249,6 @@ def process_file(json_path, json_color, args, ax):
             # single JSON - different color for each RCODE
             cur_rcode_colors = pc.RCODE_COLORS
         for rcode in draw_rcodes:
-            if rcode not in pc.RCODES:
-                logging.error("Unsupported RCODE: %s", rcode)
-                continue
 
             symbol = pc.RCODE_MARKERS.get(rcode, rcode)
             eval_func = rcode_rate(rcode)
