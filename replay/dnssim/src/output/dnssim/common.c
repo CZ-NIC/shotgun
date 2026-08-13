@@ -196,17 +196,6 @@ static void _close_query(_output_dnssim_query_t* qry)
     }
 }
 
-int _pick_latency_histogram_bucket(output_dnssim_t* dnssim, uint64_t latency)
-{
-    for (int i = 0; i < dnssim->latency_histogram.boundary_count; i++)
-    {
-        if (latency < dnssim->latency_histogram.boundaries[i]) {
-            return i;
-        }
-    }
-    return dnssim->latency_histogram.boundary_count;
-}
-
 void _output_dnssim_close_request(_output_dnssim_request_t* req)
 {
     if (req == NULL || req->state == _OUTPUT_DNSSIM_REQ_CLOSING)
@@ -229,7 +218,7 @@ void _output_dnssim_close_request(_output_dnssim_request_t* req)
         latency       = req->dnssim->timeout_ms;
     }
 
-    int latency_bucket_index = _pick_latency_histogram_bucket(req->dnssim, latency);
+    int latency_bucket_index = req->dnssim->latency_histogram.lut[latency];
     req->stats->latency_buckets[latency_bucket_index]++;
     req->dnssim->stats_sum->latency_buckets[latency_bucket_index]++;
 
