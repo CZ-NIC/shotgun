@@ -92,6 +92,15 @@ end:
     quic_check_max_streams(conn);
     quic_update_expiry_timer(conn);
 
+    /* Outside ngtcp2 callback context, flush queries stranded by congestion
+     * that cleared during the processing above. Skip the flush when the
+     * connection is no longer usable (re-congested or closing). */
+    if (conn->resume_pending) {
+        conn->resume_pending = false;
+        if (conn->state == _OUTPUT_DNSSIM_CONN_ACTIVE)
+            _output_dnssim_handle_pending_queries(conn->client);
+    }
+
     if (buf)
         free(buf->base);
 }
@@ -129,6 +138,12 @@ static void expiry_timer_cb(uv_timer_t *timer)
     ret = quic_send(conn, false);
     if (ret && ret != 1)
         lwarning("could not send quic data in expiry timer: %s", ngtcp2_strerror(ret));
+
+    if (conn->resume_pending) {
+        conn->resume_pending = false;
+        if (conn->state == _OUTPUT_DNSSIM_CONN_ACTIVE)
+            _output_dnssim_handle_pending_queries(conn->client);
+    }
 }
 
 static void handshake_timer_cb(uv_timer_t* handle)
@@ -565,6 +580,12 @@ static void quic_check_max_streams(_output_dnssim_connection_t* conn)
         if (conn->state == _OUTPUT_DNSSIM_CONN_CONGESTED) {
             linfo("congestion recovered");
             conn->state = _OUTPUT_DNSSIM_CONN_ACTIVE;
+            /* Same as HTTP/2: this transition typically happens inside ngtcp2
+             * callbacks (e.g. extend_max_local_streams_bidi), where the query
+             * write path must not be invoked since it calls
+             * ngtcp2_conn_writev_stream(). Defer flushing client->pending to
+             * the end of udp_recv_cb()/expiry_timer_cb(). */
+            conn->resume_pending = true;
         }
     } else {
         switch (conn->state) {

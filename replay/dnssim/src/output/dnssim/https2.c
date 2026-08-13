@@ -130,7 +130,7 @@ static void _http2_check_max_streams(_output_dnssim_connection_t* conn)
              * nghttp2_session_send(), which must never be called from nghttp2
              * callbacks (submitting the requests alone would be legal).
              * Defer to the end of _output_dnssim_https2_process_input_data(). */
-            conn->http2->resume_pending = true;
+            conn->resume_pending = true;
         }
         break;
     default:
@@ -321,8 +321,8 @@ void _output_dnssim_https2_process_input_data(_output_dnssim_connection_t* conn,
      * it can close the connection (e.g. on GOAWAY or TLS write failure),
      * which frees the session. Running it after nghttp2_session_send() also
      * catches a resume_pending set by a stream close during that send. */
-    if (conn->http2->resume_pending) {
-        conn->http2->resume_pending = false;
+    if (conn->resume_pending) {
+        conn->resume_pending = false;
         _output_dnssim_handle_pending_queries(conn->client);
     }
 }

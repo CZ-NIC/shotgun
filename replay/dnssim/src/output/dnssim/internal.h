@@ -176,13 +176,6 @@ typedef struct _output_dnssim_http2_ctx {
 
     /* Flag indicating whether we received the peer's initial SETTINGS frame. */
     bool remote_settings_received;
-
-    /* Set when congestion clears while inside an nghttp2 callback (e.g.
-     * on_stream_close): the query write path calls nghttp2_session_send(),
-     * which must never be called from nghttp2 callbacks. Consumed (and
-     * cleared) at the end of _output_dnssim_https2_process_input_data(),
-     * outside callback context. */
-    bool resume_pending;
 } _output_dnssim_http2_ctx_t;
 
 typedef struct _output_dnssim_quic_sent_payload _output_dnssim_quic_sent_payload_t;
@@ -303,6 +296,14 @@ struct _output_dnssim_connection {
      * to CLOSE_REQUESTED state and setter of this flag is responsible for
      * closing the connection when clearing this flag. */
     bool prevent_close;
+
+    /* Set when stream congestion clears while inside a transport library
+     * callback: the query write path calls nghttp2_session_send() /
+     * ngtcp2_conn_writev_stream(), which must never be called from the
+     * respective library's callbacks. Consumed (and cleared) by the
+     * transport's input/timer processing once it is outside callback
+     * context. */
+    bool resume_pending;
 };
 
 /*
