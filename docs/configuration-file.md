@@ -100,7 +100,7 @@ Only **one** of the following mutually exclusive options can be specified at a t
 
 - `latency_linear`: Defines a fixed step size (integer) in milliseconds for uniform linear buckets up to the timeout.
 - `latency_bucket_boundaries`: An explicit list of integers defining custom millisecond upper bounds for each histogram bucket.
-- `latency_geom_count`: Defines the number of boundaries spaced evenly on a log scale (a geometric progression) with.
+- `latency_geom_count`: Defines the number of boundaries spaced evenly on a geometric growth approximation scale.
 
 If neither option is specified, DNS Shotgun defaults to `latency_geom_count` with a value of 200.
 
@@ -115,7 +115,7 @@ latency_bucket_boundaries = [5, 10, 25, 50, 100, 250, 500, 1000]
 ```
 or
 ```toml
-# Example 3: Log spacing with 10 boundaries total
+# Example 3: Geometric growth like spacing with 10 boundaries total
 latency_geom_count = 10
 ```
 
