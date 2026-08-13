@@ -1,0 +1,10 @@
+# Test-only config for tests/test_e2e_rcodes.py.
+#
+# Section name DOH (not the built-in configs/doh.toml's DoH-GET/DoH-POST),
+# matching the protocol.upper() sender-name convention shared by udp/tcp/dot
+# in this test.
+[traffic]
+
+[traffic.DOH]
+protocol = "doh"
+http_method = "POST"

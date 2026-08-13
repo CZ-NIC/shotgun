@@ -39,7 +39,7 @@ from e2e_common import (  # noqa: E402
     get_stats_sum,
     merge_stats,
     read_records,
-    run_replay,
+    run_replay_for,
     run_server,
     seeded_rng,
 )
@@ -50,7 +50,7 @@ from e2e_common import (  # noqa: E402
 BUCKET_TARGETS = [50, 200, 450, 800, 1250, 1750, None]
 
 
-@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot"])
+@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot", "doh"])
 def test_replay_latency_buckets(protocol, tmp_path):
     rng = seeded_rng()
 
@@ -69,8 +69,8 @@ def test_replay_latency_buckets(protocol, tmp_path):
 
     outdir = tmp_path / "out"
     config = TESTS_DIR / f"latency_{protocol.lower()}.toml"
-    with run_server(protocol, tmp_path) as (port, dot_port):
-        run_replay(config, pcap_path, port, outdir, dot_port=dot_port)
+    with run_server(protocol, tmp_path) as (port, extra_port):
+        run_replay_for(protocol, config, pcap_path, port, extra_port, outdir)
 
     sender = protocol.upper()
     merged_path = merge_stats(outdir, sender, tmp_path)

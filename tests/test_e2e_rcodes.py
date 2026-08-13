@@ -26,7 +26,7 @@ from e2e_common import (  # noqa: E402
     get_stats_sum,
     merge_stats,
     read_records,
-    run_replay,
+    run_replay_for,
     run_server,
     seeded_rng,
 )
@@ -52,7 +52,7 @@ def _rcode_bucket_name(rcode: int) -> str:
     return dns.rcode.to_text(rcode) if rcode in STANDARD_RCODES else "OTHER"
 
 
-@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot"])
+@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot", "doh"])
 def test_replay_rcodes(protocol, tmp_path):
     rng = seeded_rng()
 
@@ -79,13 +79,16 @@ def test_replay_rcodes(protocol, tmp_path):
 
     pcap_path = build_pcap(qnames, tmp_path)
     # udp/tcp reuse replay.py's built-in default configs (bare protocol
-    # name); dot needs its own (see rcodes_dot.toml) since the built-in
-    # configs/dot.toml uses section name DoT, not DOT.
-    config = TESTS_DIR / "rcodes_dot.toml" if protocol == "dot" else protocol.lower()
+    # name); dot/doh need their own (see rcodes_dot.toml/rcodes_doh.toml)
+    # since the built-in configs use section names DoT/DoH-*, not DOT/DOH.
+    if protocol in ("dot", "doh"):
+        config = TESTS_DIR / f"rcodes_{protocol}.toml"
+    else:
+        config = protocol.lower()
 
     outdir = tmp_path / "out"
-    with run_server(protocol, tmp_path) as (port, dot_port):
-        run_replay(config, pcap_path, port, outdir, dot_port=dot_port)
+    with run_server(protocol, tmp_path) as (port, extra_port):
+        run_replay_for(protocol, config, pcap_path, port, extra_port, outdir)
 
     sender = protocol.upper()
     merged_path = merge_stats(outdir, sender, tmp_path)

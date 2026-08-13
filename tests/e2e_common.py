@@ -44,7 +44,7 @@ def build_pcap(qnames, tmp_path, spacing_us=1000):
     return pcap_path
 
 
-def replay_args(config, pcap_path, port, outdir, threads=4, dot_port=None):
+def replay_args(config, pcap_path, port, outdir, threads=4, dot_port=None, doh_port=None):
     args = [
         sys.executable,
         "replay.py",
@@ -64,12 +64,30 @@ def replay_args(config, pcap_path, port, outdir, threads=4, dot_port=None):
     ]
     if dot_port is not None:
         args += ["--dot-port", str(dot_port)]
+    if doh_port is not None:
+        args += ["--doh-port", str(doh_port)]
     return args
 
 
-def run_replay(config, pcap_path, port, outdir, threads=4, dot_port=None):
+def run_replay_for(protocol, config, pcap_path, port, extra_port, outdir, threads=4):
+    """
+    run_replay(), routing extra_port (as yielded by run_server()) to
+    --dot-port or --doh-port depending on protocol.
+    """
+    run_replay(
+        config,
+        pcap_path,
+        port,
+        outdir,
+        threads,
+        dot_port=extra_port if protocol == "dot" else None,
+        doh_port=extra_port if protocol == "doh" else None,
+    )
+
+
+def run_replay(config, pcap_path, port, outdir, threads=4, dot_port=None, doh_port=None):
     subprocess.run(
-        replay_args(config, pcap_path, port, outdir, threads, dot_port),
+        replay_args(config, pcap_path, port, outdir, threads, dot_port, doh_port),
         cwd=REPO_ROOT,
         check=True,
     )
@@ -78,13 +96,16 @@ def run_replay(config, pcap_path, port, outdir, threads=4, dot_port=None):
 @contextlib.contextmanager
 def run_server(protocol, tmp_path):
     """
-    ans.run_in_subprocess(), yielding (port, dot_port) -- dot_port is None
-    unless protocol == "dot", in which case a TLS listener with an ephemeral
-    cert is also set up (see tls_cert.py).
+    ans.run_in_subprocess(), yielding (port, extra_port) -- extra_port is
+    None unless protocol is "dot" or "doh", in which case a TLS/DoH listener
+    with an ephemeral cert is also set up (see tls_cert.py).
     """
     if protocol == "dot":
         with run_in_subprocess(cert_dir=tmp_path) as (port, dot_port):
             yield port, dot_port
+    elif protocol == "doh":
+        with run_in_subprocess(cert_dir=tmp_path, doh=True) as (port, doh_port):
+            yield port, doh_port
     else:
         with run_in_subprocess() as port:
             yield port, None
