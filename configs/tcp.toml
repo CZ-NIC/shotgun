@@ -5,7 +5,8 @@
 [traffic.TCP]
 protocol = "tcp"
 
-# Aggressive DNS-over-TCP clients that terminate connection as soon as queries are answered.
+# Aggressive DNS-over-TCP clients that close a connection as soon as it has
+# no outstanding queries.
 #[traffic.TCP-no_idle]
 #protocol = "tcp"
 #idle_timeout_s = 0
