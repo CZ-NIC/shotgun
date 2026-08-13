@@ -1,0 +1,23 @@
+# Test-only config for tests/test_e2e_conn_reuse.py's test_conn_recover_dot.
+#
+# idle_timeout_s high enough that client1's one connection survives the
+# whole test, with margin for scheduling jitter under a loaded machine.
+# handshake_timeout_s=1: short relative to blockN, so both connections
+# racing for the exhausted backlog=0 slot (asyncserver.py) fail -- unlike
+# plain TCP, a DoT connection isn't done at the TCP handshake; dnssim tracks
+# TCP+TLS handshake as one combined budget (single handshake_timer, started
+# at TCP connect, stopped only once ACTIVE -- see
+# replay/dnssim/src/output/dnssim/{tcp,connection}.c), and TLS bytes can't
+# be exchanged until the frozen server wakes up. So the backlog occupant
+# can't finish its TLS handshake before this budget expires either, and
+# both attempts are counted as handshakes_failed. timeout_s raised so a
+# query answered late (after a blockN pause) doesn't get counted as a
+# client-side timeout.
+[traffic]
+
+[traffic.DOT]
+protocol = "dot"
+idle_timeout_s = 8
+handshake_timeout_s = 1
+timeout_s = 9
+batch_size = 128

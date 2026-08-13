@@ -1,0 +1,9 @@
+# Test-only config for tests/test_e2e_conn_reuse.py.
+#
+# idle_timeout_s=10: a connection stays open for 10s after going idle, so
+# queries spaced well under that share a single connection.
+[traffic]
+
+[traffic.DOT]
+protocol = "dot"
+idle_timeout_s = 10
