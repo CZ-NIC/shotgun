@@ -61,6 +61,7 @@ typedef struct output_dnssim_latency_histogram output_dnssim_latency_histogram_t
 struct output_dnssim_latency_histogram {
     uint64_t boundary_count;
     uint64_t* boundaries;
+    uint16_t* lut;
 };
 
 typedef struct output_dnssim_stats output_dnssim_stats_t;

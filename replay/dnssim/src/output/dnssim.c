@@ -374,6 +374,17 @@ void output_dnssim_latency_bucket_boundaries(output_dnssim_t* self, int* arr, in
     for (int i = 0; i < n; i++) {
         self->latency_histogram.boundaries[i] = arr[i];
     }
+
+
+    int timeout = arr[n-1];
+    lfatal_oom(self->latency_histogram.lut = calloc(timeout + 1, sizeof(uint16_t)));
+    for (int i = 0, j = 0; i <= timeout; i++) {
+        while (j < n && i >= self->latency_histogram.boundaries[j]) {
+            j++;
+        }
+
+        self->latency_histogram.lut[i] = j;
+    }
 }
 
 static void handle_default_priority(const char** inout_priority,
