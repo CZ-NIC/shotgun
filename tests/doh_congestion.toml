@@ -1,0 +1,8 @@
+# Test-only config for tests/test_e2e_doh_congestion.py.
+[traffic]
+
+[traffic.DOH]
+protocol = "doh"
+http_method = "POST"
+timeout_s = 2
+latency_bucket_boundaries = [100, 2000]
