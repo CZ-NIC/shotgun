@@ -133,6 +133,36 @@ def bind_net_to_ips(bind_net: Optional[List[str]]) -> List[str]:
     return list(ips)
 
 
+def safe_geom_like_buckets(start: int, stop: int, num: int):
+    if start <= 0:
+        raise ValueError("start must be > 0 for log spacing")
+    if stop <= start:
+        raise ValueError("stop must be > start")
+
+    num = min(num, stop - start + 1)
+
+    buckets = [0] * num
+    cur = float(start)
+
+    # geometric growth approximation:
+    # stop = cur * ratio  ^ num
+    for i in range(num):
+        remaining = num - i
+        if remaining == 1:
+            val = stop
+        else:
+            ratio = (stop / cur) ** (1.0 / (remaining - 1))  # update ratio
+            val = int(round(cur))
+            if i > 0 and val <= buckets[i - 1]:  # guarantee no duplicates
+                val = buckets[i - 1] + 1
+            cur = val * ratio
+            buckets[i] = val
+            continue
+        buckets[i] = val
+
+    return buckets
+
+
 def make_latency_buckets(
     timeout: int,
     step: Optional[int] = None,
@@ -150,9 +180,9 @@ def make_latency_buckets(
     elif buckets is not None:
         result = list(buckets)
     elif geom_count is not None:
-        result = np.geomspace(start=1, stop=timeout, num=geom_count).tolist()
+        result = safe_geom_like_buckets(start=1, stop=timeout, num=geom_count)
     else:
-        result = np.geomspace(start=1, stop=timeout, num=200).tolist()
+        result = safe_geom_like_buckets(start=1, stop=timeout, num=200)
 
     if not result or result[-1] < timeout:
         result.append(timeout)
