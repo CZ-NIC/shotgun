@@ -17,6 +17,8 @@ from typing import Any, cast
 
 import abc
 import asyncio
+import base64
+import binascii
 import copy
 import enum
 import logging
@@ -24,6 +26,7 @@ import os
 import signal
 import ssl
 import sys
+import urllib.parse
 
 import dns.exception
 import dns.message
@@ -31,6 +34,11 @@ import dns.name
 import dns.rcode
 import dns.rdataclass
 import dns.rdatatype
+import h2.config
+import h2.connection
+import h2.events
+import h2.exceptions
+import h2.settings
 
 _UdpHandler = Callable[
     [bytes, tuple[str, int], asyncio.DatagramTransport], Coroutine[Any, Any, None]
@@ -83,6 +91,8 @@ class AsyncServer:
         tls_port: int | None = None,
         tls_certfile: str | None = None,
         tls_keyfile: str | None = None,
+        doh_port: int | None = None,
+        doh_handler: _TcpHandler | None = None,
     ) -> None:
         logging.basicConfig(
             format="%(asctime)s %(levelname)8s  %(message)s",
@@ -102,6 +112,8 @@ class AsyncServer:
         self._tls_port: int | None = tls_port
         self._tls_certfile: str | None = tls_certfile
         self._tls_keyfile: str | None = tls_keyfile
+        self._doh_port: int | None = doh_port
+        self._doh_handler: _TcpHandler | None = doh_handler
         self._work_done: asyncio.Future | None = None
 
     def run(self) -> None:
@@ -117,6 +129,7 @@ class AsyncServer:
         await self._listen_udp()
         await self._listen_tcp()
         await self._listen_tls()
+        await self._listen_doh()
         await self._work_done
 
     def _setup_exception_handler(self) -> None:
@@ -175,10 +188,30 @@ class AsyncServer:
                 backlog=0,
             )
 
+    async def _listen_doh(self) -> None:
+        if not self._doh_port:
+            return
+        assert self._doh_handler and self._tls_certfile and self._tls_keyfile
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(self._tls_certfile, self._tls_keyfile)
+        # DoH clients check for a negotiated "h2" ALPN protocol and abort if
+        # missing (dnssim's https2.c); DoT (_listen_tls above) needs no ALPN
+        # at all, hence the separate context/listener.
+        ctx.set_alpn_protocols(["h2"])
+        for ip_address in self._ip_addresses:
+            await asyncio.start_server(
+                self._doh_handler,
+                host=ip_address,
+                port=self._doh_port,
+                ssl=ctx,
+                backlog=0,
+            )
+
 
 class DnsProtocol(enum.Enum):
     UDP = enum.auto()
     TCP = enum.auto()
+    DOH = enum.auto()
 
 
 @dataclass(frozen=True)
@@ -445,6 +478,7 @@ class AsyncDnsServer(AsyncServer):
         tls_port: int | None = None,
         tls_certfile: str | None = None,
         tls_keyfile: str | None = None,
+        doh_port: int | None = None,
     ) -> None:
         super().__init__(
             self._handle_udp,
@@ -452,6 +486,8 @@ class AsyncDnsServer(AsyncServer):
             tls_port=tls_port,
             tls_certfile=tls_certfile,
             tls_keyfile=tls_keyfile,
+            doh_port=doh_port,
+            doh_handler=self._handle_doh,
         )
 
         self._response_handlers: list[ResponseHandler] = []
@@ -621,6 +657,164 @@ class AsyncDnsServer(AsyncServer):
                     task.cancel()
             writer.close()
 
+    async def _handle_doh(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        peer_info = writer.get_extra_info("peername")
+        peer = Peer(peer_info[0], peer_info[1])
+        socket_info = writer.get_extra_info("sockname")
+        socket = Peer(socket_info[0], socket_info[1])
+        logging.debug("Accepted DoH connection from %s", peer)
+
+        conn = h2.connection.H2Connection(config=h2.config.H2Configuration(client_side=False))
+        conn.initiate_connection()
+        # h2's default (100) is lower than a single dnsjit/dnssim pacing
+        # batch (128 -- see BATCH in test_e2e_*.py), which would otherwise
+        # refuse/stall queries pipelined past that limit on one connection.
+        conn.update_settings({h2.settings.SettingCodes.MAX_CONCURRENT_STREAMS: 100_000})
+        writer.write(conn.data_to_send())
+        await writer.drain()
+
+        request_headers: dict[int, dict[bytes, bytes]] = {}
+        request_data: dict[int, bytearray] = {}
+        pending_responses: set[asyncio.Task] = set()
+
+        try:
+            while True:
+                data = await reader.read(65535)
+                if not data:
+                    break
+                try:
+                    events = conn.receive_data(data)
+                except h2.exceptions.ProtocolError:
+                    break
+
+                for event in events:
+                    if isinstance(event, h2.events.RequestReceived):
+                        request_headers[event.stream_id] = dict(event.headers)
+                        request_data[event.stream_id] = bytearray()
+                    elif isinstance(event, h2.events.DataReceived):
+                        request_data[event.stream_id] += event.data
+                        conn.acknowledge_received_data(len(event.data), event.stream_id)
+                    elif isinstance(event, h2.events.StreamEnded):
+                        headers = request_headers.pop(event.stream_id, {})
+                        body = bytes(request_data.pop(event.stream_id, b""))
+                        wire = self._extract_doh_wire(headers, body)
+                        if wire is None:
+                            logging.error(
+                                "Invalid DoH request from %s (%r, %s)",
+                                peer,
+                                headers,
+                                body.hex(),
+                            )
+                            conn.reset_stream(event.stream_id)
+                            continue
+                        task = asyncio.create_task(
+                            self._send_doh_response(
+                                conn,
+                                writer,
+                                socket,
+                                peer,
+                                event.stream_id,
+                                wire,
+                                pending_responses,
+                            )
+                        )
+                        pending_responses.add(task)
+                        task.add_done_callback(pending_responses.discard)
+                    elif isinstance(event, h2.events.ConnectionTerminated):
+                        return
+
+                outbound = conn.data_to_send()
+                if outbound:
+                    writer.write(outbound)
+                    await writer.drain()
+        except _ConnectionTeardownRequested:
+            pass
+        except ConnectionResetError:
+            logging.error("DoH connection from %s reset by peer", peer)
+            return
+        finally:
+            for result in await asyncio.gather(
+                *pending_responses, return_exceptions=True
+            ):
+                if not isinstance(result, BaseException):
+                    continue
+                if isinstance(result, (asyncio.CancelledError, ConnectionError)):
+                    logging.debug(
+                        "Response to %s ended with %s", peer, type(result).__name__
+                    )
+                    continue
+                raise result
+
+        logging.debug("Closing DoH connection from %s", peer)
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except ConnectionError as exc:
+            logging.debug("DoH connection from %s closed with %r", peer, exc)
+
+    def _extract_doh_wire(
+        self, headers: dict[bytes, bytes], body: bytes
+    ) -> bytes | None:
+        """
+        Extract the DNS wire message from a DoH request, per RFC 8484: POST's
+        body is the message as-is; GET's is base64url(no padding)-encoded in
+        the "dns" query parameter.
+        """
+        method = headers.get(b":method")
+        if method == b"POST":
+            return body
+        if method == b"GET":
+            path = headers.get(b":path")
+            if not path:
+                return None
+            query = urllib.parse.urlsplit(path).query
+            dns_param = urllib.parse.parse_qs(query).get(b"dns")
+            if not dns_param:
+                return None
+            encoded = dns_param[0] + b"=" * (-len(dns_param[0]) % 4)
+            try:
+                return base64.urlsafe_b64decode(encoded)
+            except binascii.Error:
+                return None
+        return None
+
+    async def _send_doh_response(
+        self,
+        conn: h2.connection.H2Connection,
+        writer: asyncio.StreamWriter,
+        socket: Peer,
+        peer: Peer,
+        stream_id: int,
+        wire: bytes,
+        pending_responses: set[asyncio.Task],
+    ) -> None:
+        try:
+            responses = self._handle_query(wire, socket, peer, DnsProtocol.DOH)
+            async for response in responses:
+                logging.debug("Sending DoH response: %s", response.hex())
+                conn.send_headers(
+                    stream_id,
+                    [
+                        (":status", "200"),
+                        ("content-type", "application/dns-message"),
+                        ("content-length", str(len(response))),
+                    ],
+                )
+                conn.send_data(stream_id, response, end_stream=True)
+                writer.write(conn.data_to_send())
+                await writer.drain()
+        except _ConnectionTeardownRequested:
+            # Unlike CloseConnection on a plain TCP connection (one query,
+            # one connection), HTTP/2 multiplexes many streams per
+            # connection; CloseConnection tears down the whole thing, same
+            # as it does for TCP, cancelling any other in-flight streams.
+            for task in list(pending_responses):
+                if task is not asyncio.current_task():
+                    task.cancel()
+            writer.close()
+
     def _log_query(self, qctx: QueryContext) -> None:
         logging.info(
             "Received %s/%s/%s (ID=%d) query from %s on %s (%s)",
@@ -696,16 +890,19 @@ class AsyncDnsServer(AsyncServer):
     def _prepare_response_wire(
         self, qctx: QueryContext, response: dns.message.Message | bytes | None
     ) -> bytes | None:
-        def prepend_length_unless_udp(payload: bytes) -> bytes:
-            if qctx.protocol == DnsProtocol.UDP:
+        def add_framing(payload: bytes) -> bytes:
+            # UDP and DoH delimit messages at the transport level already
+            # (one datagram, one HTTP/2 DATA+END_STREAM); only TCP/DoT need
+            # the 2-octet length prefix.
+            if qctx.protocol in (DnsProtocol.UDP, DnsProtocol.DOH):
                 return payload
             return len(payload).to_bytes(2, byteorder="big") + payload
 
         match response:
             case bytes() as payload:
-                return prepend_length_unless_udp(payload)
+                return add_framing(payload)
             case dns.message.Message():
-                return prepend_length_unless_udp(response.to_wire(max_size=65535))
+                return add_framing(response.to_wire(max_size=65535))
             case _:
                 return None
 

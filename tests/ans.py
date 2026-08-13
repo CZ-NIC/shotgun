@@ -201,10 +201,12 @@ class UnrecognizedQueryHandler(ResponseHandler):
 
 def make_server() -> AsyncDnsServer:
     tls_port = os.environ.get("TLS_PORT")
+    doh_port = os.environ.get("DOH_PORT")
     server = AsyncDnsServer(
         tls_port=int(tls_port) if tls_port else None,
         tls_certfile=os.environ.get("TLS_CERTFILE"),
         tls_keyfile=os.environ.get("TLS_KEYFILE"),
+        doh_port=int(doh_port) if doh_port else None,
     )
     server.install_response_handler(QnameInstructionHandler())
     server.install_response_handler(UnrecognizedQueryHandler())
@@ -240,7 +242,9 @@ def _wait_for_tcp_port(port: int, timeout: float) -> None:
 
 
 @contextlib.contextmanager
-def run_in_subprocess(timeout: float = 5.0, cert_dir: pathlib.Path | None = None):
+def run_in_subprocess(
+    timeout: float = 5.0, cert_dir: pathlib.Path | None = None, doh: bool = False
+):
     """
     Launch this module as a subprocess on a free port, wait until it accepts
     TCP, yield the port. Out-of-process: AsyncServer.run() installs signal
@@ -248,24 +252,35 @@ def run_in_subprocess(timeout: float = 5.0, cert_dir: pathlib.Path | None = None
 
     With cert_dir given, also sets up a DoT listener on a second free port
     with an ephemeral cert (see tls_cert.py) generated into cert_dir, and
-    yields (port, tls_port) instead.
+    yields (port, tls_port) instead. With doh=True (requires cert_dir) a
+    third free port gets a DoH listener (same cert) instead of DoT, yielding
+    (port, doh_port).
     """
     tls_port: int | None = None
+    doh_port: int | None = None
     env = os.environ.copy()
 
     if cert_dir is not None:
-        port, tls_port = _free_ports(2)
+        if doh:
+            port, tls_port, doh_port = _free_ports(3)
+        else:
+            port, tls_port = _free_ports(2)
         cert, key = generate_cert(cert_dir)
-        env["TLS_PORT"] = str(tls_port)
         env["TLS_CERTFILE"] = str(cert)
         env["TLS_KEYFILE"] = str(key)
+        env["TLS_PORT"] = str(tls_port)
+        if doh:
+            env["DOH_PORT"] = str(doh_port)
     else:
         port = _free_port()
 
     proc = subprocess.Popen([sys.executable, __file__, str(port)], env=env)
     try:
         _wait_for_tcp_port(port, timeout)
-        if tls_port is not None:
+        if doh_port is not None:
+            _wait_for_tcp_port(doh_port, timeout)
+            yield port, doh_port
+        elif tls_port is not None:
             _wait_for_tcp_port(tls_port, timeout)
             yield port, tls_port
         else:
