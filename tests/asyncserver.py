@@ -28,6 +28,8 @@ import ssl
 import sys
 import urllib.parse
 
+import aioquic.asyncio
+import aioquic.quic.configuration
 import dns.exception
 import dns.message
 import dns.name
@@ -76,6 +78,57 @@ class _AsyncUdpHandler(asyncio.DatagramProtocol):
         asyncio.create_task(self._handler(data, addr, self._transport))
 
 
+_DOQ_ALPN = "doq"
+
+# Same value as aioquic's own default, spelled out because the effective idle
+# timeout is min(server, client) and dnssim sets its side from idle_timeout_s.
+_DOQ_IDLE_TIMEOUT = 60.0
+
+
+class _DoqConnectionProtocol(aioquic.asyncio.QuicConnectionProtocol):
+    """
+    QUIC connection exposing its endpoints and its in-flight stream tasks.
+
+    aioquic's per-stream writers answer only get_extra_info("stream_id"), and
+    no coroutine owns the connection as a whole, so the addresses and the task
+    set live here; stream handlers reach them via writer.transport.protocol.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.peer: Peer | None = None
+        self.socket: Peer | None = None
+        self.pending_responses: set[asyncio.Task] = set()
+        self.unfinished_streams: set[asyncio.StreamWriter] = set()
+        # dnssim stops sending once it has opened as many streams as the
+        # server allows (quic.c's quic_check_max_streams) and waits for a
+        # MAX_STREAMS update. aioquic's initial budget of 128 is exactly one
+        # dnsjit pacing batch, and the updates it raises on its own arrive too
+        # late for a loaded server, stranding the rest of the queries until
+        # they time out. Announced up front instead, like the DoH listener's
+        # MAX_CONCURRENT_STREAMS. No public API for it.
+        limit = self._quic._local_max_streams_bidi  # pylint: disable=protected-access
+        limit.value = limit.sent = 100_000
+
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        super().connection_made(transport)
+        socket_info = transport.get_extra_info("sockname")
+        self.socket = Peer(socket_info[0], socket_info[1])
+
+    def datagram_received(self, data: bytes, addr: tuple) -> None:
+        if self.peer is None:
+            self.peer = Peer(addr[0], addr[1])
+        super().datagram_received(data, addr)
+
+
+def _doq_connection(writer: asyncio.StreamWriter) -> _DoqConnectionProtocol:
+    """
+    The connection a DoQ stream belongs to. Its writer's transport is aioquic's
+    QuicStreamAdapter, which holds the connection but isn't typed as doing so.
+    """
+    return cast(_DoqConnectionProtocol, cast(Any, writer.transport).protocol)
+
+
 class AsyncServer:
     """
     A generic asynchronous server which may handle UDP and/or TCP traffic.
@@ -93,6 +146,8 @@ class AsyncServer:
         tls_keyfile: str | None = None,
         doh_port: int | None = None,
         doh_handler: _TcpHandler | None = None,
+        doq_port: int | None = None,
+        doq_handler: _TcpHandler | None = None,
     ) -> None:
         logging.basicConfig(
             format="%(asctime)s %(levelname)8s  %(message)s",
@@ -114,6 +169,8 @@ class AsyncServer:
         self._tls_keyfile: str | None = tls_keyfile
         self._doh_port: int | None = doh_port
         self._doh_handler: _TcpHandler | None = doh_handler
+        self._doq_port: int | None = doq_port
+        self._doq_handler: _TcpHandler | None = doq_handler
         self._work_done: asyncio.Future | None = None
 
     def run(self) -> None:
@@ -127,6 +184,10 @@ class AsyncServer:
         self._setup_signals()
         assert self._work_done
         await self._listen_udp()
+        # Before _listen_tcp(): a DoQ listener is UDP-only, so tests can't
+        # probe it by connecting; binding it first makes "the plain TCP port
+        # accepts" imply the QUIC socket is bound too.
+        await self._listen_doq()
         await self._listen_tcp()
         await self._listen_tls()
         await self._listen_doh()
@@ -207,11 +268,59 @@ class AsyncServer:
                 backlog=0,
             )
 
+    async def _listen_doq(self) -> None:
+        if not self._doq_port:
+            return
+        assert self._doq_handler and self._tls_certfile and self._tls_keyfile
+        config = aioquic.quic.configuration.QuicConfiguration(
+            is_client=False,
+            alpn_protocols=[_DOQ_ALPN],
+            idle_timeout=_DOQ_IDLE_TIMEOUT,
+        )
+        config.load_cert_chain(self._tls_certfile, self._tls_keyfile)
+        for ip_address in self._ip_addresses:
+            await aioquic.asyncio.serve(
+                ip_address,
+                self._doq_port,
+                configuration=config,
+                create_protocol=_DoqConnectionProtocol,
+                stream_handler=self._start_doq_stream,
+            )
+
+    def _start_doq_stream(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        assert self._doq_handler
+        # aioquic calls this back synchronously and nothing awaits the
+        # resulting coroutine, so the task is kept on the connection: that
+        # prevents garbage collection while pending and lets a handler tear
+        # down sibling streams. Failures are reported by hand because there is
+        # no await to raise them, unlike the TCP/DoH handlers.
+        protocol = _doq_connection(writer)
+        task = asyncio.create_task(self._doq_handler(reader, writer))
+        protocol.pending_responses.add(task)
+        task.add_done_callback(protocol.pending_responses.discard)
+        task.add_done_callback(self._report_doq_stream_result)
+
+    def _report_doq_stream_result(self, task: asyncio.Task) -> None:
+        if task.cancelled():
+            return
+        exception = task.exception()
+        if exception is None or isinstance(exception, ConnectionError):
+            return
+        asyncio.get_running_loop().call_exception_handler(
+            {
+                "message": "Unhandled exception in DoQ stream handler",
+                "exception": exception,
+            }
+        )
+
 
 class DnsProtocol(enum.Enum):
     UDP = enum.auto()
     TCP = enum.auto()
     DOH = enum.auto()
+    DOQ = enum.auto()
 
 
 @dataclass(frozen=True)
@@ -479,6 +588,7 @@ class AsyncDnsServer(AsyncServer):
         tls_certfile: str | None = None,
         tls_keyfile: str | None = None,
         doh_port: int | None = None,
+        doq_port: int | None = None,
     ) -> None:
         super().__init__(
             self._handle_udp,
@@ -488,6 +598,8 @@ class AsyncDnsServer(AsyncServer):
             tls_keyfile=tls_keyfile,
             doh_port=doh_port,
             doh_handler=self._handle_doh,
+            doq_port=doq_port,
+            doq_handler=self._handle_doq,
         )
 
         self._response_handlers: list[ResponseHandler] = []
@@ -814,6 +926,51 @@ class AsyncDnsServer(AsyncServer):
                 if task is not asyncio.current_task():
                     task.cancel()
             writer.close()
+
+    async def _handle_doq(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        protocol = _doq_connection(writer)
+        assert protocol.peer and protocol.socket
+        peer, socket = protocol.peer, protocol.socket
+        stream_id = writer.get_extra_info("stream_id")
+        logging.debug("Accepted DoQ stream %s from %s", stream_id, peer)
+
+        # One query per stream (RFC 9250), so there is no read loop here; the
+        # 2-octet length prefix is the same as TCP's, hence the shared reader.
+        wire = await self._read_tcp_query(reader, peer)
+        if not wire:
+            return
+
+        sent = False
+        try:
+            responses = self._handle_query(wire, socket, peer, DnsProtocol.DOQ)
+            async for response in responses:
+                logging.debug("Sending DoQ response: %s", response.hex())
+                writer.write(response)
+                sent = True
+        except _ConnectionTeardownRequested:
+            # writer.close() would only FIN this stream, so tear the whole
+            # connection down explicitly, cancelling the other streams on it -
+            # same semantics CloseConnection has for TCP and DoH.
+            for task in list(protocol.pending_responses):
+                if task is not asyncio.current_task():
+                    task.cancel()
+            protocol.close()
+            return
+
+        # dnssim buffers stream data and parses it only once the stream is
+        # FINed, so an unfinished stream reads as a lost query. A dropped
+        # response must stay unfinished for that very reason: FINing an empty
+        # stream makes dnssim close the request right away (its
+        # recv_stream_data_cb warns and gives up), instead of letting it time
+        # out the way a dropped response does on every other transport.
+        # Keeping the writer referenced is what keeps the stream open -
+        # StreamWriter.__del__ closes it, which on a QUIC stream is a FIN.
+        if sent:
+            writer.write_eof()
+        else:
+            protocol.unfinished_streams.add(writer)
 
     def _log_query(self, qctx: QueryContext) -> None:
         logging.info(
