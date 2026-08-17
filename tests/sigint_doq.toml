@@ -8,3 +8,6 @@
 [traffic.DOQ]
 protocol = "doq"
 timeout_s = 1
+# >= the test's QPS, so one second's burst of queries is dequeued in one
+# chunk and cannot be split across two stats periods.
+batch_size = 128

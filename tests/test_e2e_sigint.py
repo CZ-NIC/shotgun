@@ -31,10 +31,33 @@ from tcpdns2pcap import pcap_global_header, write_packet_record  # noqa: E402
 
 QPS = 128
 DURATION_S = 5
-# sigint_{udp,tcp}.toml: timeout_s=1, so period1 (ends 1s) is write-eligible
-# at 2s and period2 (ends 2s) at 3s; period3 (ends 3s) needs 4s. 3.5s gives
-# ~0.5s margin past period2's threshold and before period3's.
-SIGINT_AFTER_S = 3.5
+EXPECTED_PERIODS = 2
+# Ceiling for waiting until EXPECTED_PERIODS periods have been flushed, not
+# a target: sigint_*.toml sets timeout_s=1, so period1 (ends 1s) becomes
+# write-eligible at 2s and period2 at 3s (dnssim.c _on_stats_timer_tick),
+# but the run's clock starts whenever dnsjit finishes setting up. Waiting
+# for the records themselves rather than for a fixed moment keeps the
+# interrupt inside period3's window however long that takes. Generous
+# because it costs nothing when the run is healthy, and a machine loaded
+# enough to need it has already made the wait unpredictable.
+SIGINT_TIMEOUT_S = 30
+
+
+# Each second's queries are packed into a sub-millisecond burst rather than
+# spread across the second, which makes a burst indivisible: dnsjit hands it
+# over in one go and dnssim dequeues it in one chunk (batch_size >= QPS, see
+# sigint_*.toml), and the stats timer only fires between dequeues. A period
+# therefore holds whole bursts.
+#
+# Which period a burst lands in is not controllable from here. dnsjit's
+# filter.timing:realtime() only consults the clock every 128 packets and
+# sleeps until that packet's timestamp, so the packets following an anchor
+# are handed over with no pacing at all -- a burst can be released up to a
+# second early. Spread-out queries made this worse, splitting a second's
+# queries across two periods in batch_size chunks (periods of 160 or 192);
+# with bursts, a period holds one or two whole bursts.
+QUERY_BURST_START_US = 100_000
+QUERY_BURST_SPACING_US = 1
 
 
 def _build_pcap(tmp_path) -> pathlib.Path:
@@ -46,13 +69,46 @@ def _build_pcap(tmp_path) -> pathlib.Path:
             for i in range(QPS):
                 q = dns.message.make_query("rcode0.test.", "A")
                 q.id = qid
-                write_packet_record(f, q.to_wire(), sec, i * (1_000_000 // QPS))
+                usec = QUERY_BURST_START_US + i * QUERY_BURST_SPACING_US
+                write_packet_record(f, q.to_wire(), sec, usec)
                 qid += 1
     return pcap_path
 
 
+def _thread_jsons(outdir, sender):
+    data_dir = outdir / "data" / sender
+    if not data_dir.is_dir():
+        return []
+    return sorted(data_dir.glob(f"{sender}-*.json"))
+
+
+def _wait_for_flushed_periods(outdir, sender, threads=3):
+    """
+    Block until every thread has flushed EXPECTED_PERIODS periods, so the
+    interrupt lands after those records are on disk and before the next one
+    is due. Returns as soon as the condition holds, leaving most of a period
+    (the stats interval, 1s) before another record could appear.
+    """
+    deadline = time.monotonic() + SIGINT_TIMEOUT_S
+    while time.monotonic() < deadline:
+        paths = _thread_jsons(outdir, sender)
+        if len(paths) == threads:
+            flushed = [
+                sum(
+                    1
+                    for line in path.read_text().splitlines()
+                    if json.loads(line)["type"] == "stats_periodic"
+                )
+                for path in paths
+            ]
+            if all(count >= EXPECTED_PERIODS for count in flushed):
+                return
+        time.sleep(0.05)
+    raise TimeoutError(f"{sender}: {EXPECTED_PERIODS} periods were never flushed")
+
+
 def _run_replay_and_interrupt(
-    config, pcap_path, port, outdir, dot_port=None, doh_port=None, doq_port=None
+    config, pcap_path, port, outdir, sender, dot_port=None, doh_port=None, doq_port=None
 ):
     # start_new_session so SIGINT hits replay.py + dnsjit child, like a real
     # terminal Ctrl+C would (both are in the foreground process group).
@@ -69,9 +125,14 @@ def _run_replay_and_interrupt(
         cwd=REPO_ROOT,
         start_new_session=True,
     )
-    time.sleep(SIGINT_AFTER_S)
-    os.killpg(os.getpgid(proc.pid), signal.SIGINT)
-    proc.wait(timeout=10)
+    try:
+        _wait_for_flushed_periods(outdir, sender)
+    finally:
+        # Even when the wait gives up: start_new_session put the run in its
+        # own process group, so nothing else will reap it, and a replay left
+        # running competes with whatever runs next.
+        os.killpg(os.getpgid(proc.pid), signal.SIGINT)
+        proc.wait(timeout=10)
     return proc.returncode
 
 
@@ -80,6 +141,7 @@ def test_sigint_partial_results(protocol, tmp_path):
     pcap_path = _build_pcap(tmp_path)
     config = TESTS_DIR / f"sigint_{protocol}.toml"
     outdir = tmp_path / "out"
+    sender = protocol.upper()
 
     with run_server(protocol, tmp_path) as (port, extra_port):
         returncode = _run_replay_and_interrupt(
@@ -87,6 +149,7 @@ def test_sigint_partial_results(protocol, tmp_path):
             pcap_path,
             port,
             outdir,
+            sender,
             dot_port=extra_port if protocol == "dot" else None,
             doh_port=extra_port if protocol == "doh" else None,
             doq_port=extra_port if protocol == "doq" else None,
@@ -94,8 +157,7 @@ def test_sigint_partial_results(protocol, tmp_path):
 
     assert returncode != 0  # killed, not a clean exit
 
-    sender = protocol.upper()
-    thread_jsons = sorted((outdir / "data" / sender).glob(f"{sender}-*.json"))
+    thread_jsons = _thread_jsons(outdir, sender)
     assert thread_jsons
 
     for p in thread_jsons:
@@ -117,12 +179,20 @@ def test_sigint_partial_results(protocol, tmp_path):
     records = read_records(merged_path)
     periodic = [r for r in records if r["type"] == "stats_periodic"]
     summed = [r for r in records if r["type"] == "stats_sum"]
-    assert len(periodic) == 2  # period1, period2 write-eligible; period3 not yet
+    assert len(periodic) == EXPECTED_PERIODS  # what the interrupt waited for
     assert summed == []  # close_file() never reached on abrupt kill
 
+    # Whole bursts only, and every query in them accounted for. The exact
+    # count per period is deliberately not asserted: which period a burst
+    # lands in depends on dnsjit's 128-packet pacing granularity (see
+    # QUERY_BURST_START_US above), so a period holds one or two bursts. What
+    # a flushed record must never be is internally inconsistent - a partial
+    # burst, or queries whose responses went missing.
+    assert sum(p["queries"] for p in periodic) >= QPS
     for period in periodic:
-        assert period["queries"] == QPS
-        assert period["responses"] == QPS
+        assert period["queries"] % QPS == 0
+        assert period["responses"] == period["queries"]
         assert period["timeouts"] == 0
         assert period["discarded"] == 0
-        assert period["response_rcodes"] == {"NOERROR": QPS}
+        expected_rcodes = {"NOERROR": period["queries"]} if period["queries"] else {}
+        assert period["response_rcodes"] == expected_rcodes
