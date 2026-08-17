@@ -31,12 +31,14 @@ from e2e_common import (  # noqa: E402
     merge_stats,
     read_records,
     run_replay,
+    run_replay_for,
     run_server,
 )
 from tcpdns2pcap import pcap_global_header, write_packet_record  # noqa: E402
 
 # dnssim's conn_info.type per protocol (dnssim.c:_output_dnssim_write_transport).
-CONN_TYPE = {"tcp": "tcp", "dot": "tls_conn"}
+# doh (HTTPS2) reports "tls_conn", same as dot.
+CONN_TYPE = {"tcp": "tcp", "dot": "tls_conn", "doh": "tls_conn"}
 
 BATCH = 128  # dnsjit's filter.timing:realtime() batch size
 NUM_QUERIES = 2 * BATCH
@@ -66,7 +68,7 @@ def _build_pcap(tmp_path) -> pathlib.Path:
     return pcap_path
 
 
-@pytest.mark.parametrize("protocol", ["tcp", "dot"])
+@pytest.mark.parametrize("protocol", ["tcp", "dot", "doh"])
 def test_conn_reuse_idle0_single_query(protocol, tmp_path):
     # Baseline: one query, one connection, closed right after -- no batch
     # trick needed since there's nothing to pipeline with or reuse against.
@@ -79,8 +81,8 @@ def test_conn_reuse_idle0_single_query(protocol, tmp_path):
     config = TESTS_DIR / f"conn_reuse_idle0_{protocol}.toml"
 
     outdir = tmp_path / "out"
-    with run_server(protocol, tmp_path) as (port, dot_port):
-        run_replay(config, pcap_path, port, outdir, dot_port=dot_port)
+    with run_server(protocol, tmp_path) as (port, extra_port):
+        run_replay_for(protocol, config, pcap_path, port, extra_port, outdir)
 
     sender = protocol.upper()
     merged_path = merge_stats(outdir, sender, tmp_path)
@@ -96,14 +98,14 @@ def test_conn_reuse_idle0_single_query(protocol, tmp_path):
     assert stats_sum["conn_active"] == 0  # closed once idle, before run ended
 
 
-@pytest.mark.parametrize("protocol", ["tcp", "dot"])
+@pytest.mark.parametrize("protocol", ["tcp", "dot", "doh"])
 def test_conn_reuse_idle0(protocol, tmp_path):
     pcap_path = _build_pcap(tmp_path)
     config = TESTS_DIR / f"conn_reuse_idle0_{protocol}.toml"
 
     outdir = tmp_path / "out"
-    with run_server(protocol, tmp_path) as (port, dot_port):
-        run_replay(config, pcap_path, port, outdir, dot_port=dot_port)
+    with run_server(protocol, tmp_path) as (port, extra_port):
+        run_replay_for(protocol, config, pcap_path, port, extra_port, outdir)
 
     sender = protocol.upper()
     merged_path = merge_stats(outdir, sender, tmp_path)
@@ -120,7 +122,7 @@ def test_conn_reuse_idle0(protocol, tmp_path):
     assert stats_sum["conn_info"]["handshakes_failed"] == 0
 
 
-@pytest.mark.parametrize("protocol", ["tcp", "dot"])
+@pytest.mark.parametrize("protocol", ["tcp", "dot", "doh"])
 def test_conn_reuse_idle0_handshake_failed(protocol, tmp_path):
     # 4 isolated (idle_timeout_s=0) connections, 2s apart: batch1, batch2
     # succeed. batch3 (all "terminate") completes its handshake, then kills
@@ -151,8 +153,8 @@ def test_conn_reuse_idle0_handshake_failed(protocol, tmp_path):
     config = TESTS_DIR / f"conn_reuse_idle0_{protocol}.toml"
 
     outdir = tmp_path / "out"
-    with run_server(protocol, tmp_path) as (port, dot_port):
-        run_replay(config, pcap_path, port, outdir, dot_port=dot_port)
+    with run_server(protocol, tmp_path) as (port, extra_port):
+        run_replay_for(protocol, config, pcap_path, port, extra_port, outdir)
 
     sender = protocol.upper()
     merged_path = merge_stats(outdir, sender, tmp_path)
@@ -291,14 +293,14 @@ def test_conn_recover_dot(tmp_path):
     assert stats_sum["conn_active"] == 0
 
 
-@pytest.mark.parametrize("protocol", ["tcp", "dot"])
+@pytest.mark.parametrize("protocol", ["tcp", "dot", "doh"])
 def test_conn_reuse_idle10(protocol, tmp_path):
     pcap_path = _build_pcap(tmp_path)
     config = TESTS_DIR / f"conn_reuse_idle10_{protocol}.toml"
 
     outdir = tmp_path / "out"
-    with run_server(protocol, tmp_path) as (port, dot_port):
-        run_replay(config, pcap_path, port, outdir, dot_port=dot_port)
+    with run_server(protocol, tmp_path) as (port, extra_port):
+        run_replay_for(protocol, config, pcap_path, port, extra_port, outdir)
 
     sender = protocol.upper()
     merged_path = merge_stats(outdir, sender, tmp_path)

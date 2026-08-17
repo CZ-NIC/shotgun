@@ -1,0 +1,17 @@
+# Test-only config for tests/test_e2e_conn_reuse.py.
+#
+# idle_timeout_s=0: closes a connection once it has no outstanding
+# (queued/in-flight) queries -- not "one query per connection"; a query sent
+# while a prior one on the same conn is still in flight still pipelines onto
+# it (connection.c's dispatch reuses any ACTIVE conn regardless of this
+# setting).
+[traffic]
+
+[traffic.DOH]
+protocol = "doh"
+idle_timeout_s = 0
+# Default batch_size=32 calls run_nowait() every 32 queries; a failing conn
+# goes CLOSED by the next call and gets retried, multiplying one 128-query
+# group's connect attempts by 128/32. 128 matches dnsjit's pacing batch, so
+# a group is dispatched (and, if failing, attempted) as one chunk.
+batch_size = 128
