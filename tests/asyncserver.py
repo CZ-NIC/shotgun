@@ -30,6 +30,7 @@ import urllib.parse
 
 import aioquic.asyncio
 import aioquic.quic.configuration
+import aioquic.tls
 import dns.exception
 import dns.message
 import dns.name
@@ -119,6 +120,26 @@ class _DoqConnectionProtocol(aioquic.asyncio.QuicConnectionProtocol):
         if self.peer is None:
             self.peer = Peer(addr[0], addr[1])
         super().datagram_received(data, addr)
+
+
+class _SessionTicketStore:
+    """
+    TLS session tickets issued to DoQ clients.
+
+    Without a store, aioquic issues no tickets at all, so clients can never
+    resume a session - and QUIC 0-RTT, which needs a resumed session, never
+    happens either. Tickets are single-use; a resuming connection is issued a
+    fresh one.
+    """
+
+    def __init__(self) -> None:
+        self._tickets: dict[bytes, aioquic.tls.SessionTicket] = {}
+
+    def add(self, ticket: aioquic.tls.SessionTicket) -> None:
+        self._tickets[ticket.ticket] = ticket
+
+    def pop(self, label: bytes) -> aioquic.tls.SessionTicket | None:
+        return self._tickets.pop(label, None)
 
 
 def _doq_connection(writer: asyncio.StreamWriter) -> _DoqConnectionProtocol:
@@ -278,6 +299,9 @@ class AsyncServer:
             idle_timeout=_DOQ_IDLE_TIMEOUT,
         )
         config.load_cert_chain(self._tls_certfile, self._tls_keyfile)
+        # aioquic advertises early data on its own once tickets are issued,
+        # so a store is all 0-RTT needs on this side.
+        tickets = _SessionTicketStore()
         for ip_address in self._ip_addresses:
             await aioquic.asyncio.serve(
                 ip_address,
@@ -285,6 +309,8 @@ class AsyncServer:
                 configuration=config,
                 create_protocol=_DoqConnectionProtocol,
                 stream_handler=self._start_doq_stream,
+                session_ticket_fetcher=tickets.pop,
+                session_ticket_handler=tickets.add,
             )
 
     def _start_doq_stream(
