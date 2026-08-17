@@ -50,7 +50,7 @@ from e2e_common import (  # noqa: E402
 BUCKET_TARGETS = [50, 200, 450, 800, 1250, 1750, None]
 
 
-@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot", "doh"])
+@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot", "doh", "doq"])
 def test_replay_latency_buckets(protocol, tmp_path):
     rng = seeded_rng()
 

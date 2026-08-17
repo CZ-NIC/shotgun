@@ -1,0 +1,10 @@
+# Test-only config for tests/test_e2e_sigint.py.
+#
+# timeout_s must be an int (replay.py's make_latency_buckets uses it as a
+# range() step). A period is write-eligible only at period_end + timeout_s
+# (dnssim.c _on_stats_timer_tick), so this bounds how long that takes.
+[traffic]
+
+[traffic.DOQ]
+protocol = "doq"
+timeout_s = 1

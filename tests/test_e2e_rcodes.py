@@ -52,7 +52,7 @@ def _rcode_bucket_name(rcode: int) -> str:
     return dns.rcode.to_text(rcode) if rcode in STANDARD_RCODES else "OTHER"
 
 
-@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot", "doh"])
+@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot", "doh", "doq"])
 def test_replay_rcodes(protocol, tmp_path):
     rng = seeded_rng()
 
@@ -79,9 +79,9 @@ def test_replay_rcodes(protocol, tmp_path):
 
     pcap_path = build_pcap(qnames, tmp_path)
     # udp/tcp reuse replay.py's built-in default configs (bare protocol
-    # name); dot/doh need their own (see rcodes_dot.toml/rcodes_doh.toml)
-    # since the built-in configs use section names DoT/DoH-*, not DOT/DOH.
-    if protocol in ("dot", "doh"):
+    # name); dot/doh/doq need their own (see rcodes_dot.toml etc.) since the
+    # built-in configs use section names DoT/DoH-*/DoQ, not DOT/DOH/DOQ.
+    if protocol in ("dot", "doh", "doq"):
         config = TESTS_DIR / f"rcodes_{protocol}.toml"
     else:
         config = protocol.lower()

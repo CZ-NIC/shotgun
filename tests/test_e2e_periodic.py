@@ -77,7 +77,7 @@ def _build_pcap(tmp_path) -> pathlib.Path:
     return pcap_path
 
 
-@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot", "doh"])
+@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot", "doh", "doq"])
 def test_replay_periods(protocol, tmp_path):
     pcap_path = _build_pcap(tmp_path)
 

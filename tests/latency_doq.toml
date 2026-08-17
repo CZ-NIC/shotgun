@@ -1,0 +1,10 @@
+# Test-only config for tests/test_e2e_latency.py and test_e2e_periodic.py.
+#
+# Explicit, wide latency buckets (instead of the default 10ms-linear step)
+# so bucket widths comfortably absorb loopback/scheduling jitter.
+[traffic]
+
+[traffic.DOQ]
+protocol = "doq"
+timeout_s = 2
+latency_bucket_boundaries = [100, 300, 600, 1000, 1500, 2000]

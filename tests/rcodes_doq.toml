@@ -1,0 +1,9 @@
+# Test-only config for tests/test_e2e_rcodes.py.
+#
+# Section name DOQ (not the built-in configs/doq.toml's DoQ), matching the
+# protocol.upper() sender-name convention shared by udp/tcp/dot/doh in this
+# test.
+[traffic]
+
+[traffic.DOQ]
+protocol = "doq"

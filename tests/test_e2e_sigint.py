@@ -52,12 +52,20 @@ def _build_pcap(tmp_path) -> pathlib.Path:
 
 
 def _run_replay_and_interrupt(
-    config, pcap_path, port, outdir, dot_port=None, doh_port=None
+    config, pcap_path, port, outdir, dot_port=None, doh_port=None, doq_port=None
 ):
     # start_new_session so SIGINT hits replay.py + dnsjit child, like a real
     # terminal Ctrl+C would (both are in the foreground process group).
     proc = subprocess.Popen(
-        replay_args(config, pcap_path, port, outdir, dot_port=dot_port, doh_port=doh_port),
+        replay_args(
+            config,
+            pcap_path,
+            port,
+            outdir,
+            dot_port=dot_port,
+            doh_port=doh_port,
+            doq_port=doq_port,
+        ),
         cwd=REPO_ROOT,
         start_new_session=True,
     )
@@ -67,7 +75,7 @@ def _run_replay_and_interrupt(
     return proc.returncode
 
 
-@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot", "doh"])
+@pytest.mark.parametrize("protocol", ["udp", "tcp", "dot", "doh", "doq"])
 def test_sigint_partial_results(protocol, tmp_path):
     pcap_path = _build_pcap(tmp_path)
     config = TESTS_DIR / f"sigint_{protocol}.toml"
@@ -81,6 +89,7 @@ def test_sigint_partial_results(protocol, tmp_path):
             outdir,
             dot_port=extra_port if protocol == "dot" else None,
             doh_port=extra_port if protocol == "doh" else None,
+            doq_port=extra_port if protocol == "doq" else None,
         )
 
     assert returncode != 0  # killed, not a clean exit
