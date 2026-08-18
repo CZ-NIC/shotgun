@@ -162,6 +162,35 @@ def merge_stats(iterable):
     return out
 
 
+GAUGE_STATS = {"ongoing", "conn_active"}
+SANITY_SKIP_STATS = {"runid", "type"} | GAUGE_STATS
+SANITY_COMPARED_STATS = set(DATA_STRUCTURE_STATS) - SANITY_SKIP_STATS
+
+
+def check_stats_sum(running_sum, stats_sum):
+    """
+    Differences between the summed stats_periodic records and stats_sum.
+    dnssim bumps both accumulators independently, so they must agree.
+    """
+    one_sided = set(running_sum) ^ set(stats_sum)
+    problems = []
+    for field in sorted(SANITY_COMPARED_STATS):
+        if field in one_sided:
+            problems.append(f"{field}: present in only one of stats_periodic/stats_sum")
+            continue
+        if field not in running_sum:
+            continue
+        want = running_sum[field]
+        got = stats_sum[field]
+        if want == got:
+            continue
+        delta = ""
+        if isinstance(want, int) and isinstance(got, int):
+            delta = f" (delta {got - want})"
+        problems.append(f"{field}: stats_periodic sum {want} != stats_sum {got}{delta}")
+    return problems
+
+
 DATA_STRUCTURE_HEADER = {
     "runid": first,
     "type": same,
@@ -201,9 +230,11 @@ class MergeData:
     code. To avoid the issue of too many open files, would mean a significant increase in merge time complexity.
     """
 
-    def __init__(self, thread_data):
+    def __init__(self, thread_data, summarize=False):
         self.paths = thread_data
         self.handles = []
+        self.summarize = summarize
+        self.problems = []
 
     def __enter__(self):
         try:
@@ -238,15 +269,50 @@ class MergeData:
         # abruptly. A period only some threads reached is merged from those
         # threads alone; demanding equal record counts would fail the merge
         # outright over a millisecond of drift.
+        running_sum = None
         for objects in itertools.zip_longest(*periodic):
-            yield merge_stats([o for o in objects if o is not None])
+            merged = merge_stats([o for o in objects if o is not None])
+            if self.summarize:
+                if running_sum is None:
+                    running_sum = merged
+                else:
+                    running_sum = merge_stats([running_sum, merged])
+            yield merged
 
-        # A summary is only written on clean shutdown. Merging a subset of
-        # them would silently understate the totals, so it's all or nothing.
-        if sums:
+        if self.summarize:
+            yield from self._summarize(sums, len(handles), running_sum)
+        elif sums:
+            # A summary is only written on clean shutdown. Merging a subset of
+            # them would silently understate the totals, so it's all or nothing.
             if len(sums) != len(handles):
                 raise ThreadMismatch()
             yield merge_stats(sums)
+
+    def _summarize(self, sums, thread_count, running_sum):
+        """
+        Build stats_sum from the stats_periodic records, verified against the
+        thread-written ones when all threads produced them.
+        """
+        if sums:
+            if len(sums) != thread_count:
+                # partial set understates the totals
+                logging.warning(
+                    "only %d of %d threads wrote stats_sum, not comparing",
+                    len(sums),
+                    thread_count,
+                )
+            elif running_sum is not None:
+                self.problems.extend(check_stats_sum(running_sum, merge_stats(sums)))
+
+        if running_sum is None:
+            logging.warning("no stats_periodic records, cannot build stats_sum")
+            return
+        summary = dict(running_sum)
+        summary["type"] = "stats_sum"
+        for gauge in GAUGE_STATS:
+            if gauge in summary:
+                summary[gauge] = 0
+        yield summary
 
     def _read_by_type(self, handles):
         headers = []
@@ -283,6 +349,13 @@ def main():
     parser.add_argument(
         "-o", "--output", default=DEFAULT_FILENAME, help="Output JSON file"
     )
+    parser.add_argument(
+        "--summarize",
+        action="store_true",
+        help="build the stats_sum record by summing the stats_periodic records "
+        "instead of merging the ones written by the threads; those are used to "
+        "verify the result instead, and a mismatch exits 1",
+    )
     args = parser.parse_args()
 
     outpath = args.output
@@ -290,10 +363,16 @@ def main():
         outpath = os.path.join(os.path.dirname(args.json_file[0]), outpath)
 
     try:
+        merger = MergeData(args.json_file, summarize=args.summarize)
         with open(outpath, "w", encoding="utf-8") as out:
-            with MergeData(args.json_file) as to_be_merged_data:
+            with merger as to_be_merged_data:
                 for obj in to_be_merged_data:
                     out.write(json.dumps(obj) + "\n")
+        if merger.problems:
+            for problem in merger.problems:
+                logging.critical("stats_sum mismatch: %s", problem)
+            logging.critical("merged shotgun results still saved as %s", outpath)
+            sys.exit(1)
         logging.info("DONE: merged shotgun results saved as %s", outpath)
     except (FileNotFoundError, UnexpectedType, ThreadMismatch) as exc:
         logging.critical("%s", exc)
