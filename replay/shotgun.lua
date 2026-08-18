@@ -2,6 +2,7 @@
 
 local object = require("dnsjit.core.objects")
 local log = require("dnsjit.core.log")
+local clock = require("dnsjit.lib.clock")
 local dnssim = require("shotgun.output.dnssim")
 
 local DNSSIM_REQ_VERSION = 20260813
@@ -286,7 +287,8 @@ local function push_since_ms()
 	-- also unblocks threads on an empty PCAP, called once after the loop
 	if since_ms_pushed then return end
 	since_ms_pushed = true
-	local since_ms = math.floor(socket.gettime() * 1000)
+	local sec, nsec = clock.realtime()
+	local since_ms = sec * 1000 + math.floor(nsec / 1000000)
 	for i, _ in ipairs(config.threads) do
 		threads[i]:push(since_ms)
 	end
