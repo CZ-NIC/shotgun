@@ -1,0 +1,13 @@
+# Test-only config for tests/test_e2e_tls_resumption.py.
+#
+# idle_timeout_s=0 closes a connection once it has no outstanding queries, so
+# each query batch handshakes anew -- which is what gives later batches a
+# ticket to resume with.
+[traffic]
+
+[traffic.DOT]
+protocol = "dot"
+idle_timeout_s = 0
+# 128 matches dnsjit's pacing batch, so one batch is dispatched as one chunk
+# (see conn_reuse_idle0_dot.toml).
+batch_size = 128
