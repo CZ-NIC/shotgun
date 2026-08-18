@@ -1,5 +1,5 @@
 """
-e2e: TCP/DoT/DoH connection reuse driven by idle_timeout_s (conn_reuse_idle0_*.toml,
+e2e: TCP/DoT/DoH/DoQ connection reuse driven by idle_timeout_s (conn_reuse_idle0_*.toml,
 conn_reuse_idle10_*.toml), checking conn_info in the merged stats_sum.
 
 idle_timeout_s only governs closing once a connection is truly idle (no
@@ -38,7 +38,7 @@ from tcpdns2pcap import pcap_global_header, write_packet_record  # noqa: E402
 
 # dnssim's conn_info.type per protocol (dnssim.c:_output_dnssim_write_transport).
 # doh (HTTPS2) reports "tls_conn", same as dot.
-CONN_TYPE = {"tcp": "tcp", "dot": "tls_conn", "doh": "tls_conn"}
+CONN_TYPE = {"tcp": "tcp", "dot": "tls_conn", "doh": "tls_conn", "doq": "quic_conn"}
 
 BATCH = 128  # dnsjit's filter.timing:realtime() batch size
 NUM_QUERIES = 2 * BATCH
@@ -68,7 +68,7 @@ def _build_pcap(tmp_path) -> pathlib.Path:
     return pcap_path
 
 
-@pytest.mark.parametrize("protocol", ["tcp", "dot", "doh"])
+@pytest.mark.parametrize("protocol", ["tcp", "dot", "doh", "doq"])
 def test_conn_reuse_idle0_single_query(protocol, tmp_path):
     # Baseline: one query, one connection, closed right after -- no batch
     # trick needed since there's nothing to pipeline with or reuse against.
@@ -98,7 +98,7 @@ def test_conn_reuse_idle0_single_query(protocol, tmp_path):
     assert stats_sum["conn_active"] == 0  # closed once idle, before run ended
 
 
-@pytest.mark.parametrize("protocol", ["tcp", "dot", "doh"])
+@pytest.mark.parametrize("protocol", ["tcp", "dot", "doh", "doq"])
 def test_conn_reuse_idle0(protocol, tmp_path):
     pcap_path = _build_pcap(tmp_path)
     config = TESTS_DIR / f"conn_reuse_idle0_{protocol}.toml"
@@ -122,8 +122,7 @@ def test_conn_reuse_idle0(protocol, tmp_path):
     assert stats_sum["conn_info"]["handshakes_failed"] == 0
 
 
-@pytest.mark.parametrize("protocol", ["tcp", "dot", "doh"])
-def test_conn_reuse_idle0_handshake_failed(protocol, tmp_path):
+def _build_handshake_failed_pcap(tmp_path) -> pathlib.Path:
     # 4 isolated (idle_timeout_s=0) connections, 2s apart: batch1, batch2
     # succeed. batch3 (all "terminate") completes its handshake, then kills
     # the server before answering. batch4, 5s later, finds nothing
@@ -149,7 +148,12 @@ def test_conn_reuse_idle0_handshake_failed(protocol, tmp_path):
             add_query("terminate.test.", 4, i)
         for i in range(BATCH):  # batch4, t=9s: conn4 attempt, refused
             add_query("rcode0.test.", 9, i)
+    return pcap_path
 
+
+@pytest.mark.parametrize("protocol", ["tcp", "dot", "doh", "doq"])
+def test_conn_reuse_idle0_handshake_failed(protocol, tmp_path):
+    pcap_path = _build_handshake_failed_pcap(tmp_path)
     config = TESTS_DIR / f"conn_reuse_idle0_{protocol}.toml"
 
     outdir = tmp_path / "out"
@@ -167,12 +171,32 @@ def test_conn_reuse_idle0_handshake_failed(protocol, tmp_path):
     assert stats_sum["discarded"] == 0
     assert stats_sum["conn_info"]["type"] == CONN_TYPE[protocol]
     # 3 successful (batch1, batch2, batch3) + 1 failed attempt (batch4) --
-    # conn_reuse_idle0_{tcp,dot}.toml set batch_size=128 so batch4's refused
+    # conn_reuse_idle0_*.toml set batch_size=128 so batch4's refused
     # connect is attempted (and counted) once, not retried once per default
     # 32-query dispatch chunk against a conn that goes CLOSED between chunks.
     assert stats_sum["conn_info"]["handshakes"] == 4
     assert stats_sum["conn_info"]["handshakes_failed"] == 1  # batch4
     assert stats_sum["conn_active"] == 0
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="a doq conn resuming a ticket fails from EARLY_DATA, and conn_bye() "
+    "sets GRACEFUL_CLOSING before conn_close() can count handshakes_failed",
+)
+def test_conn_reuse_idle0_handshake_failed_doq_0rtt(tmp_path):
+    pcap_path = _build_handshake_failed_pcap(tmp_path)
+    config = TESTS_DIR / "conn_reuse_idle0_doq_0rtt.toml"
+
+    outdir = tmp_path / "out"
+    with run_server("doq", tmp_path) as (port, extra_port):
+        run_replay_for("doq", config, pcap_path, port, extra_port, outdir)
+
+    merged_path = merge_stats(outdir, "DOQ", tmp_path)
+    stats_sum = get_stats_sum(read_records(merged_path))
+
+    assert stats_sum["conn_info"]["handshakes"] == 4
+    assert stats_sum["conn_info"]["handshakes_failed"] == 1  # batch4
 
 
 def test_conn_recover(tmp_path):
@@ -294,7 +318,7 @@ def test_conn_recover_tls(protocol, tmp_path):
     assert stats_sum["conn_active"] == 0
 
 
-@pytest.mark.parametrize("protocol", ["tcp", "dot", "doh"])
+@pytest.mark.parametrize("protocol", ["tcp", "dot", "doh", "doq"])
 def test_conn_reuse_idle10(protocol, tmp_path):
     pcap_path = _build_pcap(tmp_path)
     config = TESTS_DIR / f"conn_reuse_idle10_{protocol}.toml"
