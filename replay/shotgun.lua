@@ -41,6 +41,7 @@ end
 
 local function send_thread_main(thr)
 	local channel = thr:pop()
+	local stop_obj = channel
 	local running
 
 	local max_clients = thr:pop()
@@ -91,7 +92,8 @@ local function send_thread_main(thr)
 
 	local recv, rctx = output:receive()
 	local i_full = 0
-	while true do
+	local done = false
+	while not done do
 		local obj
 		local i = 0
 
@@ -116,18 +118,18 @@ local function send_thread_main(thr)
 		-- read available data from channel
 		while i < batch_size do
 			obj = channel:try_get()
-			if obj == nil then break end
+			if obj == nil then
+				break
+			elseif obj == stop_obj then
+				done = true
+				break
+			end
 			recv(rctx, obj)
 			i = i + 1
 		end
 
 		-- execute libuv loop
 		running = output:run_nowait()
-
-		if obj == nil and channel.closed == 1 and channel:size() == 0 then
-			output:stats_finish()
-			break
-		end
 	end
 
 	-- finish processing outstanding requests
@@ -135,6 +137,7 @@ local function send_thread_main(thr)
 		running = output:run_nowait()
 	end
 
+	output:stats_finish()
 	output:export(output_file)
 end
 
@@ -223,7 +226,7 @@ log.notice('processed %.0f packets from input PCAP', input:packets())
 
 -- teardown
 for i, _ in ipairs(config.threads) do
-	channels[i]:close()
+	channels[i]:put(channels[i])  -- sentinel
 end
 for i, _ in ipairs(config.threads) do
 	threads[i]:stop()
