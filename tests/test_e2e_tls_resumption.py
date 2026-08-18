@@ -1,6 +1,6 @@
 """
-e2e: TLS session resumption over DoT (dot_resumption.toml), checking
-conn_info in the merged stats_sum.
+e2e: TLS session resumption over DoT and DoH ({dot,doh}_resumption.toml),
+checking conn_info in the merged stats_sum.
 
 Three query batches 2s apart, with idle_timeout_s=0 so each gets its own
 connection: batch1 handshakes from scratch, batch2 and batch3 resume with
@@ -46,7 +46,7 @@ def _build_pcap(tmp_path) -> pathlib.Path:
     return pcap_path
 
 
-@pytest.mark.parametrize("protocol", ["dot"])
+@pytest.mark.parametrize("protocol", ["dot", "doh"])
 def test_tls_resumption(protocol, tmp_path):
     pcap_path = _build_pcap(tmp_path)
     config = TESTS_DIR / f"{protocol}_resumption.toml"
