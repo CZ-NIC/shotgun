@@ -1,0 +1,12 @@
+# Test-only config for tests/test_e2e_conn_reuse.py's test_conn_recover_tls (doh).
+#
+# Same rationale as conn_reuse_block_backlog_dot.toml; for DoH the combined
+# handshake budget also covers the HTTP/2 settings exchange.
+[traffic]
+
+[traffic.DOH]
+protocol = "doh"
+idle_timeout_s = 8
+handshake_timeout_s = 1
+timeout_s = 9
+batch_size = 128

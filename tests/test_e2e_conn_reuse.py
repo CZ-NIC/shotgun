@@ -1,5 +1,5 @@
 """
-e2e: TCP/DoT connection reuse driven by idle_timeout_s (conn_reuse_idle0_*.toml,
+e2e: TCP/DoT/DoH connection reuse driven by idle_timeout_s (conn_reuse_idle0_*.toml,
 conn_reuse_idle10_*.toml), checking conn_info in the merged stats_sum.
 
 idle_timeout_s only governs closing once a connection is truly idle (no
@@ -229,8 +229,9 @@ def test_conn_recover(tmp_path):
     assert stats_sum["conn_active"] == 0
 
 
-def test_conn_recover_dot(tmp_path):
-    # Unlike plain TCP, a DoT connection isn't done at the TCP handshake --
+@pytest.mark.parametrize("protocol", ["dot", "doh"])
+def test_conn_recover_tls(protocol, tmp_path):
+    # Unlike plain TCP, a TLS-based conn isn't done at the TCP handshake --
     # dnssim tracks TCP+TLS as one combined handshake budget (single timer,
     # started at TCP connect, stopped only once ACTIVE), and TLS bytes can't
     # be exchanged until the frozen server wakes up. So a short
@@ -273,13 +274,13 @@ def test_conn_recover_dot(tmp_path):
         for i in range(BATCH):
             add_query("rcode0.test.", 10, 300_000 + i, client_id=3)
 
-    config = TESTS_DIR / "conn_reuse_block_backlog_dot.toml"
+    config = TESTS_DIR / f"conn_reuse_block_backlog_{protocol}.toml"
 
     outdir = tmp_path / "out"
-    with run_server("dot", tmp_path) as (port, dot_port):
-        run_replay(config, pcap_path, port, outdir, dot_port=dot_port)
+    with run_server(protocol, tmp_path) as (port, extra_port):
+        run_replay_for(protocol, config, pcap_path, port, extra_port, outdir)
 
-    merged_path = merge_stats(outdir, "DOT", tmp_path)
+    merged_path = merge_stats(outdir, protocol.upper(), tmp_path)
     stats_sum = get_stats_sum(read_records(merged_path))
 
     total = 6 * BATCH
@@ -287,7 +288,7 @@ def test_conn_recover_dot(tmp_path):
     assert stats_sum["responses"] == total  # everyone eventually answered
     assert stats_sum["timeouts"] == 0
     assert stats_sum["discarded"] == 0
-    assert stats_sum["conn_info"]["type"] == "tls_conn"
+    assert stats_sum["conn_info"]["type"] == CONN_TYPE[protocol]
     assert stats_sum["conn_info"]["handshakes"] == 5
     assert stats_sum["conn_info"]["handshakes_failed"] == 2  # client2 + client3, 1st attempt
     assert stats_sum["conn_active"] == 0

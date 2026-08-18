@@ -1,4 +1,4 @@
-# Test-only config for tests/test_e2e_conn_reuse.py's test_conn_recover_dot.
+# Test-only config for tests/test_e2e_conn_reuse.py's test_conn_recover_tls (dot).
 #
 # idle_timeout_s high enough that client1's one connection survives the
 # whole test, with margin for scheduling jitter under a loaded machine.
