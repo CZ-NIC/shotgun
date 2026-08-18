@@ -124,8 +124,7 @@ local function send_thread_main(thr)
 		-- execute libuv loop
 		running = output:run_nowait()
 
-		-- check if channel is still open
-		if obj == nil and channel.closed == 1 then
+		if obj == nil and channel.closed == 1 and channel:size() == 0 then
 			output:stats_finish()
 			break
 		end
