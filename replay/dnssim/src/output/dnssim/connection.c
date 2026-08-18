@@ -201,6 +201,15 @@ void _output_dnssim_conn_bye(_output_dnssim_connection_t* conn)
         lfatal("unknown conn state: %d", conn->state);
     }
 
+    if (conn->prevent_close) {
+        /* Inside a transport-library callback, where the connection must not
+         * be torn down; conn_close records the request as CLOSE_REQUESTED
+         * (with its stats bookkeeping) and the setter of prevent_close
+         * converts it back into a bye once outside callback context. */
+        _output_dnssim_conn_close(conn);
+        return;
+    }
+
     conn->state = _OUTPUT_DNSSIM_CONN_GRACEFUL_CLOSING;
 
     /* Only QUIC supports a graceful closure right now.
