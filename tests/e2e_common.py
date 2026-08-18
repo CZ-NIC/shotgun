@@ -125,7 +125,10 @@ def run_server(protocol, tmp_path):
 
 
 def merge_stats(outdir, sender, tmp_path, expected_threads=3):
-    """Run tools/merge-data.py on the per-thread JSON, return the merged file's path."""
+    """
+    Run tools/merge-data.py on the per-thread JSON, return the merged file's path.
+    --summarize asserts stats_sum matches the stats_periodic records.
+    """
     thread_jsons = sorted(glob.glob(str(outdir / "data" / sender / f"{sender}-*.json")))
     assert len(thread_jsons) == expected_threads
 
@@ -134,6 +137,7 @@ def merge_stats(outdir, sender, tmp_path, expected_threads=3):
         [
             sys.executable,
             str(REPO_ROOT / "tools" / "merge-data.py"),
+            "--summarize",
             *thread_jsons,
             "-o",
             str(merged_path),
