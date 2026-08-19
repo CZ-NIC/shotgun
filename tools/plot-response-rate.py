@@ -21,12 +21,19 @@ import _plot_common as pc
 
 
 def rcode_type(value):
-    upper_value = value.upper()
-    if upper_value not in pc.RCODES:
-        raise argparse.ArgumentTypeError(
-            f"unsupported RCODE {value!r} (supported: {', '.join(sorted(pc.RCODES))})"
-        )
-    return upper_value
+    if isinstance(value, int) or (isinstance(value, str) and value.isdigit()):
+        int_val = int(value)
+        if int_val in pc.RCODES:
+            return pc.RCODES[int_val]
+
+    if isinstance(value, str):
+        upper_value = value.upper()
+        if upper_value in pc.RCODES.values():
+            return upper_value
+
+    raise argparse.ArgumentTypeError(
+        f"unsupported RCODE {value!r} (supported: {', '.join(sorted(pc.RCODES))})"
+    )
 
 
 def stat_field_rate(field):
