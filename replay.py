@@ -136,6 +136,8 @@ def safe_geom_like_buckets(start: int, stop: int, num: int):
         raise ValueError("start must be > 0 for log spacing")
     if stop <= start:
         raise ValueError("stop must be > start")
+    if num <= 0:
+        raise ValueError("num must be > 0")
 
     num = min(num, stop - start + 1)
 
