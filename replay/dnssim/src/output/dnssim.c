@@ -620,7 +620,7 @@ static void _output_dnssim_write_stats(output_dnssim_t* self,
     FILE* f = self->output_file;
     if (f == NULL) return;
 
-    fprintf(f, "{\"runid\":\"%"PRIu64"\",\"threadid\":%"PRIu16","
+    fprintf(f, "{\"runid\":\"%"PRIu64"\",\"subid\":%"PRIu16","
                "\"type\":\"%s\","
                "\"since\":%"PRIu64",\"until\":%"PRIu64","
                "\"queries\":%"PRIu64", \"ongoing\": %"PRIu64", \"responses\":%"PRIu64","
