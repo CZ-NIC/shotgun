@@ -60,7 +60,6 @@ typedef enum output_dnssim_h2_method {
 typedef struct output_dnssim_latency_histogram output_dnssim_latency_histogram_t;
 struct output_dnssim_latency_histogram {
     uint64_t boundary_count;
-    uint64_t* boundaries;
     uint16_t* lut;
 };
 
@@ -161,7 +160,7 @@ void output_dnssim_set_transport(output_dnssim_t* self, output_dnssim_transport_
 void output_dnssim_identifier(output_dnssim_t* self, uint64_t run_id, uint16_t thread_id);
 int  output_dnssim_target(output_dnssim_t* self, const char* ip, uint16_t port);
 int  output_dnssim_bind(output_dnssim_t* self, const char* ip);
-void output_dnssim_latency_bucket_boundaries(output_dnssim_t*, int* arr, int n);
+void output_dnssim_latency_bucket_boundaries(output_dnssim_t *self, const int n, const int *boundaries);
 int  output_dnssim_tls_priority(output_dnssim_t* self, const char* priority, bool is_quic);
 int  output_dnssim_run_nowait(output_dnssim_t* self);
 void output_dnssim_timeout_ms(output_dnssim_t* self, uint64_t timeout_ms);
@@ -271,7 +270,7 @@ function DnsSim:latency_bucket_boundaries(latency_boundaries)
     local n = #latency_boundaries
     local c_array = ffi.new("int[?]", n, latency_boundaries)
 
-    C.output_dnssim_latency_bucket_boundaries(self.obj, c_array, n)
+    C.output_dnssim_latency_bucket_boundaries(self.obj, n, c_array)
 end
 
 -- Set the preferred transport to UDP.
