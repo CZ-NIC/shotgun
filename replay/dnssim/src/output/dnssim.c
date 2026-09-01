@@ -106,6 +106,10 @@ void output_dnssim_free(output_dnssim_t* self)
         self->stats_current = stats_prev;
     } while (self->stats_current != NULL);
 
+    if (self->latency_histogram.lut != NULL) {
+        free(self->latency_histogram.lut);
+    }
+
     if (_self->source != NULL) {
         // free cilcular linked list
         do {
@@ -143,8 +147,6 @@ void output_dnssim_free(output_dnssim_t* self)
         gnutls_priority_deinit(*_self->tls_priority);
         free(_self->tls_priority);
     }
-
-    free(self->latency_histogram.boundaries);
 
     free(self);
 }
@@ -368,18 +370,18 @@ int output_dnssim_bind(output_dnssim_t* self, const char* ip)
     return 0;
 }
 
-void output_dnssim_latency_bucket_boundaries(output_dnssim_t* self, int* arr, int n) {
+void output_dnssim_latency_bucket_boundaries(output_dnssim_t *self, const int n, const int boundaries[static n])
+{
+    mlassert_self();
+    lassert(n > 0, "boundary count must be positive");
+    lassert(n <= UINT16_MAX, "boundary count cannot exceed uint16 limit");
+
     self->latency_histogram.boundary_count = n;
-    lfatal_oom(self->latency_histogram.boundaries = calloc(n, sizeof(uint64_t)));
-    for (int i = 0; i < n; i++) {
-        self->latency_histogram.boundaries[i] = arr[i];
-    }
 
-
-    int timeout = arr[n-1];
+    int timeout = boundaries[n-1];
     lfatal_oom(self->latency_histogram.lut = calloc(timeout + 1, sizeof(uint16_t)));
     for (int i = 0, j = 0; i <= timeout; i++) {
-        while (j < n && i >= self->latency_histogram.boundaries[j]) {
+        while (j < n && i >= boundaries[j]) {
             j++;
         }
 
