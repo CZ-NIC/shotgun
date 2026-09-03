@@ -3,7 +3,6 @@
 import argparse
 import logging
 import os
-import sys
 
 # pylint: disable=wrong-import-order,wrong-import-position
 import matplotlib
