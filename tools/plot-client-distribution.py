@@ -16,7 +16,6 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.colors
-from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 
 import mplhlpr.styles

@@ -13,8 +13,6 @@ import math
 import os
 import re
 
-import numpy as np
-
 # Force matplotlib to use a different backend to handle machines without a display
 import matplotlib
 import matplotlib.ticker as mtick
