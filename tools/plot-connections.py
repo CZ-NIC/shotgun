@@ -15,6 +15,44 @@ import mplhlpr.styles
 
 import _plot_common as pc
 
+KIND_SPECS = {
+    "active": (
+        "Active ({name})",
+        lambda: pc.COLOR_ACTIVE,
+        lambda stats: stats["conn_active"],
+    ),
+    "conn_hs": (
+        "Handshakes ({name})",
+        lambda: pc.COLOR_CONN_HS,
+        lambda stats: stats["conn_info"]["handshakes"],
+    ),
+    "quic_0rtt": (
+        "QUIC 0RTT ({name})",
+        lambda: pc.COLOR_QUIC_0RTT,
+        lambda stats: stats["conn_info"]["zero_rtt"]["loaded"],
+    ),
+    "quic_0rtt_sent": (
+        "QUIC 0RTT sent ({name})",
+        lambda: pc.COLOR_QUIC_0RTT_SENT,
+        lambda stats: stats["conn_info"]["zero_rtt"]["sent"],
+    ),
+    "quic_0rtt_answered": (
+        "QUIC 0RTT answered ({name})",
+        lambda: pc.COLOR_QUIC_0RTT_ANSWERED,
+        lambda stats: stats["conn_info"]["zero_rtt"]["answered"],
+    ),
+    "tls_resumed": (
+        "TLS Resumed ({name})",
+        lambda: pc.COLOR_TLS_RESUMED,
+        lambda stats: stats["conn_info"]["resumption"]["established"],
+    ),
+    "failed_hs": (
+        "Failed Handshakes ({name})",
+        lambda: pc.COLOR_FAILED_HS,
+        lambda stats: stats["conn_info"]["handshakes_failed"],
+    ),
+}
+
 
 def init_plot(title):
     _, ax = plt.subplots()
@@ -45,6 +83,23 @@ def plot(ax, data, label, eval_func, min_timespan=0, color=None):
         yvalues.append(eval_func(stats))
 
     ax.plot(xvalues, yvalues, label=label, color=color)
+
+
+def plot_selected_kinds(ax, stats_periodic, name, kinds):
+    for kind in kinds:
+        label_template, color_cycle, eval_func = KIND_SPECS[kind]
+        try:
+            plot(
+                ax,
+                stats_periodic,
+                label=label_template.format(name=name),
+                color=next(color_cycle()),
+                eval_func=eval_func,
+            )
+        except KeyError as e:
+            raise RuntimeError(
+                f"Missing expected key {e} while plotting {kind!r} stats for {name!r}"
+            ) from e
 
 
 def main():
@@ -100,103 +155,7 @@ def main():
 
         name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
 
-        if "active" in args.kind:
-            try:
-                plot(
-                    ax,
-                    stats_periodic,
-                    label=f"Active ({name})",
-                    color=next(pc.COLOR_ACTIVE),
-                    eval_func=lambda stats: stats["conn_active"],
-                )
-            except KeyError as e:
-                raise RuntimeError(
-                    f"Missing expected key {e} while plotting 'active' stats for {name!r}"
-                ) from e
-
-        if "conn_hs" in args.kind or "tcp_hs" in args.kind:
-            try:
-                plot(
-                    ax,
-                    stats_periodic,
-                    label=f"Handshakes ({name})",
-                    color=next(pc.COLOR_CONN_HS),
-                    eval_func=lambda stats: stats["conn_info"]["handshakes"],
-                )
-            except KeyError as e:
-                raise RuntimeError(
-                    f"Missing expected key {e} while plotting 'conn_hs/tcp_hs' stats for {name!r}"
-                ) from e
-
-        if "quic_0rtt" in args.kind:
-            try:
-                plot(
-                    ax,
-                    stats_periodic,
-                    label=f"QUIC 0RTT ({name})",
-                    color=next(pc.COLOR_QUIC_0RTT),
-                    eval_func=lambda stats: stats["conn_info"]["zero_rtt"]["loaded"],
-                )
-            except KeyError as e:
-                raise RuntimeError(
-                    f"Missing expected key {e} while plotting 'quic_0rtt' stats for {name!r}"
-                ) from e
-
-        if "quic_0rtt_sent" in args.kind:
-            try:
-                plot(
-                    ax,
-                    stats_periodic,
-                    label=f"QUIC 0RTT sent ({name})",
-                    color=next(pc.COLOR_QUIC_0RTT_SENT),
-                    eval_func=lambda stats: stats["conn_info"]["zero_rtt"]["sent"],
-                )
-            except KeyError as e:
-                raise RuntimeError(
-                    f"Missing expected key {e} while plotting 'quic_0rtt_sent' stats for {name!r}"
-                ) from e
-
-        if "quic_0rtt_answered" in args.kind:
-            try:
-                plot(
-                    ax,
-                    stats_periodic,
-                    label=f"QUIC 0RTT answered ({name})",
-                    color=next(pc.COLOR_QUIC_0RTT_ANSWERED),
-                    eval_func=lambda stats: stats["conn_info"]["zero_rtt"]["answered"],
-                )
-            except KeyError as e:
-                raise RuntimeError(
-                    f"Missing expected key {e} while plotting 'quic_0rtt_answered' stats for {name!r}"
-                ) from e
-
-        if "tls_resumed" in args.kind:
-            try:
-                plot(
-                    ax,
-                    stats_periodic,
-                    label=f"TLS Resumed ({name})",
-                    color=next(pc.COLOR_TLS_RESUMED),
-                    eval_func=lambda stats: stats["conn_info"]["resumption"]["established"],
-                )
-            except KeyError as e:
-                raise RuntimeError(
-                    f"Missing expected key {e} while plotting 'tls_resumed' stats for {name!r}"
-                ) from e
-
-        if "failed_hs" in args.kind:
-            try:
-                plot(
-                    ax,
-                    stats_periodic,
-                    label=f"Failed Handshakes ({name})",
-                    color=next(pc.COLOR_FAILED_HS),
-                    eval_func=lambda stats: stats["conn_info"]["handshakes_failed"],
-                )
-            except KeyError as e:
-                raise RuntimeError(
-                    f"Missing expected key {e} while plotting 'failed_hs' stats for {name!r}"
-                ) from e
+        plot_selected_kinds(ax, stats_periodic, name, args.kind)
 
     # set axis boundaries
     ax.set_xlim(xmin=0)
