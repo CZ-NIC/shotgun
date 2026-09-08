@@ -12,6 +12,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import json
 from typing import Any, Dict, List, Optional, Set
 
 from jinja2 import Environment, FileSystemLoader
@@ -33,6 +34,8 @@ DEFAULT_TRAFFIC_FIELDS = [
     "channel_size",
     "max_clients",
     "batch_size",
+    "latency_bucket_boundaries",
+    "latency_linear",
 ]
 
 # Protocol aliases are translated into specific dnssim functions.
@@ -128,6 +131,98 @@ def bind_net_to_ips(bind_net: Optional[List[str]]) -> List[str]:
     return list(ips)
 
 
+def safe_geom_like_buckets(start: int, stop: int, num: int):
+    if start <= 0:
+        raise ValueError("start must be > 0 for log spacing")
+    if stop <= start:
+        raise ValueError("stop must be > start")
+    if num <= 0:
+        raise ValueError("num must be > 0")
+
+    num = min(num, stop - start + 1)
+
+    buckets = [0] * num
+    cur = float(start)
+
+    # geometric growth approximation:
+    # stop = cur * ratio  ^ num
+    for i in range(num):
+        remaining = num - i
+        if remaining == 1:
+            val = stop
+        else:
+            ratio = (stop / cur) ** (1.0 / (remaining - 1))  # update ratio
+            val = int(round(cur))
+            if i > 0 and val <= buckets[i - 1]:  # guarantee no duplicates
+                val = buckets[i - 1] + 1
+            cur = val * ratio
+            buckets[i] = val
+            continue
+        buckets[i] = val
+
+    return buckets
+
+
+def make_latency_buckets(
+    timeout: int,
+    step: Optional[int] = None,
+    buckets: Optional[list] = None,
+    geom_count: Optional[int] = None,
+) -> list[int]:
+    set_opts = sum(x is not None for x in (step, buckets, geom_count))
+    if set_opts > 1:
+        raise RuntimeError(
+            "Only one of latency_linear, latency_bucket_boundaries, or latency_geom_count can be set."
+        )
+
+    if step is not None:
+        result = list(range(step, timeout, step))
+    elif buckets is not None:
+        result = list(buckets)
+    elif geom_count is not None:
+        result = safe_geom_like_buckets(start=1, stop=timeout, num=geom_count)
+    else:
+        result = safe_geom_like_buckets(start=1, stop=timeout, num=200)
+
+    if not result or result[-1] < timeout:
+        result.append(timeout)
+    return result
+
+
+def build_thrconf(
+    kind: str, count: int, config: Dict[str, Any], args: Any
+) -> Dict[str, Any]:
+    thrconf = copy.deepcopy(config["traffic"][kind])
+    for key in DEFAULT_TRAFFIC_FIELDS:
+        try:
+            thrconf.setdefault(key, config["defaults"]["traffic"][key])
+        except KeyError:
+            pass
+    if "server" not in thrconf:
+        if args.server is None:
+            raise RuntimeError("server must be set, use -s/--server")
+        thrconf.setdefault("server", args.server)
+    thrconf.setdefault("dns_port", args.dns_port)
+    thrconf.setdefault("dot_port", args.dot_port)
+    thrconf.setdefault("doh_port", args.doh_port)
+    thrconf.setdefault("doq_port", args.doq_port)
+    thrconf["target_ip"] = thrconf["server"]
+    thrconf["target_port"] = thrconf[PROTOCOL_FUNC_PORTS[thrconf["protocol_func"]]]
+    thrconf["weight"] = math.ceil(
+        1000 * thrconf["weight"] / count
+    )  # convert to integer
+    if "timeout_s" not in thrconf:
+        thrconf["timeout_s"] = 2
+    timeout = thrconf["timeout_s"] * 1000
+    thrconf["latency_bucket_boundaries"] = make_latency_buckets(
+        timeout,
+        buckets=thrconf.get("latency_bucket_boundaries"),
+        step=thrconf.get("latency_linear"),
+        geom_count=thrconf.get("latency_geom_count"),
+    )
+    return thrconf
+
+
 def create_luaconfig(config: Dict[str, Any], threads: Dict[str, int], args: Any) -> str:
     data = {
         "verbosity": args.verbosity,
@@ -159,40 +254,15 @@ def create_luaconfig(config: Dict[str, Any], threads: Dict[str, int], args: Any)
         ips *= thr_total
 
     for kind, count in threads.items():
-        thrconf = copy.deepcopy(config["traffic"][kind])
-        for key in DEFAULT_TRAFFIC_FIELDS:
-            try:
-                thrconf.setdefault(key, config["defaults"]["traffic"][key])
-            except KeyError:
-                pass
-
-        if "server" not in thrconf:
-            if args.server is None:
-                raise RuntimeError("server must be set, use -s/--server")
-            thrconf.setdefault("server", args.server)
-
+        thrconf = build_thrconf(kind, count, config, args)
         datadir = os.path.join(args.outdir, "data", kind)
         os.makedirs(datadir)
-
-        thrconf.setdefault("dns_port", args.dns_port)
-        thrconf.setdefault("dot_port", args.dot_port)
-        thrconf.setdefault("doh_port", args.doh_port)
-        thrconf.setdefault("doq_port", args.doq_port)
-
-        thrconf["target_ip"] = thrconf["server"]
-        thrconf["target_port"] = thrconf[PROTOCOL_FUNC_PORTS[thrconf["protocol_func"]]]
-        thrconf["weight"] = math.ceil(
-            1000 * thrconf["weight"] / count
-        )  # convert to integer
-
         for i in range(count):
             instconf = copy.deepcopy(thrconf)
             instconf["name"] = f"{kind}-{i+1:02d}"
             fname = os.path.join(datadir, instconf["name"]) + ".json"
             instconf["output_file"] = fname
-            instconf["bind_ips"] = []
-            for _ in range(ips_per_thread):
-                instconf["bind_ips"].append(ips.pop())
+            instconf["bind_ips"] = [ips.pop() for _ in range(ips_per_thread)]
             data["threads"].append(instconf)
 
     confdir = os.path.join(args.outdir, ".config")
@@ -291,8 +361,12 @@ def run_or_exit(args: List[str], env: Optional[collections.abc.Mapping] = None) 
         sys.exit(ex.returncode)
 
 
+def prepare_generator_params(params: List) -> str:
+    return json.dumps(params)
+
+
 def run_shotgun(luaconfig: str, env: collections.abc.Mapping) -> None:
-    run_or_exit([SHOTGUN_PATH, luaconfig], env)
+    run_or_exit([SHOTGUN_PATH, luaconfig, prepare_generator_params(sys.argv)], env)
 
 
 def list_json_files(directory: str) -> List[str]:

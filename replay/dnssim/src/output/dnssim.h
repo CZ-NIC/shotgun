@@ -9,6 +9,7 @@
 #define __dnsjit_output_dnssim_h
 
 #include <stdbool.h>
+#include <stdio.h>
 
 typedef enum output_dnssim_transport {
     OUTPUT_DNSSIM_TRANSPORT_UDP_ONLY,
@@ -24,12 +25,18 @@ typedef enum output_dnssim_h2_method {
     OUTPUT_DNSSIM_H2_POST
 } output_dnssim_h2_method_t;
 
+typedef struct output_dnssim_latency_histogram output_dnssim_latency_histogram_t;
+struct output_dnssim_latency_histogram {
+    uint16_t boundary_count;
+    uint16_t* lut;
+};
+
 typedef struct output_dnssim_stats output_dnssim_stats_t;
 struct output_dnssim_stats {
     output_dnssim_stats_t* prev;
     output_dnssim_stats_t* next;
 
-    uint64_t* latency;
+    uint64_t* latency_buckets;
 
     uint64_t since_ms;
     uint64_t until_ms;
@@ -37,6 +44,7 @@ struct output_dnssim_stats {
     uint64_t requests;
     uint64_t ongoing;
     uint64_t answers;
+    uint64_t discarded;
 
     /* Number of connections that are open at the end of the stats interval. */
     uint64_t conn_active;
@@ -76,18 +84,25 @@ struct output_dnssim_stats {
     uint64_t rcode_badtrunc;
     uint64_t rcode_badcookie;
     uint64_t rcode_other;
+
+    bool written;
 };
 
 typedef struct output_dnssim {
     core_log_t _log;
 
+    uint64_t run_id;
+    uint16_t thread_id;
+
     uint64_t processed;
-    uint64_t discarded;
     uint64_t ongoing;
+
+    output_dnssim_latency_histogram_t latency_histogram;
 
     output_dnssim_stats_t* stats_sum;
     output_dnssim_stats_t* stats_current;
     output_dnssim_stats_t* stats_first;
+    output_dnssim_stats_t* stats_last_written;
 
     size_t zero_rtt_data_initial_capacity;
 
@@ -99,6 +114,8 @@ typedef struct output_dnssim {
     uint64_t idle_timeout_ms;
     uint64_t handshake_timeout_ms;
     uint64_t stats_interval_ms;
+
+    FILE* output_file;
 } output_dnssim_t;
 
 core_log_t* output_dnssim_log();
@@ -108,14 +125,18 @@ void             output_dnssim_free(output_dnssim_t* self);
 
 void output_dnssim_log_name(output_dnssim_t* self, const char* name);
 void output_dnssim_set_transport(output_dnssim_t* self, output_dnssim_transport_t tr);
+void output_dnssim_identifier(output_dnssim_t* self, uint64_t run_id, uint16_t thread_id);
 int  output_dnssim_target(output_dnssim_t* self, const char* ip, uint16_t port);
 int  output_dnssim_bind(output_dnssim_t* self, const char* ip);
+void output_dnssim_latency_bucket_boundaries(output_dnssim_t *self, const int n, const int boundaries[static n]);
 int  output_dnssim_tls_priority(output_dnssim_t* self, const char* priority, bool is_quic);
 int  output_dnssim_run_nowait(output_dnssim_t* self);
 void output_dnssim_timeout_ms(output_dnssim_t* self, uint64_t timeout_ms);
 void output_dnssim_h2_uri_path(output_dnssim_t* self, const char* uri_path);
 void output_dnssim_h2_method(output_dnssim_t* self, const char* method);
 void output_dnssim_h2_zero_out_msgid(output_dnssim_t* self, bool zero_out_msgid);
+int output_dnssim_open_file(output_dnssim_t* self, const char* output_file);
+void output_dnssim_close_file(output_dnssim_t* self);
 void output_dnssim_stats_collect(output_dnssim_t* self, uint64_t interval_ms);
 void output_dnssim_stats_finish(output_dnssim_t* self);
 

@@ -57,12 +57,18 @@ typedef enum output_dnssim_h2_method {
     OUTPUT_DNSSIM_H2_POST
 } output_dnssim_h2_method_t;
 
+typedef struct output_dnssim_latency_histogram output_dnssim_latency_histogram_t;
+struct output_dnssim_latency_histogram {
+    uint64_t boundary_count;
+    uint16_t* lut;
+};
+
 typedef struct output_dnssim_stats output_dnssim_stats_t;
 struct output_dnssim_stats {
     output_dnssim_stats_t* prev;
     output_dnssim_stats_t* next;
 
-    uint64_t* latency;
+    uint64_t* latency_buckets;
 
     uint64_t since_ms;
     uint64_t until_ms;
@@ -70,6 +76,7 @@ struct output_dnssim_stats {
     uint64_t requests;
     uint64_t ongoing;
     uint64_t answers;
+    uint64_t discarded;
 
     /* Number of connections that are open at the end of the stats interval. */
     uint64_t conn_active;
@@ -109,18 +116,25 @@ struct output_dnssim_stats {
     uint64_t rcode_badtrunc;
     uint64_t rcode_badcookie;
     uint64_t rcode_other;
+
+    bool written;
 };
 
 typedef struct output_dnssim {
     core_log_t _log;
 
+    uint64_t run_id;
+    uint16_t thread_id;
+
     uint64_t processed;
-    uint64_t discarded;
     uint64_t ongoing;
+
+    output_dnssim_latency_histogram_t latency_histogram;
 
     output_dnssim_stats_t* stats_sum;
     output_dnssim_stats_t* stats_current;
     output_dnssim_stats_t* stats_first;
+    output_dnssim_stats_t* stats_last_written;
 
     size_t zero_rtt_data_initial_capacity;
 
@@ -132,6 +146,8 @@ typedef struct output_dnssim {
     uint64_t idle_timeout_ms;
     uint64_t handshake_timeout_ms;
     uint64_t stats_interval_ms;
+
+    void* output_file;
 } output_dnssim_t;
 
 core_log_t* output_dnssim_log();
@@ -141,14 +157,18 @@ void             output_dnssim_free(output_dnssim_t* self);
 
 void output_dnssim_log_name(output_dnssim_t* self, const char* name);
 void output_dnssim_set_transport(output_dnssim_t* self, output_dnssim_transport_t tr);
+void output_dnssim_identifier(output_dnssim_t* self, uint64_t run_id, uint16_t thread_id);
 int  output_dnssim_target(output_dnssim_t* self, const char* ip, uint16_t port);
 int  output_dnssim_bind(output_dnssim_t* self, const char* ip);
+void output_dnssim_latency_bucket_boundaries(output_dnssim_t *self, const int n, const int *boundaries);
 int  output_dnssim_tls_priority(output_dnssim_t* self, const char* priority, bool is_quic);
 int  output_dnssim_run_nowait(output_dnssim_t* self);
 void output_dnssim_timeout_ms(output_dnssim_t* self, uint64_t timeout_ms);
 void output_dnssim_h2_uri_path(output_dnssim_t* self, const char* uri_path);
 void output_dnssim_h2_method(output_dnssim_t* self, const char* method);
 void output_dnssim_h2_zero_out_msgid(output_dnssim_t* self, bool zero_out_msgid);
+int output_dnssim_open_file(output_dnssim_t* self, const char* output_file);
+void output_dnssim_close_file(output_dnssim_t* self);
 void output_dnssim_stats_collect(output_dnssim_t* self, uint64_t interval_ms);
 void output_dnssim_stats_finish(output_dnssim_t* self);
 
@@ -160,8 +180,7 @@ local C = ffi.C
 
 local DnsSim = {}
 
-local _DNSSIM_VERSION = 20240219
-local _DNSSIM_JSON_VERSION = 20200527
+local _DNSSIM_VERSION = 20260813
 
 -- Create a new DnsSim output for up to max_clients.
 function DnsSim.new(max_clients)
@@ -200,18 +219,6 @@ function DnsSim.check_version(req_version)
     return _check_version(_DNSSIM_VERSION, req_version)
 end
 
--- Check that version of dnssim's JSON data format is at minimum the one passed as
--- .B req_version
--- and return the actual version number.
--- Return nil if the condition is not met.
---
--- If no
--- .B req_version
--- is specified no check is done and only the version number is returned.
-function DnsSim.check_json_version(req_version)
-    return _check_version(_DNSSIM_JSON_VERSION, req_version)
-end
-
 -- Return the Log object to control logging of this instance or module.
 -- Optionally, set the instance's log name.
 -- Unique name should be used for each instance.
@@ -223,6 +230,10 @@ function DnsSim:log(name)
         C.output_dnssim_log_name(self.obj, name)
     end
     return self.obj._log
+end
+
+function DnsSim:identifier(run_id, thread_id)
+    C.output_dnssim_identifier(self.obj, run_id, thread_id)
 end
 
 -- Set the target IPv4/IPv6 address where queries will be sent to.
@@ -244,6 +255,22 @@ end
 -- Addresses are selected round-robin when sending.
 function DnsSim:bind(ip)
     return C.output_dnssim_bind(self.obj, ip)
+end
+
+-- Set latency histogram bucket boundaries.
+--
+-- .I latency_boundaries
+-- must be a Lua array of integers defining the upper bound of each latency
+-- bucket (in the configured time units). The number of elements determines
+-- the number of buckets used for latency statistics.
+--
+-- The values are passed to the underlying C implementation as an integer
+-- array and used when aggregating response latency counts.
+function DnsSim:latency_bucket_boundaries(latency_boundaries)
+    local n = #latency_boundaries
+    local c_array = ffi.new("int[?]", n, latency_boundaries)
+
+    C.output_dnssim_latency_bucket_boundaries(self.obj, n, c_array)
 end
 
 -- Set the preferred transport to UDP.
@@ -412,10 +439,23 @@ function DnsSim:zero_rtt(zero_rtt)
     self.obj.zero_rtt = zero_rtt
 end
 
+-- Open file for periodic statistics write.
+function DnsSim:open_file(output_file)
+    local ret = C.output_dnssim_open_file(self.obj, output_file)
+    if ret ~= 0 then
+       error("failed to open output file: " .. output_file)
+    end
+end
+
+-- Finish writing statistics and close statistics file.
+function DnsSim:close_file()
+    C.output_dnssim_close_file(self.obj)
+end
+
 -- Number of input packets discarded due to various reasons.
 -- To investigate causes, run with increased logging level.
 function DnsSim:discarded()
-    return tonumber(self.obj.discarded)
+    return tonumber(self.obj.stats_sum.discarded)
 end
 
 -- Number of valid requests (input packets) processed.
@@ -445,86 +485,6 @@ end
 -- Stop the collection of statistics.
 function DnsSim:stats_finish()
     C.output_dnssim_stats_finish(self.obj)
-end
-
--- Export the results to a JSON file.
-function DnsSim:export(filename)
-    local file = io.open(filename, "w")
-    if file == nil then
-        self.obj._log:fatal("export failed: no filename")
-        return
-    end
-
-    local function write_stats(f, stats)
-        f:write(
-            "{ ",
-                '"since_ms":', tonumber(stats.since_ms), ',',
-                '"until_ms":', tonumber(stats.until_ms), ',',
-                '"requests":', tonumber(stats.requests), ',',
-                '"ongoing":', tonumber(stats.ongoing), ',',
-                '"answers":', tonumber(stats.answers), ',',
-                '"conn_active":', tonumber(stats.conn_active), ',',
-                '"conn_handshakes":', tonumber(stats.conn_handshakes), ',',
-                '"conn_resumed":', tonumber(stats.conn_resumed), ',',
-                '"conn_quic_0rtt_loaded":', tonumber(stats.conn_quic_0rtt_loaded), ',',
-                '"quic_0rtt_sent":', tonumber(stats.quic_0rtt_sent), ',',
-                '"quic_0rtt_answered":', tonumber(stats.quic_0rtt_answered), ',',
-                '"conn_handshakes_failed":', tonumber(stats.conn_handshakes_failed), ',',
-                '"rcode_noerror":', tonumber(stats.rcode_noerror), ',',
-                '"rcode_formerr":', tonumber(stats.rcode_formerr), ',',
-                '"rcode_servfail":', tonumber(stats.rcode_servfail), ',',
-                '"rcode_nxdomain":', tonumber(stats.rcode_nxdomain), ',',
-                '"rcode_notimp":', tonumber(stats.rcode_notimp), ',',
-                '"rcode_refused":', tonumber(stats.rcode_refused), ',',
-                '"rcode_yxdomain":', tonumber(stats.rcode_yxdomain), ',',
-                '"rcode_yxrrset":', tonumber(stats.rcode_yxrrset), ',',
-                '"rcode_nxrrset":', tonumber(stats.rcode_nxrrset), ',',
-                '"rcode_notauth":', tonumber(stats.rcode_notauth), ',',
-                '"rcode_notzone":', tonumber(stats.rcode_notzone), ',',
-                '"rcode_badvers":', tonumber(stats.rcode_badvers), ',',
-                '"rcode_badkey":', tonumber(stats.rcode_badkey), ',',
-                '"rcode_badtime":', tonumber(stats.rcode_badtime), ',',
-                '"rcode_badmode":', tonumber(stats.rcode_badmode), ',',
-                '"rcode_badname":', tonumber(stats.rcode_badname), ',',
-                '"rcode_badalg":', tonumber(stats.rcode_badalg), ',',
-                '"rcode_badtrunc":', tonumber(stats.rcode_badtrunc), ',',
-                '"rcode_badcookie":', tonumber(stats.rcode_badcookie), ',',
-                '"rcode_other":', tonumber(stats.rcode_other), ',',
-                '"latency":[')
-        f:write(tonumber(stats.latency[0]))
-        for i=1,tonumber(self.obj.timeout_ms) do
-            f:write(',', tonumber(stats.latency[i]))
-        end
-        f:write("]}")
-    end
-
-    file:write(
-        "{ ",
-            '"version":', _DNSSIM_JSON_VERSION, ',',
-            '"merged":false,',
-            '"stats_interval_ms":', tonumber(self.obj.stats_interval_ms), ',',
-            '"timeout_ms":', tonumber(self.obj.timeout_ms), ',',
-            '"idle_timeout_ms":', tonumber(self.obj.idle_timeout_ms), ',',
-            '"handshake_timeout_ms":', tonumber(self.obj.handshake_timeout_ms), ',',
-            '"discarded":', self:discarded(), ',',
-            '"stats_sum":')
-    write_stats(file, self.obj.stats_sum)
-    file:write(
-            ',',
-            '"stats_periodic":[')
-
-    local stats = self.obj.stats_first
-    write_stats(file, stats)
-
-    while (stats.next ~= nil) do
-        stats = stats.next
-        file:write(',')
-        write_stats(file, stats)
-    end
-
-    file:write(']}')
-    file:close()
-    self.obj._log:notice("results exported to "..filename)
 end
 
 -- Return the C function and context for receiving objects.
