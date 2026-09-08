@@ -3,6 +3,7 @@
 import argparse
 import logging
 import os
+import sys
 
 # pylint: disable=wrong-import-order,wrong-import-position
 import matplotlib
@@ -100,61 +101,102 @@ def main():
         name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
 
         if "active" in args.kind:
-            plot(
-                ax,
-                stats_periodic,
-                label=f"Active ({name})",
-                color=next(pc.COLOR_ACTIVE),
-                eval_func=lambda stats: stats["conn_active"],
-            )
+            try:
+                plot(
+                    ax,
+                    stats_periodic,
+                    label=f"Active ({name})",
+                    color=next(pc.COLOR_ACTIVE),
+                    eval_func=lambda stats: stats["conn_active"],
+                )
+            except KeyError as e:
+                raise RuntimeError(
+                    f"Missing expected key {e} while plotting 'active' stats for {name!r}"
+                ) from e
+
         if "conn_hs" in args.kind or "tcp_hs" in args.kind:
-            plot(
-                ax,
-                stats_periodic,
-                label=f"Handshakes ({name})",
-                color=next(pc.COLOR_CONN_HS),
-                eval_func=lambda stats: stats["conn_info"]["handshakes"],
-            )
+            try:
+                plot(
+                    ax,
+                    stats_periodic,
+                    label=f"Handshakes ({name})",
+                    color=next(pc.COLOR_CONN_HS),
+                    eval_func=lambda stats: stats["conn_info"]["handshakes"],
+                )
+            except KeyError as e:
+                raise RuntimeError(
+                    f"Missing expected key {e} while plotting 'conn_hs/tcp_hs' stats for {name!r}"
+                ) from e
+
         if "quic_0rtt" in args.kind:
-            plot(
-                ax,
-                stats_periodic,
-                label=f"QUIC 0RTT ({name})",
-                color=next(pc.COLOR_QUIC_0RTT),
-                eval_func=lambda stats: stats["conn_info"]["zero_rtt"]["loaded"],
-            )
+            try:
+                plot(
+                    ax,
+                    stats_periodic,
+                    label=f"QUIC 0RTT ({name})",
+                    color=next(pc.COLOR_QUIC_0RTT),
+                    eval_func=lambda stats: stats["conn_info"]["zero_rtt"]["loaded"],
+                )
+            except KeyError as e:
+                raise RuntimeError(
+                    f"Missing expected key {e} while plotting 'quic_0rtt' stats for {name!r}"
+                ) from e
+
         if "quic_0rtt_sent" in args.kind:
-            plot(
-                ax,
-                stats_periodic,
-                label=f"QUIC 0RTT sent ({name})",
-                color=next(pc.COLOR_QUIC_0RTT_SENT),
-                eval_func=lambda stats: stats["conn_info"]["zero_rtt"]["sent"],
-            )
+            try:
+                plot(
+                    ax,
+                    stats_periodic,
+                    label=f"QUIC 0RTT sent ({name})",
+                    color=next(pc.COLOR_QUIC_0RTT_SENT),
+                    eval_func=lambda stats: stats["conn_info"]["zero_rtt"]["sent"],
+                )
+            except KeyError as e:
+                raise RuntimeError(
+                    f"Missing expected key {e} while plotting 'quic_0rtt_sent' stats for {name!r}"
+                ) from e
+
         if "quic_0rtt_answered" in args.kind:
-            plot(
-                ax,
-                stats_periodic,
-                label=f"QUIC 0RTT answered ({name})",
-                color=next(pc.COLOR_QUIC_0RTT_ANSWERED),
-                eval_func=lambda stats: stats["conn_info"]["zero_rtt"]["answered"],
-            )
+            try:
+                plot(
+                    ax,
+                    stats_periodic,
+                    label=f"QUIC 0RTT answered ({name})",
+                    color=next(pc.COLOR_QUIC_0RTT_ANSWERED),
+                    eval_func=lambda stats: stats["conn_info"]["zero_rtt"]["answered"],
+                )
+            except KeyError as e:
+                raise RuntimeError(
+                    f"Missing expected key {e} while plotting 'quic_0rtt_answered' stats for {name!r}"
+                ) from e
+
         if "tls_resumed" in args.kind:
-            plot(
-                ax,
-                stats_periodic,
-                label=f"TLS Resumed ({name})",
-                color=next(pc.COLOR_TLS_RESUMED),
-                eval_func=lambda stats: stats["conn_info"]["resumption"]["established"],
-            )
+            try:
+                plot(
+                    ax,
+                    stats_periodic,
+                    label=f"TLS Resumed ({name})",
+                    color=next(pc.COLOR_TLS_RESUMED),
+                    eval_func=lambda stats: stats["conn_info"]["resumption"]["established"],
+                )
+            except KeyError as e:
+                raise RuntimeError(
+                    f"Missing expected key {e} while plotting 'tls_resumed' stats for {name!r}"
+                ) from e
+
         if "failed_hs" in args.kind:
-            plot(
-                ax,
-                stats_periodic,
-                label=f"Failed Handshakes ({name})",
-                color=next(pc.COLOR_FAILED_HS),
-                eval_func=lambda stats: stats["conn_info"]["handshakes_failed"],
-            )
+            try:
+                plot(
+                    ax,
+                    stats_periodic,
+                    label=f"Failed Handshakes ({name})",
+                    color=next(pc.COLOR_FAILED_HS),
+                    eval_func=lambda stats: stats["conn_info"]["handshakes_failed"],
+                )
+            except KeyError as e:
+                raise RuntimeError(
+                    f"Missing expected key {e} while plotting 'failed_hs' stats for {name!r}"
+                ) from e
 
     # set axis boundaries
     ax.set_xlim(xmin=0)
