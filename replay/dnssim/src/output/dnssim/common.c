@@ -147,7 +147,8 @@ void _output_dnssim_create_request(output_dnssim_t* self, _output_dnssim_client_
 
     return;
 failure:
-    self->discarded++;
+    self->stats_sum->discarded++;
+    self->stats_current->discarded++;
     _output_dnssim_close_request(req);
     return;
 }
@@ -216,8 +217,10 @@ void _output_dnssim_close_request(_output_dnssim_request_t* req)
         req->ended_at = req->created_at + req->dnssim->timeout_ms;
         latency       = req->dnssim->timeout_ms;
     }
-    req->stats->latency[latency]++;
-    req->dnssim->stats_sum->latency[latency]++;
+
+    int latency_bucket_index = req->dnssim->latency_histogram.lut[latency];
+    req->stats->latency_buckets[latency_bucket_index]++;
+    req->dnssim->stats_sum->latency_buckets[latency_bucket_index]++;
 
     if (req->timer != NULL) {
         uv_timer_stop(req->timer);

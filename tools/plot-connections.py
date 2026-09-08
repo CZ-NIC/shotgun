@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
-from itertools import cycle
-import json
 import logging
-import math
 import os
 import sys
 
@@ -16,33 +13,45 @@ import matplotlib.pyplot as plt
 
 import mplhlpr.styles
 
-JSON_VERSION = 20200527
+import _plot_common as pc
 
-COLOR_ACTIVE = cycle(["royalblue", "cornflowerblue", "darkblue", "lightsteelblue"])
-COLOR_CONN_HS = cycle(["forestgreen", "limegreen", "darkgreen", "lightgreen"])
-COLOR_QUIC_0RTT = cycle(
-    ["darkolivegreen", "darkseagreen", "darkslategray", "greenyellow"]
-)
-COLOR_QUIC_0RTT_SENT = cycle(["crimson", "brown", "firebrick", "indianred"])
-COLOR_QUIC_0RTT_ANSWERED = cycle(["khaki", "moccasin", "peru", "wheat"])
-COLOR_TLS_RESUMED = cycle(["orange", "moccasin", "darkorange", "antiquewhite"])
-COLOR_FAILED_HS = cycle(["gray", "silver", "black", "gainsboro"])
-
-
-sinames = ["", " k", " M", " G", " T"]
-
-
-def siname(n):
-    try:
-        n = float(n)
-    except ValueError:
-        return n
-
-    siidx = max(
-        0,
-        min(len(sinames) - 1, int(math.floor(0 if n == 0 else math.log10(abs(n)) / 3))),
-    )
-    return f"{(n / 10 ** (3 * siidx)):.0f}{sinames[siidx]}"
+KIND_SPECS = {
+    "active": (
+        "Active ({name})",
+        lambda: pc.COLOR_ACTIVE,
+        lambda stats: stats["conn_active"],
+    ),
+    "conn_hs": (
+        "Handshakes ({name})",
+        lambda: pc.COLOR_CONN_HS,
+        lambda stats: stats["conn_info"]["handshakes"],
+    ),
+    "quic_0rtt": (
+        "QUIC 0RTT ({name})",
+        lambda: pc.COLOR_QUIC_0RTT,
+        lambda stats: stats["conn_info"]["zero_rtt"]["loaded"],
+    ),
+    "quic_0rtt_sent": (
+        "QUIC 0RTT sent ({name})",
+        lambda: pc.COLOR_QUIC_0RTT_SENT,
+        lambda stats: stats["conn_info"]["zero_rtt"]["sent"],
+    ),
+    "quic_0rtt_answered": (
+        "QUIC 0RTT answered ({name})",
+        lambda: pc.COLOR_QUIC_0RTT_ANSWERED,
+        lambda stats: stats["conn_info"]["zero_rtt"]["answered"],
+    ),
+    "tls_resumed": (
+        "TLS Resumed ({name})",
+        lambda: pc.COLOR_TLS_RESUMED,
+        lambda stats: stats["conn_info"]["resumption"]["established"],
+    ),
+    "failed_hs": (
+        "Failed Handshakes ({name})",
+        lambda: pc.COLOR_FAILED_HS,
+        lambda stats: stats["conn_info"]["handshakes_failed"],
+    ),
+}
 
 
 def init_plot(title):
@@ -60,22 +69,37 @@ def init_plot(title):
 
 
 def plot(ax, data, label, eval_func, min_timespan=0, color=None):
-    stats_periodic = data["stats_periodic"][
-        :-1
-    ]  # omit the last often misleading datapoint
-    time_offset = stats_periodic[0]["since_ms"]
+    stats_periodic = data[:-1]
+    time_offset = stats_periodic[0]["since"]
 
     xvalues = []
     yvalues = []
     for stats in stats_periodic:
-        timespan = stats["until_ms"] - stats["since_ms"]
+        timespan = stats["until"] - stats["since"]
         if timespan < min_timespan:
             continue
-        time = (stats["until_ms"] - time_offset) / 1000
+        time = (stats["until"] - time_offset) / 1000
         xvalues.append(time)
         yvalues.append(eval_func(stats))
 
     ax.plot(xvalues, yvalues, label=label, color=color)
+
+
+def plot_selected_kinds(ax, stats_periodic, name, kinds):
+    for kind in kinds:
+        label_template, color_cycle, eval_func = KIND_SPECS[kind]
+        try:
+            plot(
+                ax,
+                stats_periodic,
+                label=label_template.format(name=name),
+                color=next(color_cycle()),
+                eval_func=eval_func,
+            )
+        except KeyError as e:
+            raise RuntimeError(
+                f"Missing expected key {e} while plotting {kind!r} stats for {name!r}"
+            ) from e
 
 
 def main():
@@ -122,83 +146,16 @@ def main():
     ax = init_plot(args.title)
 
     for json_path in args.json_file:
-        try:
-            with open(json_path, encoding="utf-8") as f:
-                data = json.load(f)
-        except FileNotFoundError as exc:
-            logging.critical("%s", exc)
-            sys.exit(1)
+        _, stats_sum, stats_periodic = pc.load_json_lines_file(json_path)
 
-        try:
-            assert data["version"] == JSON_VERSION
-        except (KeyError, AssertionError):
-            logging.critical(
-                "Older formats of JSON data aren't supported. "
-                "Use older tooling or re-run the tests with newer shotgun."
+        if stats_sum["discarded"] != 0:
+            logging.warning(
+                "%d discarded packets may skew results!", stats_sum["discarded"]
             )
-            sys.exit(1)
-
-        if data["discarded"] != 0:
-            logging.warning("%d discarded packets may skew results!", data["discarded"])
 
         name = os.path.splitext(os.path.basename(os.path.normpath(json_path)))[0]
 
-        if "active" in args.kind:
-            plot(
-                ax,
-                data,
-                label=f"Active ({name})",
-                color=next(COLOR_ACTIVE),
-                eval_func=lambda stats: stats["conn_active"],
-            )
-        if "conn_hs" in args.kind or "tcp_hs" in args.kind:
-            plot(
-                ax,
-                data,
-                label=f"Handshakes ({name})",
-                color=next(COLOR_CONN_HS),
-                eval_func=lambda stats: stats["conn_handshakes"],
-            )
-        if "quic_0rtt" in args.kind:
-            plot(
-                ax,
-                data,
-                label=f"QUIC 0RTT ({name})",
-                color=next(COLOR_QUIC_0RTT),
-                eval_func=lambda stats: stats["conn_quic_0rtt_loaded"],
-            )
-        if "quic_0rtt_sent" in args.kind:
-            plot(
-                ax,
-                data,
-                label=f"QUIC 0RTT sent ({name})",
-                color=next(COLOR_QUIC_0RTT_SENT),
-                eval_func=lambda stats: stats["quic_0rtt_sent"],
-            )
-        if "quic_0rtt_answered" in args.kind:
-            plot(
-                ax,
-                data,
-                label=f"QUIC 0RTT answered ({name})",
-                color=next(COLOR_QUIC_0RTT_ANSWERED),
-                eval_func=lambda stats: stats["quic_0rtt_answered"],
-            )
-        if "tls_resumed" in args.kind:
-            plot(
-                ax,
-                data,
-                label=f"TLS Resumed ({name})",
-                color=next(COLOR_TLS_RESUMED),
-                eval_func=lambda stats: stats["conn_resumed"],
-            )
-        if "failed_hs" in args.kind:
-            plot(
-                ax,
-                data,
-                label=f"Failed Handshakes ({name})",
-                color=next(COLOR_FAILED_HS),
-                eval_func=lambda stats: stats["conn_handshakes_failed"],
-            )
+        plot_selected_kinds(ax, stats_periodic, name, args.kind)
 
     # set axis boundaries
     ax.set_xlim(xmin=0)

@@ -97,14 +97,18 @@ void output_dnssim_free(output_dnssim_t* self)
     _output_dnssim_source_t* first = _self->source;
     output_dnssim_stats_t*   stats_prev;
 
-    free(self->stats_sum->latency);
+    free(self->stats_sum->latency_buckets);
     free(self->stats_sum);
     do {
         stats_prev = self->stats_current->prev;
-        free(self->stats_current->latency);
+        free(self->stats_current->latency_buckets);
         free(self->stats_current);
         self->stats_current = stats_prev;
     } while (self->stats_current != NULL);
+
+    if (self->latency_histogram.lut != NULL) {
+        free(self->latency_histogram.lut);
+    }
 
     if (_self->source != NULL) {
         // free cilcular linked list
@@ -193,7 +197,8 @@ static void _receive(output_dnssim_t* self, const core_object_t* obj)
             break;
         }
         if (current->obj_prev == NULL) {
-            self->discarded++;
+            self->stats_sum->discarded++;
+            self->stats_current->discarded++;
             lwarning("packet discarded (missing payload object)");
             return;
         }
@@ -207,7 +212,8 @@ static void _receive(output_dnssim_t* self, const core_object_t* obj)
             break;
         }
         if (current->obj_prev == NULL) {
-            self->discarded++;
+            self->stats_sum->discarded++;
+            self->stats_current->discarded++;
             lwarning("packet discarded (missing ip/ip6 object)");
             return;
         }
@@ -230,7 +236,8 @@ static void _receive(output_dnssim_t* self, const core_object_t* obj)
     if (_self->h2_zero_out_msgid) {
         lassert(_self->transport == OUTPUT_DNSSIM_TRANSPORT_HTTPS2, "must use HTTP/2 to zero-out msgid");
         if (payload->len < 2) {
-            self->discarded++;
+            self->stats_sum->discarded++;
+            self->stats_current->discarded++;
             lwarning("packet discarded (payload len < 2)");
             return;
         }
@@ -240,7 +247,8 @@ static void _receive(output_dnssim_t* self, const core_object_t* obj)
     }
 
     if (client >= self->max_clients) {
-        self->discarded++;
+        self->stats_sum->discarded++;
+        self->stats_current->discarded++;
         lwarning("packet discarded (client exceeded max_clients)");
         return;
     }
@@ -293,6 +301,12 @@ void output_dnssim_set_transport(output_dnssim_t* self, output_dnssim_transport_
     }
 
     _self->transport = tr;
+}
+
+void output_dnssim_identifier(output_dnssim_t* self, uint64_t run_id, uint16_t thread_id)
+{
+    self->run_id = run_id;
+    self->thread_id = thread_id;
 }
 
 int output_dnssim_target(output_dnssim_t* self, const char* ip, uint16_t port)
@@ -354,6 +368,25 @@ int output_dnssim_bind(output_dnssim_t* self, const char* ip)
 
     lnotice("bind to source address %s", ip);
     return 0;
+}
+
+void output_dnssim_latency_bucket_boundaries(output_dnssim_t *self, const int n, const int boundaries[static n])
+{
+    mlassert_self();
+    lassert(n > 0, "boundary count must be positive");
+    lassert(n <= UINT16_MAX, "boundary count cannot exceed uint16 limit");
+
+    self->latency_histogram.boundary_count = n;
+
+    int timeout = boundaries[n-1];
+    lfatal_oom(self->latency_histogram.lut = calloc(timeout + 1, sizeof(uint16_t)));
+    for (int i = 0, j = 0; i <= timeout; i++) {
+        while (j < n && i >= boundaries[j]) {
+            j++;
+        }
+
+        self->latency_histogram.lut[i] = j;
+    }
 }
 
 static void handle_default_priority(const char** inout_priority,
@@ -439,7 +472,7 @@ void output_dnssim_timeout_ms(output_dnssim_t* self, uint64_t timeout_ms)
     lassert(timeout_ms > 0, "timeout must be greater than 0");
 
     if (self->stats_sum != NULL) {
-        free(self->stats_sum->latency);
+        free(self->stats_sum->latency_buckets);
         free(self->stats_sum);
         self->stats_sum = 0;
     }
@@ -447,7 +480,7 @@ void output_dnssim_timeout_ms(output_dnssim_t* self, uint64_t timeout_ms)
         output_dnssim_stats_t* stats_prev;
         do {
             stats_prev = self->stats_current->prev;
-            free(self->stats_current->latency);
+            free(self->stats_current->latency_buckets);
             free(self->stats_current);
             self->stats_current = stats_prev;
         } while (self->stats_current != NULL);
@@ -456,10 +489,10 @@ void output_dnssim_timeout_ms(output_dnssim_t* self, uint64_t timeout_ms)
     self->timeout_ms = timeout_ms;
 
     lfatal_oom(self->stats_sum = calloc(1, sizeof(output_dnssim_stats_t)));
-    lfatal_oom(self->stats_sum->latency = calloc(self->timeout_ms + 1, sizeof(uint64_t)));
+    lfatal_oom(self->stats_sum->latency_buckets = calloc(self->latency_histogram.boundary_count + 1, sizeof(uint64_t)));
 
     lfatal_oom(self->stats_current = calloc(1, sizeof(output_dnssim_stats_t)));
-    lfatal_oom(self->stats_current->latency = calloc(self->timeout_ms + 1, sizeof(uint64_t)));
+    lfatal_oom(self->stats_current->latency_buckets = calloc(self->latency_histogram.boundary_count + 1, sizeof(uint64_t)));
 
     self->stats_first = self->stats_current;
 }
@@ -501,6 +534,127 @@ void output_dnssim_h2_zero_out_msgid(output_dnssim_t* self, bool zero_out_msgid)
     }
 }
 
+static void _output_dnssim_write_rcodes(output_dnssim_stats_t* stats, FILE* f)
+{
+    const char* rcode_names[] = {
+        "NOERROR", "FORMERR", "SERVFAIL", "NXDOMAIN", "NOTIMP",
+        "REFUSED", "YXDOMAIN", "YXRRSET", "NXRRSET", "NOTAUTH",
+        "NOTZONE", "BADVERS", "BADKEY", "BADTIME", "BADMODE",
+        "BADNAME", "BADALG", "BADTRUNC", "BADCOOKIE", "OTHER"
+    };
+    uint64_t rcode_vals[] = {
+        stats->rcode_noerror, stats->rcode_formerr, stats->rcode_servfail,
+        stats->rcode_nxdomain, stats->rcode_notimp, stats->rcode_refused,
+        stats->rcode_yxdomain, stats->rcode_yxrrset, stats->rcode_nxrrset,
+        stats->rcode_notauth, stats->rcode_notzone, stats->rcode_badvers,
+        stats->rcode_badkey, stats->rcode_badtime, stats->rcode_badmode,
+        stats->rcode_badname, stats->rcode_badalg, stats->rcode_badtrunc,
+        stats->rcode_badcookie, stats->rcode_other
+    };
+    int n_rcodes = sizeof(rcode_names) / sizeof(rcode_names[0]);
+
+    fprintf(f, "\"response_rcodes\":{");
+    bool first = true;
+    for (int i = 0; i < n_rcodes; i++) {
+        if (rcode_vals[i] != 0) {
+            fprintf(f, "%s\"%s\":%"PRIu64, first ? "" : ",",
+                    rcode_names[i], rcode_vals[i]);
+            first = false;
+        }
+    }
+    fprintf(f, "}");
+}
+
+static void _output_dnssim_write_transport(output_dnssim_stats_t* stats, FILE* f, output_dnssim_transport_t tr)
+{
+    fprintf(f, "\"conn_info\":{\"type\":");
+    switch (tr) {
+    case OUTPUT_DNSSIM_TRANSPORT_UDP_ONLY:
+        fprintf(f, "\"udp\"");
+        goto bracket_end;
+    case OUTPUT_DNSSIM_TRANSPORT_UDP:
+        fprintf(f, "\"udp\"");
+        goto bracket_end;
+    case OUTPUT_DNSSIM_TRANSPORT_TCP:
+        fprintf(f, "\"tcp\",");
+        goto handshakes;
+    case OUTPUT_DNSSIM_TRANSPORT_TLS:
+        fprintf(f, "\"tls_conn\",");
+        goto resumptions;
+    case OUTPUT_DNSSIM_TRANSPORT_HTTPS2:
+        fprintf(f, "\"tls_conn\",");
+        goto resumptions;
+    case OUTPUT_DNSSIM_TRANSPORT_QUIC:
+        fprintf(f, "\"quic_conn\",");
+        goto quic;
+    }
+
+quic:
+fprintf(f,
+        "\"zero_rtt\":{"
+        "\"loaded\":%"PRIu64","
+        "\"sent\":%"PRIu64","
+        "\"answered\":%"PRIu64"},",
+        stats->conn_quic_0rtt_loaded,
+        stats->quic_0rtt_sent,
+        stats->quic_0rtt_answered
+    );
+resumptions:
+fprintf(f,
+        "\"resumption\":{"
+        "\"established\":%"PRIu64"},",
+        stats->conn_resumed
+    );
+handshakes:
+    fprintf(f,
+        "\"handshakes\":%"PRIu64","
+        "\"handshakes_failed\":%"PRIu64,
+        stats->conn_handshakes,
+        stats->conn_handshakes_failed
+    );
+bracket_end:
+    fprintf(f, "}");
+}
+
+static void _output_dnssim_write_stats(output_dnssim_t* self,
+                                        output_dnssim_stats_t* stats,
+                                        const char* stat_type)
+{
+    FILE* f = self->output_file;
+    if (f == NULL) return;
+
+    fprintf(f, "{\"runid\":\"%"PRIu64"\",\"subid\":%"PRIu16","
+               "\"type\":\"%s\","
+               "\"since\":%"PRIu64",\"until\":%"PRIu64","
+               "\"queries\":%"PRIu64", \"ongoing\": %"PRIu64", \"responses\":%"PRIu64","
+               "\"timeouts\":%"PRIu64","
+               "\"discarded\":%"PRIu64",",
+        self->run_id, self->thread_id,
+        stat_type,
+        stats->since_ms, stats->until_ms,
+        stats->requests, stats->ongoing, stats->answers,
+        stats->latency_buckets[self->latency_histogram.boundary_count],
+        stats->discarded);
+
+    _output_dnssim_write_rcodes(stats, f);
+
+    fprintf(f, ",\"response_latency\":{\"bucket_counts\":[");
+    fprintf(f, "%"PRIu64, stats->latency_buckets[0]);
+    for (uint64_t i = 1; i < self->latency_histogram.boundary_count + 1; i++) {
+        fprintf(f, ",%"PRIu64, stats->latency_buckets[i]);
+    }
+
+    fprintf(f, "]},"
+               "\"conn_active\":%"PRIu64",",
+                stats->conn_active
+    );
+
+    _output_dnssim_write_transport(stats, f, _self->transport);
+
+    fprintf(f, "}\n");
+    fflush(f);
+}
+
 static void _on_stats_timer_tick(uv_timer_t* handle)
 {
     uint64_t         now_ms = _now_ms();
@@ -512,13 +666,26 @@ static void _on_stats_timer_tick(uv_timer_t* handle)
     lassert(self->stats_current, "stats_current is nil");
 
     lnotice("total processed:%10ld; answers:%10ld; discarded:%10ld; ongoing:%10ld",
-        self->processed, self->stats_sum->answers, self->discarded, self->ongoing);
+        self->processed, self->stats_sum->answers, self->stats_sum->discarded, self->ongoing);
+
+    self->stats_current->until_ms = now_ms;
+
+    if (self->output_file != NULL) {
+        output_dnssim_stats_t* stats = (self->stats_last_written == NULL) ? self->stats_first : self->stats_last_written;
+        while (stats != self->stats_current) {
+            if (!stats->written && now_ms >= stats->until_ms + self->timeout_ms) {
+                _output_dnssim_write_stats(self, stats, "stats_periodic");
+                stats->written = true;
+                self->stats_last_written = stats;
+            }
+            stats = stats->next;
+        }
+    }
 
     output_dnssim_stats_t* stats_next;
     lfatal_oom(stats_next = calloc(1, sizeof(output_dnssim_stats_t)));
-    lfatal_oom(stats_next->latency = calloc(self->timeout_ms + 1, sizeof(uint64_t)));
+    lfatal_oom(stats_next->latency_buckets = calloc(self->latency_histogram.boundary_count + 1, sizeof(uint64_t)));
 
-    self->stats_current->until_ms = now_ms;
     stats_next->since_ms          = now_ms;
     stats_next->conn_active       = self->stats_current->conn_active;
 
@@ -526,6 +693,40 @@ static void _on_stats_timer_tick(uv_timer_t* handle)
     stats_next->prev          = self->stats_current;
     self->stats_current->next = stats_next;
     self->stats_current       = stats_next;
+}
+
+int output_dnssim_open_file(output_dnssim_t* self, const char* output_file)
+{
+    mlassert_self();
+    lassert(output_file, "output_file is nil");
+
+    self->output_file = fopen(output_file, "a");
+    if (self->output_file == NULL) {
+        lfatal("failed to open output file: %s", output_file);
+        return -1;
+    }
+    return 0;
+}
+
+void output_dnssim_close_file(output_dnssim_t* self)
+{
+    mlassert_self();
+    if (self->output_file != NULL) {
+        output_dnssim_stats_t* stats = self->stats_first;
+        while (stats != NULL) {
+            if (!stats->written && stats != self->stats_sum) {
+                _output_dnssim_write_stats(self, stats, "stats_periodic");
+                stats->written = true;
+            }
+            stats = stats->next;
+        }
+        _output_dnssim_write_stats(self, self->stats_sum, "stats_sum");
+    }
+
+    if (self->output_file != NULL) {
+        fclose(self->output_file);
+        self->output_file = NULL;
+    }
 }
 
 void output_dnssim_stats_collect(output_dnssim_t* self, uint64_t interval_ms)

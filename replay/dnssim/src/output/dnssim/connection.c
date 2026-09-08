@@ -446,21 +446,24 @@ _output_dnssim_conn_find_stream(_output_dnssim_connection_t* conn,
     return *target;
 }
 
-void _output_dnssim_conn_early_data(_output_dnssim_connection_t* conn)
+/* Variants of _output_dnssim_conn_early_data()/_conn_activate() safe to call
+ * from transport-library callbacks (e.g. ngtcp2's handshake_completed): they
+ * perform the state transition, but defer flushing client->pending via
+ * conn->resume_pending, since the query write path must not be invoked from
+ * inside library callbacks. The transport's event processing consumes the
+ * flag once it is outside callback context. */
+void _output_dnssim_conn_early_data_deferred(_output_dnssim_connection_t* conn)
 {
     mlassert(conn, "conn is nil");
-    mlassert(conn->client, "conn must be associated with a client");
-    mlassert(conn->client->dnssim, "client must be associated with dnssim");
 
     if (conn->state >= _OUTPUT_DNSSIM_CONN_EARLY_DATA)
         return;
 
-    conn->state = _OUTPUT_DNSSIM_CONN_EARLY_DATA;
-
-    _send_pending_queries(conn);
+    conn->state          = _OUTPUT_DNSSIM_CONN_EARLY_DATA;
+    conn->resume_pending = true;
 }
 
-void _output_dnssim_conn_activate(_output_dnssim_connection_t* conn)
+void _output_dnssim_conn_activate_deferred(_output_dnssim_connection_t* conn)
 {
     mlassert(conn, "conn is nil");
     mlassert(conn->client, "conn must be associated with a client");
@@ -474,6 +477,37 @@ void _output_dnssim_conn_activate(_output_dnssim_connection_t* conn)
 
     conn->state = _OUTPUT_DNSSIM_CONN_ACTIVE;
     conn->client->dnssim->stats_current->conn_active++;
+    conn->resume_pending = true;
+}
+
+void _output_dnssim_conn_early_data(_output_dnssim_connection_t* conn)
+{
+    mlassert(conn, "conn is nil");
+    mlassert(conn->client, "conn must be associated with a client");
+    mlassert(conn->client->dnssim, "client must be associated with dnssim");
+
+    if (conn->state >= _OUTPUT_DNSSIM_CONN_EARLY_DATA)
+        return;
+
+    _output_dnssim_conn_early_data_deferred(conn);
+    /* Outside library-callback context, flush right away. */
+    conn->resume_pending = false;
+
+    _send_pending_queries(conn);
+}
+
+void _output_dnssim_conn_activate(_output_dnssim_connection_t* conn)
+{
+    mlassert(conn, "conn is nil");
+    mlassert(conn->client, "conn must be associated with a client");
+    mlassert(conn->client->dnssim, "client must be associated with dnssim");
+
+    if (conn->state >= _OUTPUT_DNSSIM_CONN_ACTIVE)
+        return;
+
+    _output_dnssim_conn_activate_deferred(conn);
+    /* Outside library-callback context, flush right away. */
+    conn->resume_pending = false;
 
     _send_pending_queries(conn);
     _output_dnssim_conn_idle(conn);
